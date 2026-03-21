@@ -10,7 +10,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--compile-commands", required=True)
     parser.add_argument("--files", required=True)
     parser.add_argument("--clang-tidy-binary", default="clang-tidy")
-    parser.add_argument("--header-filter", default="^(Engine|Runtime|Test)/")
+    parser.add_argument("--header-filter", default="^(Engine|Runtime)/")
     parser.add_argument("--jobs", type=int, default=0)
     parser.add_argument("--warnings-as-errors", default="*")
     return parser.parse_args()

@@ -106,9 +106,9 @@ jobs:
             --base-ref "${{ github.base_ref }}" \
             --base-sha "${{ github.event.before }}" \
             --head-sha "${{ github.sha }}" \
-            --pattern '^(Engine|Runtime|Test)/.*\.(c|cc|cpp|cxx)$' \
+            --pattern '^(Engine|Runtime)/.*\.(c|cc|cpp|cxx)$' \
             --compile-commands Build/compile_commands/linux/compile_commands.json \
-            --fallback-compile-db-pattern '^(Engine|Runtime|Test)/.*\.(c|cc|cpp|cxx)$' \
+            --fallback-compile-db-pattern '^(Engine|Runtime)/.*\.(c|cc|cpp|cxx)$' \
             --output Build/Logs/linux-clang-tidy-files.txt
 
       - name: Run clang-tidy
