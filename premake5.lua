@@ -78,7 +78,11 @@ end
 function UseEngineIncludeDirs(extraIncludeDirs)
     local includeDirs =
     {
-        IncludeDir["Engine"],
+        IncludeDir["Engine"]
+    }
+
+    local externalIncludeDirs =
+    {
         IncludeDir["SDL3"],
         IncludeDir["spdlog"],
         IncludeDir["json"]
@@ -86,16 +90,20 @@ function UseEngineIncludeDirs(extraIncludeDirs)
 
     if extraIncludeDirs ~= nil then
         for _, includeDir in ipairs(extraIncludeDirs) do
-            table.insert(includeDirs, includeDir)
+            table.insert(externalIncludeDirs, includeDir)
         end
     end
 
     includedirs(includeDirs)
+    externalincludedirs(externalIncludeDirs)
 end
 
 function ConfigureCommonProject()
     filter "system:windows"
         systemversion "latest"
+
+    filter { "system:windows", "action:vs*" }
+        buildoptions { "/analyze:external-" }
 
     filter "system:linux"
         pic "On"

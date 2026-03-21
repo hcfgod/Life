@@ -20,30 +20,30 @@ jobs:
             runs_on: windows-2022
             setup_command: Setup.bat vs2022
             build_command: ./Scripts/CI/build_windows.ps1 -Configuration Dist -LogPath Build/Logs/windows-release-msbuild.log
-            package_command: python Scripts/CI/package_runtime.py --input-dir Build/windows-x86_64/Dist/Runtime --output Build/Artifacts/Life-windows-x64.zip --format zip
+            package_command: python Scripts/CI/package_runtime.py --input-dir Build/windows-*/Dist/Runtime --output Build/Artifacts/Life-windows-x64.zip --format zip
             artifact_path: Build/Artifacts/Life-windows-x64.zip
           - name: linux-x64
             runs_on: ubuntu-latest
             setup_command: ./Setup.sh gmake2
             build_command: ./Scripts/CI/build_make.sh Dist clean all
-            package_command: python Scripts/CI/package_runtime.py --input-dir Build/linux-x86_64/Dist/Runtime --output Build/Artifacts/Life-linux-x64.tar.gz --format gztar
+            package_command: python Scripts/CI/package_runtime.py --input-dir Build/linux-*/Dist/Runtime --output Build/Artifacts/Life-linux-x64.tar.gz --format gztar
             artifact_path: Build/Artifacts/Life-linux-x64.tar.gz
           - name: macos-x64
-            runs_on: macos-13
+            runs_on: macos-15-intel
             setup_command: ./Setup.sh gmake2
             build_command: ./Scripts/CI/build_make.sh Dist clean all
-            package_command: python Scripts/CI/package_runtime.py --input-dir Build/macosx-x86_64/Dist/Runtime --output Build/Artifacts/Life-macos-x64.tar.gz --format gztar
+            package_command: python Scripts/CI/package_runtime.py --input-dir Build/macosx-*/Dist/Runtime --output Build/Artifacts/Life-macos-x64.tar.gz --format gztar
             artifact_path: Build/Artifacts/Life-macos-x64.tar.gz
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
 
@@ -131,7 +131,7 @@ jobs:
         run: ${{ matrix.package_command }}
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.name }}-release-artifact
           path: ${{ matrix.artifact_path }}
@@ -144,19 +144,19 @@ jobs:
 
     steps:
       - name: Download Windows release artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: windows-x64-release-artifact
           path: Build/ReleaseAssets
 
       - name: Download Linux release artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: linux-x64-release-artifact
           path: Build/ReleaseAssets
 
       - name: Download macOS release artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: macos-x64-release-artifact
           path: Build/ReleaseAssets

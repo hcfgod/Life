@@ -10,7 +10,7 @@ permissions:
 jobs:
   macos-quality-gates:
     name: macOS ${{ matrix.gate_name }}
-    runs-on: macos-13
+    runs-on: macos-15-intel
     timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false
@@ -36,13 +36,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
 
@@ -110,12 +110,12 @@ jobs:
 
       - name: Upload macOS quality artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: macos-${{ matrix.gate_name }}
           path: |
             Build/compile_commands/macos/compile_commands.json
             Build/Logs/macos-clang-tidy-files.txt
-            Build/macosx-x86_64/Debug/Runtime/**
-            Build/macosx-x86_64/Debug/Test/**
+            Build/macosx-*/Debug/Runtime/**
+            Build/macosx-*/Debug/Test/**
           if-no-files-found: ignore

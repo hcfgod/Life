@@ -11,9 +11,22 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def resolve_input_dir(input_dir_argument: str) -> Path:
+    if any(token in input_dir_argument for token in ("*", "?", "[")):
+        matches = sorted(Path().glob(input_dir_argument))
+        directory_matches = [match.resolve() for match in matches if match.is_dir()]
+        if len(directory_matches) != 1:
+            raise ValueError(
+                f"Expected exactly one directory match for pattern '{input_dir_argument}', found {len(directory_matches)}."
+            )
+        return directory_matches[0]
+
+    return Path(input_dir_argument).resolve()
+
+
 def main() -> int:
     arguments = parse_arguments()
-    input_dir = Path(arguments.input_dir).resolve()
+    input_dir = resolve_input_dir(arguments.input_dir)
     output_path = Path(arguments.output).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 

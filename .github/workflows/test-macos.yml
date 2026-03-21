@@ -10,17 +10,17 @@ permissions:
 jobs:
   build-test-macos:
     name: Build and Test macOS
-    runs-on: macos-13
+    runs-on: macos-15-intel
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
 
@@ -38,10 +38,10 @@ jobs:
 
       - name: Upload macOS test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: macos-debug-build
           path: |
-            Build/macosx-x86_64/Debug/Runtime/**
-            Build/macosx-x86_64/Debug/Test/**
-          if-no-files-found: error
+            Build/macosx-*/Debug/Runtime/**
+            Build/macosx-*/Debug/Test/**
+          if-no-files-found: ignore

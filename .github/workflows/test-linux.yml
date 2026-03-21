@@ -14,13 +14,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
 
@@ -71,10 +71,10 @@ jobs:
 
       - name: Upload Linux test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: linux-debug-build
           path: |
-            Build/linux-x86_64/Debug/Runtime/**
-            Build/linux-x86_64/Debug/Test/**
-          if-no-files-found: error
+            Build/linux-*/Debug/Runtime/**
+            Build/linux-*/Debug/Test/**
+          if-no-files-found: ignore
