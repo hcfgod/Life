@@ -62,8 +62,8 @@ BinaryDir["SDL3_MacOS_Release"] = path.join(RootDir, "Vendor/SDL3/Install/macos/
 BinaryFile = {}
 BinaryFile["SDL3_Windows_Debug"] = path.getabsolute(BinaryDir["SDL3_Windows_Debug"] .. "/SDL3.dll")
 BinaryFile["SDL3_Windows_Release"] = path.getabsolute(BinaryDir["SDL3_Windows_Release"] .. "/SDL3.dll")
-BinaryFile["SDL3_Linux_Debug"] = path.getabsolute(BinaryDir["SDL3_Linux_Debug"] .. "/libSDL3.so")
-BinaryFile["SDL3_Linux_Release"] = path.getabsolute(BinaryDir["SDL3_Linux_Release"] .. "/libSDL3.so")
+BinaryFile["SDL3_Linux_Debug"] = path.getabsolute(BinaryDir["SDL3_Linux_Debug"] .. "/libSDL3.so.0")
+BinaryFile["SDL3_Linux_Release"] = path.getabsolute(BinaryDir["SDL3_Linux_Release"] .. "/libSDL3.so.0")
 BinaryFile["SDL3_MacOS_Debug"] = path.getabsolute(BinaryDir["SDL3_MacOS_Debug"] .. "/libSDL3.0.dylib")
 BinaryFile["SDL3_MacOS_Release"] = path.getabsolute(BinaryDir["SDL3_MacOS_Release"] .. "/libSDL3.0.dylib")
 

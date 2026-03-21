@@ -49,22 +49,22 @@ jobs:
       - name: Install dependencies
         run: |
           brew install llvm bear
-          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          echo "LLVM_PREFIX=$(brew --prefix llvm)" >> "$GITHUB_ENV"
 
       - name: Make scripts executable
         run: chmod +x Setup.sh Scripts/CI/*.sh
 
       - name: Prepare project files
         env:
-          CC: clang
-          CXX: clang++
+          CC: /usr/bin/clang
+          CXX: /usr/bin/clang++
         run: ./Setup.sh gmake2 ${{ matrix.premake_args }}
 
       - name: Build with compilation database
         if: matrix.run_clang_tidy
         env:
-          CC: clang
-          CXX: clang++
+          CC: /usr/bin/clang
+          CXX: /usr/bin/clang++
         run: |
           mkdir -p Build/compile_commands/macos
           bear --output Build/compile_commands/macos/compile_commands.json -- ./Scripts/CI/build_make.sh Debug clean all
@@ -91,21 +91,21 @@ jobs:
             --repo-root . \
             --compile-commands Build/compile_commands/macos/compile_commands.json \
             --files Build/Logs/macos-clang-tidy-files.txt \
-            --clang-tidy-binary clang-tidy \
+            --clang-tidy-binary "$LLVM_PREFIX/bin/clang-tidy" \
             --jobs 4
 
       - name: Build sanitizer configuration
         if: ${{ !matrix.run_clang_tidy }}
         env:
-          CC: clang
-          CXX: clang++
+          CC: /usr/bin/clang
+          CXX: /usr/bin/clang++
         run: ./Scripts/CI/build_make.sh Debug clean all
 
       - name: Run sanitizer tests
         if: ${{ !matrix.run_clang_tidy }}
         env:
-          CC: clang
-          CXX: clang++
+          CC: /usr/bin/clang
+          CXX: /usr/bin/clang++
         run: ${{ matrix.sanitizer_options }} ./Scripts/CI/run_tests.sh Debug
 
       - name: Upload macOS quality artifacts
