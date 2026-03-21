@@ -1,0 +1,53 @@
+name: Test Windows
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-windows:
+    name: Build and Test Windows
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Prepare project files
+        shell: cmd
+        run: Setup.bat vs2022
+
+      - name: Build solution
+        shell: pwsh
+        run: ./Scripts/CI/build_windows.ps1 -Configuration Debug -LogPath Build/Logs/windows-test-msbuild.log
+
+      - name: Run tests
+        shell: pwsh
+        run: ./Build/windows-x86_64/Debug/Test/Test.exe
+
+      - name: Upload Windows test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-debug-build
+          path: |
+            Build/windows-x86_64/Debug/Runtime/**
+            Build/windows-x86_64/Debug/Test/**
+            Build/Logs/windows-test-msbuild.log
+          if-no-files-found: error

@@ -1,0 +1,47 @@
+name: Test macOS
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-macos:
+    name: Build and Test macOS
+    runs-on: macos-13
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Make scripts executable
+        run: chmod +x Setup.sh Scripts/CI/*.sh
+
+      - name: Prepare project files
+        run: ./Setup.sh gmake2
+
+      - name: Build workspace
+        run: ./Scripts/CI/build_make.sh Debug clean all
+
+      - name: Run tests
+        run: ./Scripts/CI/run_tests.sh Debug
+
+      - name: Upload macOS test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-debug-build
+          path: |
+            Build/macosx-x86_64/Debug/Runtime/**
+            Build/macosx-x86_64/Debug/Test/**
+          if-no-files-found: error

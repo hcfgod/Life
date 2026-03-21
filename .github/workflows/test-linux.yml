@@ -1,0 +1,80 @@
+name: Test Linux
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-linux:
+    name: Build and Test Linux
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            clang \
+            pkg-config \
+            ninja-build \
+            libasound2-dev \
+            libpulse-dev \
+            libaudio-dev \
+            libjack-dev \
+            libsndio-dev \
+            libusb-1.0-0-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxfixes-dev \
+            libxrender-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            wayland-protocols \
+            libegl1-mesa-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libdrm-dev \
+            libgbm-dev \
+            libdbus-1-dev \
+            libudev-dev
+
+      - name: Make scripts executable
+        run: chmod +x Setup.sh Scripts/CI/*.sh
+
+      - name: Prepare project files
+        run: ./Setup.sh gmake2
+
+      - name: Build workspace
+        run: ./Scripts/CI/build_make.sh Debug clean all
+
+      - name: Run tests
+        run: ./Scripts/CI/run_tests.sh Debug
+
+      - name: Upload Linux test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-debug-build
+          path: |
+            Build/linux-x86_64/Debug/Runtime/**
+            Build/linux-x86_64/Debug/Test/**
+          if-no-files-found: error

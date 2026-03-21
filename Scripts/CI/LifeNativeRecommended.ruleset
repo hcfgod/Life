@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RuleSet Name="LifeNativeRecommendedRules" Description="Life native code analysis rules" ToolsVersion="15.0">
+  <Include Path="NativeRecommendedRules.ruleset" Action="Default" />
+</RuleSet>

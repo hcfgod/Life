@@ -14,4 +14,5 @@ project "Engine"
     }
 
     UseEngineIncludeDirs()
+    ConfigureSanitizers()
     ConfigureCommonProject()

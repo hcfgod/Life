@@ -14,6 +14,24 @@ workspace "Life"
 
     filter {}
 
+newoption
+{
+    trigger = "asan",
+    description = "Enable AddressSanitizer instrumentation for supported targets"
+}
+
+newoption
+{
+    trigger = "ubsan",
+    description = "Enable UndefinedBehaviorSanitizer instrumentation for supported targets"
+}
+
+newoption
+{
+    trigger = "tsan",
+    description = "Enable ThreadSanitizer instrumentation for supported targets"
+}
+
 RootDir = os.getcwd()
 
 outputdir = "%{cfg.system}-%{cfg.architecture}/%{cfg.buildcfg}"
@@ -95,6 +113,53 @@ function ConfigureCommonProject()
     filter "configurations:Dist"
         runtime "Release"
         optimize "Full"
+
+    filter {}
+end
+
+function ConfigureSanitizers()
+    filter { "system:linux", "options:asan" }
+        buildoptions { "-fsanitize=address", "-fno-omit-frame-pointer" }
+        linkoptions { "-fsanitize=address" }
+
+    filter { "system:linux", "options:ubsan" }
+        buildoptions { "-fsanitize=undefined", "-fno-omit-frame-pointer" }
+        linkoptions { "-fsanitize=undefined" }
+
+    filter { "system:linux", "options:tsan" }
+        buildoptions { "-fsanitize=thread", "-fno-omit-frame-pointer" }
+        linkoptions { "-fsanitize=thread" }
+
+    filter { "system:macosx", "options:asan" }
+        buildoptions { "-fsanitize=address", "-fno-omit-frame-pointer" }
+        linkoptions { "-fsanitize=address" }
+
+    filter { "system:macosx", "options:ubsan" }
+        buildoptions { "-fsanitize=undefined", "-fno-omit-frame-pointer" }
+        linkoptions { "-fsanitize=undefined" }
+
+    filter { "system:macosx", "options:tsan" }
+        buildoptions { "-fsanitize=thread", "-fno-omit-frame-pointer" }
+        linkoptions { "-fsanitize=thread" }
+
+    filter { "options:asan" }
+        symbols "On"
+
+    filter { "options:ubsan" }
+        symbols "On"
+
+    filter { "options:tsan" }
+        symbols "On"
+
+    filter {}
+end
+
+function ConfigureRuntimeSearchPaths()
+    filter "system:linux"
+        runpathdirs { "$ORIGIN" }
+
+    filter "system:macosx"
+        runpathdirs { "@executable_path" }
 
     filter {}
 end

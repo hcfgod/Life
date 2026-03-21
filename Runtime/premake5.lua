@@ -19,5 +19,7 @@ project "Runtime"
     }
 
     ConfigureApplicationEntrypoints()
+    ConfigureSanitizers()
+    ConfigureRuntimeSearchPaths()
     ConfigureSDL3Linking()
     ConfigureCommonProject()

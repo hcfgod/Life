@@ -4,6 +4,9 @@ setlocal EnableExtensions
 set "PREMAKE_VERSION=5.0.0-beta2"
 set "CMAKE_VERSION=4.3.0"
 set "CMAKE_CMD="
+set "PREMAKE_ACTION_ARG=%~1"
+if not "%~1"=="" shift
+set "PREMAKE_EXTRA_ARGS=%*"
 
 pushd "%~dp0" >nul || goto :error
 
@@ -23,7 +26,7 @@ echo [Setup] Updating submodules recursively...
 git submodule update --init --recursive
 if errorlevel 1 goto :error
 
-call :resolve_premake "%~1"
+call :resolve_premake "%PREMAKE_ACTION_ARG%"
 if errorlevel 1 goto :error
 
 call :resolve_cmake
@@ -33,7 +36,7 @@ call :build_sdl
 if errorlevel 1 goto :error
 
 echo [Setup] Generating project files with Premake (%PREMAKE_ACTION%)...
-call "%PREMAKE_CMD%" %PREMAKE_ACTION%
+call "%PREMAKE_CMD%" %PREMAKE_ACTION% %PREMAKE_EXTRA_ARGS%
 if errorlevel 1 goto :error
 
 echo [Setup] Dependencies, SDL3, and project files are ready.

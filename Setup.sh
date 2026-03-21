@@ -8,6 +8,9 @@ CMAKE_VERSION="4.3.0"
 cd "$REPO_ROOT"
 
 PREMAKE_ACTION=${1:-}
+if [ $# -gt 0 ]; then
+    shift
+fi
 if [ -z "$PREMAKE_ACTION" ]; then
     case "$(uname -s)" in
         Darwin)
@@ -214,6 +217,6 @@ build_sdl
 resolve_premake
 
 echo "[Setup] Generating project files with Premake ($PREMAKE_ACTION)..."
-"$PREMAKE_CMD" "$PREMAKE_ACTION"
+"$PREMAKE_CMD" "$PREMAKE_ACTION" "$@"
 
 echo "[Setup] Dependencies, SDL3, and project files are ready."

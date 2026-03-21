@@ -18,5 +18,7 @@ project "Test"
         "Engine"
     }
 
+    ConfigureSanitizers()
+    ConfigureRuntimeSearchPaths()
     ConfigureSDL3Linking()
     ConfigureCommonProject()
