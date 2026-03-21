@@ -191,17 +191,17 @@ function ConfigureSDL3Linking()
     filter { "system:linux", "configurations:Debug" }
         libdirs { LibraryDir["SDL3_Linux_Debug"] }
         links { "SDL3" }
-        postbuildcommands { '{COPY} "' .. BinaryFile["SDL3_Linux_Debug"] .. '" "%{cfg.targetdir}"' }
+        postbuildcommands { 'cp -a "' .. BinaryDir["SDL3_Linux_Debug"] .. '"/libSDL3.so* "%{cfg.targetdir}"' }
 
     filter { "system:linux", "configurations:Release" }
         libdirs { LibraryDir["SDL3_Linux_Release"] }
         links { "SDL3" }
-        postbuildcommands { '{COPY} "' .. BinaryFile["SDL3_Linux_Release"] .. '" "%{cfg.targetdir}"' }
+        postbuildcommands { 'cp -a "' .. BinaryDir["SDL3_Linux_Release"] .. '"/libSDL3.so* "%{cfg.targetdir}"' }
 
     filter { "system:linux", "configurations:Dist" }
         libdirs { LibraryDir["SDL3_Linux_Release"] }
         links { "SDL3" }
-        postbuildcommands { '{COPY} "' .. BinaryFile["SDL3_Linux_Release"] .. '" "%{cfg.targetdir}"' }
+        postbuildcommands { 'cp -a "' .. BinaryDir["SDL3_Linux_Release"] .. '"/libSDL3.so* "%{cfg.targetdir}"' }
 
     filter { "system:macosx", "configurations:Debug" }
         libdirs { LibraryDir["SDL3_MacOS_Debug"] }

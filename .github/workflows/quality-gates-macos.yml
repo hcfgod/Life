@@ -92,6 +92,7 @@ jobs:
             --compile-commands Build/compile_commands/macos/compile_commands.json \
             --files Build/Logs/macos-clang-tidy-files.txt \
             --clang-tidy-binary "$LLVM_PREFIX/bin/clang-tidy" \
+            --query-driver "/usr/bin/clang++,/usr/bin/clang" \
             --jobs 4
 
       - name: Build sanitizer configuration
