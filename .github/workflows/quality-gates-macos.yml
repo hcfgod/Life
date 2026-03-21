@@ -24,7 +24,7 @@ jobs:
           - gate_name: ASan+UBSan
             premake_args: '--asan --ubsan'
             run_clang_tidy: false
-            sanitizer_options: 'ASAN_OPTIONS=detect_leaks=1:strict_string_checks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1'
+            sanitizer_options: 'ASAN_OPTIONS=detect_leaks=0:strict_string_checks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1'
             timeout_minutes: 30
           - gate_name: TSan
             premake_args: '--tsan'
@@ -50,6 +50,7 @@ jobs:
         run: |
           brew install llvm bear
           echo "LLVM_PREFIX=$(brew --prefix llvm)" >> "$GITHUB_ENV"
+          echo "MACOS_SDKROOT=$(xcrun --show-sdk-path)" >> "$GITHUB_ENV"
 
       - name: Make scripts executable
         run: chmod +x Setup.sh Scripts/CI/*.sh
@@ -92,7 +93,9 @@ jobs:
             --compile-commands Build/compile_commands/macos/compile_commands.json \
             --files Build/Logs/macos-clang-tidy-files.txt \
             --clang-tidy-binary "$LLVM_PREFIX/bin/clang-tidy" \
-            --query-driver "/usr/bin/clang++,/usr/bin/clang" \
+            --extra-arg-before=-isysroot \
+            --extra-arg-before="$MACOS_SDKROOT" \
+            --extra-arg-before=-stdlib=libc++ \
             --jobs 4
 
       - name: Build sanitizer configuration

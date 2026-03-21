@@ -12,7 +12,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--clang-tidy-binary", default="clang-tidy")
     parser.add_argument("--header-filter", default="^(Engine|Runtime)/")
     parser.add_argument("--jobs", type=int, default=0)
-    parser.add_argument("--query-driver", default="")
+    parser.add_argument("--extra-arg-before", action="append", default=[])
+    parser.add_argument("--extra-arg", action="append", default=[])
     parser.add_argument("--warnings-as-errors", default="*")
     return parser.parse_args()
 
@@ -26,8 +27,11 @@ def run_tidy(arguments: argparse.Namespace, repo_root: Path, source_file: str) -
         f"--warnings-as-errors={arguments.warnings_as_errors}",
     ]
 
-    if arguments.query_driver:
-        command.append(f"--query-driver={arguments.query_driver}")
+    for extra_arg_before in arguments.extra_arg_before:
+        command.append(f"--extra-arg-before={extra_arg_before}")
+
+    for extra_arg in arguments.extra_arg:
+        command.append(f"--extra-arg={extra_arg}")
 
     command.append(source_file)
 
