@@ -1,0 +1,162 @@
+@echo off
+setlocal EnableExtensions
+
+set "PREMAKE_VERSION=5.0.0-beta2"
+set "CMAKE_VERSION=4.3.0"
+set "CMAKE_CMD="
+
+pushd "%~dp0" >nul || goto :error
+
+call :needs_bootstrap
+if errorlevel 1 goto :error
+if /i "%NEEDS_BOOTSTRAP%"=="1" (
+    echo [Setup] Bootstrap state not found. Running bootstrap...
+    call "Scripts\BootstrapRepo.bat"
+    if errorlevel 1 goto :error
+)
+
+echo [Setup] Initializing git submodules...
+git submodule init
+if errorlevel 1 goto :error
+
+echo [Setup] Updating submodules recursively...
+git submodule update --init --recursive
+if errorlevel 1 goto :error
+
+call :resolve_premake "%~1"
+if errorlevel 1 goto :error
+
+call :resolve_cmake
+if errorlevel 1 goto :error
+
+call :build_sdl
+if errorlevel 1 goto :error
+
+echo [Setup] Generating project files with Premake (%PREMAKE_ACTION%)...
+call "%PREMAKE_CMD%" %PREMAKE_ACTION%
+if errorlevel 1 goto :error
+
+echo [Setup] Dependencies, SDL3, and project files are ready.
+popd >nul
+exit /b 0
+
+:resolve_cmake
+where cmake >nul 2>&1
+if not errorlevel 1 set "CMAKE_CMD=cmake"
+if defined CMAKE_CMD exit /b 0
+
+set "CMAKE_DIR=Scripts\CMake\windows"
+set "CMAKE_ROOT=%CMAKE_DIR%\cmake-%CMAKE_VERSION%-windows-x86_64"
+set "CMAKE_EXE=%CMAKE_ROOT%\bin\cmake.exe"
+if exist "%CMAKE_EXE%" (
+    set "CMAKE_CMD=%CMAKE_EXE%"
+    exit /b 0
+)
+
+set "CMAKE_ARCHIVE=%CMAKE_DIR%\cmake-%CMAKE_VERSION%-windows-x86_64.zip"
+set "CMAKE_URL=https://github.com/Kitware/CMake/releases/download/v%CMAKE_VERSION%/cmake-%CMAKE_VERSION%-windows-x86_64.zip"
+
+echo [Setup] CMake was not found. Downloading CMake %CMAKE_VERSION% for Windows...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; New-Item -ItemType Directory -Force -Path '%CMAKE_DIR%' | Out-Null; Invoke-WebRequest -Uri '%CMAKE_URL%' -OutFile '%CMAKE_ARCHIVE%'; Expand-Archive -Path '%CMAKE_ARCHIVE%' -DestinationPath '%CMAKE_DIR%' -Force; Remove-Item '%CMAKE_ARCHIVE%' -Force"
+if errorlevel 1 exit /b 1
+
+if exist "%CMAKE_EXE%" (
+    set "CMAKE_CMD=%CMAKE_EXE%"
+    exit /b 0
+)
+
+echo [Setup] CMake download failed.
+exit /b 1
+
+:build_sdl
+call :resolve_sdl_generator
+if errorlevel 1 exit /b 1
+
+call :build_sdl_config Debug
+if errorlevel 1 exit /b 1
+
+call :build_sdl_config Release
+if errorlevel 1 exit /b 1
+
+exit /b 0
+
+:resolve_sdl_generator
+set "SDL_CMAKE_GENERATOR="
+if /i "%PREMAKE_ACTION%"=="vs2022" set "SDL_CMAKE_GENERATOR=Visual Studio 17 2022"
+if /i "%PREMAKE_ACTION%"=="vs2019" set "SDL_CMAKE_GENERATOR=Visual Studio 16 2019"
+if /i "%PREMAKE_ACTION%"=="vs2017" set "SDL_CMAKE_GENERATOR=Visual Studio 15 2017"
+if defined SDL_CMAKE_GENERATOR exit /b 0
+
+echo [Setup] Unsupported Windows Premake action for SDL build: %PREMAKE_ACTION%
+exit /b 1
+
+:build_sdl_config
+set "SDL_CONFIG=%~1"
+set "SDL_BUILD_DIR=Vendor\SDL3\Build\windows\x64\%SDL_CONFIG%"
+set "SDL_INSTALL_DIR=%CD%\Vendor\SDL3\Install\windows\x64\%SDL_CONFIG%"
+
+echo [Setup] Building SDL3 (%SDL_CONFIG%)...
+"%CMAKE_CMD%" -S "Vendor\SDL3" -B "%SDL_BUILD_DIR%" -G "%SDL_CMAKE_GENERATOR%" -A x64 -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_INSTALL=ON -DCMAKE_INSTALL_PREFIX="%SDL_INSTALL_DIR%"
+if errorlevel 1 exit /b 1
+
+"%CMAKE_CMD%" --build "%SDL_BUILD_DIR%" --config %SDL_CONFIG% --target install
+if errorlevel 1 exit /b 1
+
+exit /b 0
+
+:resolve_premake
+set "PREMAKE_ACTION=%~1"
+if "%PREMAKE_ACTION%"=="" set "PREMAKE_ACTION=vs2022"
+
+set "PREMAKE_CMD="
+where premake5 >nul 2>&1
+if not errorlevel 1 set "PREMAKE_CMD=premake5"
+if defined PREMAKE_CMD exit /b 0
+
+where premake5.exe >nul 2>&1
+if not errorlevel 1 set "PREMAKE_CMD=premake5.exe"
+if defined PREMAKE_CMD exit /b 0
+
+set "PREMAKE_DIR=Scripts\Premake\windows"
+set "PREMAKE_EXE=%PREMAKE_DIR%\premake5.exe"
+if exist "%PREMAKE_EXE%" (
+    set "PREMAKE_CMD=%PREMAKE_EXE%"
+    exit /b 0
+)
+
+set "PREMAKE_ARCHIVE=%PREMAKE_DIR%\premake-%PREMAKE_VERSION%-windows.zip"
+set "PREMAKE_URL=https://github.com/premake/premake-core/releases/download/v%PREMAKE_VERSION%/premake-%PREMAKE_VERSION%-windows.zip"
+
+echo [Setup] Premake was not found. Downloading Premake %PREMAKE_VERSION% for Windows...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; New-Item -ItemType Directory -Force -Path '%PREMAKE_DIR%' | Out-Null; Invoke-WebRequest -Uri '%PREMAKE_URL%' -OutFile '%PREMAKE_ARCHIVE%'; Expand-Archive -Path '%PREMAKE_ARCHIVE%' -DestinationPath '%PREMAKE_DIR%' -Force; Remove-Item '%PREMAKE_ARCHIVE%' -Force"
+if errorlevel 1 exit /b 1
+
+if exist "%PREMAKE_EXE%" (
+    set "PREMAKE_CMD=%PREMAKE_EXE%"
+    exit /b 0
+)
+
+echo [Setup] Premake download failed.
+exit /b 1
+
+:needs_bootstrap
+set "NEEDS_BOOTSTRAP=0"
+if not exist ".gitmodules" (
+    set "NEEDS_BOOTSTRAP=1"
+    exit /b 0
+)
+
+findstr /i /c:"path = Vendor/SDL3" ".gitmodules" >nul || set "NEEDS_BOOTSTRAP=1"
+findstr /i /c:"path = Vendor/spdlog" ".gitmodules" >nul || set "NEEDS_BOOTSTRAP=1"
+findstr /i /c:"path = Vendor/json" ".gitmodules" >nul || set "NEEDS_BOOTSTRAP=1"
+findstr /i /c:"path = Vendor/doctest" ".gitmodules" >nul || set "NEEDS_BOOTSTRAP=1"
+if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\SDL3\*" set "NEEDS_BOOTSTRAP=1"
+if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\spdlog\*" set "NEEDS_BOOTSTRAP=1"
+if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\json\*" set "NEEDS_BOOTSTRAP=1"
+if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\doctest\*" set "NEEDS_BOOTSTRAP=1"
+exit /b 0
+
+:error
+echo [Setup] Failed to prepare dependencies.
+popd >nul 2>nul
+exit /b 1
