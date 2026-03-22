@@ -9,39 +9,31 @@ permissions:
 
 jobs:
   build-test-macos:
-    name: Build and Test macOS
-    runs-on: macos-15-intel
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-
-      - name: Make scripts executable
-        run: chmod +x Setup.sh Scripts/CI/*.sh
-
-      - name: Prepare project files
-        run: ./Setup.sh gmake2
-
-      - name: Build workspace
-        run: ./Scripts/CI/build_make.sh Debug clean all
-
-      - name: Run tests
-        run: ./Scripts/CI/run_tests.sh Debug
-
-      - name: Upload macOS test artifacts
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: macos-debug-build
-          path: |
-            Build/macosx-*/Debug/Runtime/**
-            Build/macosx-*/Debug/Test/**
-          if-no-files-found: ignore
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-intel
+            runs_on: macos-15-intel
+            arch: x64
+            setup_command: ./Setup.sh gmake2 --arch=x64
+          - name: macos-apple-silicon
+            runs_on: macos-14
+            arch: arm64
+            setup_command: ./Setup.sh gmake2 --arch=arm64
+    uses: ./.github/workflows/reusable-platform-job.yml
+    with:
+      job_name: Build and Test ${{ matrix.name }}
+      runs_on: ${{ matrix.runs_on }}
+      platform: macos
+      dependency_profile: macos
+      premake_cache_dir: macosx
+      cmake_cache_dir: macos
+      sdl_cache_dir: macos/${{ matrix.arch }}
+      setup_command: ${{ matrix.setup_command }}
+      build_command: ./Scripts/CI/build_make.sh Debug clean all
+      test_command: ./Scripts/CI/run_tests.sh Debug
+      artifact_name: ${{ matrix.name }}-debug-build
+      artifact_path: |
+        Build/macosx-*/Debug/Runtime/**
+        Build/macosx-*/Debug/Test/**

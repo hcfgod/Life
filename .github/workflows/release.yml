@@ -11,133 +11,79 @@ permissions:
 jobs:
   build_release_assets:
     name: Release ${{ matrix.name }}
-    runs-on: ${{ matrix.runs_on }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: windows-x64
             runs_on: windows-2022
-            setup_command: Setup.bat vs2022
-            build_command: ./Scripts/CI/build_windows.ps1 -Configuration Dist -LogPath Build/Logs/windows-release-msbuild.log
+            platform: windows
+            dependency_profile: windows
+            premake_cache_dir: windows
+            cmake_cache_dir: windows
+            sdl_cache_dir: windows/x64
+            setup_command: Setup.bat vs2022 --arch=x64
+            build_command: ./Scripts/CI/build_windows.ps1 -Configuration Dist -Platform x64 -LogPath Build/Logs/windows-release-msbuild.log
             package_command: python Scripts/CI/package_runtime.py --input-dir Build/windows-*/Dist/Runtime --output Build/Artifacts/Life-windows-x64.zip --format zip
             artifact_path: Build/Artifacts/Life-windows-x64.zip
+            cc: ''
+            cxx: ''
           - name: linux-x64
             runs_on: ubuntu-latest
-            setup_command: ./Setup.sh gmake2
+            platform: linux
+            dependency_profile: linux
+            premake_cache_dir: linux
+            cmake_cache_dir: linux
+            sdl_cache_dir: linux/x64
+            setup_command: ./Setup.sh gmake2 --arch=x64
             build_command: ./Scripts/CI/build_make.sh Dist clean all
             package_command: python Scripts/CI/package_runtime.py --input-dir Build/linux-*/Dist/Runtime --output Build/Artifacts/Life-linux-x64.tar.gz --format gztar
             artifact_path: Build/Artifacts/Life-linux-x64.tar.gz
+            cc: clang
+            cxx: clang++
           - name: macos-x64
             runs_on: macos-15-intel
-            setup_command: ./Setup.sh gmake2
+            platform: macos
+            dependency_profile: macos-llvm
+            premake_cache_dir: macosx
+            cmake_cache_dir: macos
+            sdl_cache_dir: macos/x64
+            setup_command: ./Setup.sh gmake2 --arch=x64
             build_command: ./Scripts/CI/build_make.sh Dist clean all
             package_command: python Scripts/CI/package_runtime.py --input-dir Build/macosx-*/Dist/Runtime --output Build/Artifacts/Life-macos-x64.tar.gz --format gztar
             artifact_path: Build/Artifacts/Life-macos-x64.tar.gz
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-
-      - name: Set up MSBuild
-        if: runner.os == 'Windows'
-        uses: microsoft/setup-msbuild@v2
-        with:
-          msbuild-architecture: x64
-
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            clang \
-            pkg-config \
-            ninja-build \
-            libaudio-dev \
-            libjack-dev \
-            libsndio-dev \
-            libusb-1.0-0-dev \
-            libasound2-dev \
-            libpulse-dev \
-            libx11-dev \
-            libxext-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxfixes-dev \
-            libxrender-dev \
-            libxss-dev \
-            libxtst-dev \
-            libxkbcommon-dev \
-            libwayland-dev \
-            wayland-protocols \
-            libegl1-mesa-dev \
-            libgl1-mesa-dev \
-            libgles2-mesa-dev \
-            libdrm-dev \
-            libgbm-dev \
-            libdbus-1-dev \
-            libudev-dev
-
-      - name: Install macOS dependencies
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm
-          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
-
-      - name: Make scripts executable
-        if: runner.os != 'Windows'
-        run: chmod +x Setup.sh Scripts/CI/*.sh
-
-      - name: Prepare project files (Windows)
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: ${{ matrix.setup_command }}
-
-      - name: Prepare project files (Unix)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: ${{ matrix.setup_command }}
-
-      - name: Build release configuration (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ${{ matrix.build_command }}
-
-      - name: Build release configuration (Unix)
-        if: runner.os != 'Windows'
-        shell: bash
-        env:
-          CC: clang
-          CXX: clang++
-        run: ${{ matrix.build_command }}
-
-      - name: Package runtime (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ${{ matrix.package_command }}
-
-      - name: Package runtime (Unix)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: ${{ matrix.package_command }}
-
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: ${{ matrix.name }}-release-artifact
-          path: ${{ matrix.artifact_path }}
-          if-no-files-found: error
+            cc: clang
+            cxx: clang++
+          - name: macos-arm64
+            runs_on: macos-14
+            platform: macos
+            dependency_profile: macos-llvm
+            premake_cache_dir: macosx
+            cmake_cache_dir: macos
+            sdl_cache_dir: macos/arm64
+            setup_command: ./Setup.sh gmake2 --arch=arm64
+            build_command: ./Scripts/CI/build_make.sh Dist clean all
+            package_command: python Scripts/CI/package_runtime.py --input-dir Build/macosx-*/Dist/Runtime --output Build/Artifacts/Life-macos-arm64.tar.gz --format gztar
+            artifact_path: Build/Artifacts/Life-macos-arm64.tar.gz
+            cc: clang
+            cxx: clang++
+    uses: ./.github/workflows/reusable-platform-job.yml
+    with:
+      job_name: Release ${{ matrix.name }}
+      runs_on: ${{ matrix.runs_on }}
+      platform: ${{ matrix.platform }}
+      dependency_profile: ${{ matrix.dependency_profile }}
+      premake_cache_dir: ${{ matrix.premake_cache_dir }}
+      cmake_cache_dir: ${{ matrix.cmake_cache_dir }}
+      sdl_cache_dir: ${{ matrix.sdl_cache_dir }}
+      setup_command: ${{ matrix.setup_command }}
+      build_command: ${{ matrix.build_command }}
+      package_command: ${{ matrix.package_command }}
+      artifact_name: ${{ matrix.name }}-release-artifact
+      artifact_path: ${{ matrix.artifact_path }}
+      artifact_if_no_files: error
+      cc: ${{ matrix.cc }}
+      cxx: ${{ matrix.cxx }}
 
   publish_release:
     name: Publish Release
@@ -161,6 +107,12 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           name: macos-x64-release-artifact
+          path: Build/ReleaseAssets
+
+      - name: Download macOS Apple Silicon release artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: macos-arm64-release-artifact
           path: Build/ReleaseAssets
 
       - name: Publish GitHub release asset

@@ -10,116 +10,69 @@ permissions:
 jobs:
   macos-quality-gates:
     name: macOS ${{ matrix.gate_name }}
-    runs-on: macos-15-intel
-    timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - gate_name: Clang-Tidy
             premake_args: ''
-            run_clang_tidy: true
-            sanitizer_options: ''
+            build_command: |
+              mkdir -p Build/compile_commands/macos
+              bear --output Build/compile_commands/macos/compile_commands.json -- ./Scripts/CI/build_make.sh Debug clean all
+              python Scripts/CI/normalize_compile_commands.py Build/compile_commands/macos/compile_commands.json --repo-root . --project-root Engine --project-root Runtime --project-root Test
+            analysis_command: |
+              python Scripts/CI/collect_changed_files.py \
+                --repo-root . \
+                --event-name "${{ github.event_name }}" \
+                --base-ref "${{ github.base_ref }}" \
+                --base-sha "${{ github.event.before }}" \
+                --head-sha "${{ github.sha }}" \
+                --pattern '^(Engine|Runtime)/.*\.(c|cc|cpp|cxx)$' \
+                --compile-commands Build/compile_commands/macos/compile_commands.json \
+                --fallback-compile-db-pattern '^(Engine|Runtime)/.*\.(c|cc|cpp|cxx)$' \
+                --output Build/Logs/macos-clang-tidy-files.txt
+              python Scripts/CI/run_clang_tidy.py \
+                --repo-root . \
+                --compile-commands Build/compile_commands/macos/compile_commands.json \
+                --files Build/Logs/macos-clang-tidy-files.txt \
+                --clang-tidy-binary "$LLVM_PREFIX/bin/clang-tidy" \
+                --extra-arg-before=-isysroot \
+                --extra-arg-before="$MACOS_SDKROOT" \
+                --extra-arg-before=-stdlib=libc++ \
+                --jobs 4
+            test_command: ''
             timeout_minutes: 30
           - gate_name: ASan+UBSan
             premake_args: '--asan --ubsan'
-            run_clang_tidy: false
-            sanitizer_options: 'ASAN_OPTIONS=detect_leaks=0:strict_string_checks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1'
+            build_command: ./Scripts/CI/build_make.sh Debug clean all
+            analysis_command: ''
+            test_command: 'ASAN_OPTIONS=detect_leaks=0:strict_string_checks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./Scripts/CI/run_tests.sh Debug'
             timeout_minutes: 30
           - gate_name: TSan
             premake_args: '--tsan'
-            run_clang_tidy: false
-            sanitizer_options: 'TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1:history_size=7'
+            build_command: ./Scripts/CI/build_make.sh Debug clean all
+            analysis_command: ''
+            test_command: 'TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1:history_size=7 ./Scripts/CI/run_tests.sh Debug'
             timeout_minutes: 45
-    env:
-      HOMEBREW_NO_AUTO_UPDATE: '1'
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-
-      - name: Install dependencies
-        run: |
-          brew install llvm bear
-          echo "LLVM_PREFIX=$(brew --prefix llvm)" >> "$GITHUB_ENV"
-          echo "MACOS_SDKROOT=$(xcrun --show-sdk-path)" >> "$GITHUB_ENV"
-
-      - name: Make scripts executable
-        run: chmod +x Setup.sh Scripts/CI/*.sh
-
-      - name: Prepare project files
-        env:
-          CC: /usr/bin/clang
-          CXX: /usr/bin/clang++
-        run: ./Setup.sh gmake2 ${{ matrix.premake_args }}
-
-      - name: Build with compilation database
-        if: matrix.run_clang_tidy
-        env:
-          CC: /usr/bin/clang
-          CXX: /usr/bin/clang++
-        run: |
-          mkdir -p Build/compile_commands/macos
-          bear --output Build/compile_commands/macos/compile_commands.json -- ./Scripts/CI/build_make.sh Debug clean all
-          python Scripts/CI/normalize_compile_commands.py Build/compile_commands/macos/compile_commands.json --repo-root . --project-root Engine --project-root Runtime --project-root Test
-
-      - name: Select clang-tidy files
-        if: matrix.run_clang_tidy
-        run: |
-          python Scripts/CI/collect_changed_files.py \
-            --repo-root . \
-            --event-name "${{ github.event_name }}" \
-            --base-ref "${{ github.base_ref }}" \
-            --base-sha "${{ github.event.before }}" \
-            --head-sha "${{ github.sha }}" \
-            --pattern '^(Engine|Runtime)/.*\.(c|cc|cpp|cxx)$' \
-            --compile-commands Build/compile_commands/macos/compile_commands.json \
-            --fallback-compile-db-pattern '^(Engine|Runtime)/.*\.(c|cc|cpp|cxx)$' \
-            --output Build/Logs/macos-clang-tidy-files.txt
-
-      - name: Run clang-tidy
-        if: matrix.run_clang_tidy
-        run: |
-          python Scripts/CI/run_clang_tidy.py \
-            --repo-root . \
-            --compile-commands Build/compile_commands/macos/compile_commands.json \
-            --files Build/Logs/macos-clang-tidy-files.txt \
-            --clang-tidy-binary "$LLVM_PREFIX/bin/clang-tidy" \
-            --extra-arg-before=-isysroot \
-            --extra-arg-before="$MACOS_SDKROOT" \
-            --extra-arg-before=-stdlib=libc++ \
-            --jobs 4
-
-      - name: Build sanitizer configuration
-        if: ${{ !matrix.run_clang_tidy }}
-        env:
-          CC: /usr/bin/clang
-          CXX: /usr/bin/clang++
-        run: ./Scripts/CI/build_make.sh Debug clean all
-
-      - name: Run sanitizer tests
-        if: ${{ !matrix.run_clang_tidy }}
-        env:
-          CC: /usr/bin/clang
-          CXX: /usr/bin/clang++
-        run: ${{ matrix.sanitizer_options }} ./Scripts/CI/run_tests.sh Debug
-
-      - name: Upload macOS quality artifacts
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: macos-${{ matrix.gate_name }}
-          path: |
-            Build/compile_commands/macos/compile_commands.json
-            Build/Logs/macos-clang-tidy-files.txt
-            Build/macosx-*/Debug/Runtime/**
-            Build/macosx-*/Debug/Test/**
-          if-no-files-found: ignore
+    uses: ./.github/workflows/reusable-platform-job.yml
+    with:
+      job_name: macOS ${{ matrix.gate_name }}
+      runs_on: macos-15-intel
+      platform: macos
+      dependency_profile: macos-quality
+      premake_cache_dir: macosx
+      cmake_cache_dir: macos
+      sdl_cache_dir: macos/x64
+      setup_command: ./Setup.sh gmake2 ${{ matrix.premake_args }}
+      build_command: ${{ matrix.build_command }}
+      test_command: ${{ matrix.test_command }}
+      analysis_command: ${{ matrix.analysis_command }}
+      artifact_name: macos-${{ matrix.gate_name }}
+      artifact_path: |
+        Build/compile_commands/macos/compile_commands.json
+        Build/Logs/macos-clang-tidy-files.txt
+        Build/macosx-*/Debug/Runtime/**
+        Build/macosx-*/Debug/Test/**
+      timeout_minutes: ${{ matrix.timeout_minutes }}
+      cc: /usr/bin/clang
+      cxx: /usr/bin/clang++

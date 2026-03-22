@@ -9,50 +9,22 @@ permissions:
 
 jobs:
   windows-static-analysis:
-    name: Windows Static Analysis
-    runs-on: windows-2022
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Set up MSBuild
-        uses: microsoft/setup-msbuild@v2
-        with:
-          msbuild-architecture: x64
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-
-      - name: Prepare project files
-        shell: cmd
-        run: Setup.bat vs2022
-
-      - name: Build solution
-        shell: pwsh
-        run: ./Scripts/CI/build_windows.ps1 -Configuration Debug -LogPath Build/Logs/windows-quality-build.log
-
-      - name: Run tests
-        shell: pwsh
-        run: ./Scripts/CI/run_windows_tests.ps1 -Configuration Debug
-
-      - name: Run MSVC code analysis
-        shell: pwsh
-        run: ./Scripts/CI/run_windows_code_analysis.ps1 -Configuration Debug -RulesetPath Scripts/CI/LifeNativeRecommended.ruleset -LogPath Build/Logs/windows-code-analysis.log
-
-      - name: Upload Windows quality artifacts
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: windows-quality-logs
-          path: |
-            Build/Logs/windows-quality-build.log
-            Build/Logs/windows-code-analysis.log
-            Build/windows-*/Debug/Runtime/**
-            Build/windows-*/Debug/Test/**
-          if-no-files-found: ignore
+    uses: ./.github/workflows/reusable-platform-job.yml
+    with:
+      job_name: Windows Static Analysis
+      runs_on: windows-2022
+      platform: windows
+      dependency_profile: windows
+      premake_cache_dir: windows
+      cmake_cache_dir: windows
+      sdl_cache_dir: windows/x64
+      setup_command: Setup.bat vs2022 --arch=x64
+      build_command: ./Scripts/CI/build_windows.ps1 -Configuration Debug -Platform x64 -LogPath Build/Logs/windows-quality-build.log
+      test_command: ./Scripts/CI/run_windows_tests.ps1 -Configuration Debug -Platform x64
+      analysis_command: ./Scripts/CI/run_windows_code_analysis.ps1 -Configuration Debug -RulesetPath Scripts/CI/LifeNativeRecommended.ruleset -LogPath Build/Logs/windows-code-analysis.log
+      artifact_name: windows-quality-logs
+      artifact_path: |
+        Build/Logs/windows-quality-build.log
+        Build/Logs/windows-code-analysis.log
+        Build/windows-*/Debug/Runtime/**
+        Build/windows-*/Debug/Test/**

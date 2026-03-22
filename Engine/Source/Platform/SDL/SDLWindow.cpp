@@ -1,4 +1,4 @@
-#include "Core/Window.h"
+#include "Core/ApplicationRuntime.h"
 #include "Core/Log.h"
 #include "Platform/SDL/SDLEvent.h"
 
@@ -26,9 +26,6 @@ namespace Life
         explicit SDLWindow(WindowSpecification specification)
             : m_Specification(std::move(specification))
         {
-            if (!SDL_Init(SDL_INIT_VIDEO))
-                throw std::runtime_error(SDL_GetError());
-
             m_WindowHandle.reset(SDL_CreateWindow(
                 m_Specification.Title.c_str(),
                 static_cast<int>(m_Specification.Width),
@@ -38,9 +35,7 @@ namespace Life
 
             if (!m_WindowHandle)
             {
-                std::string error = SDL_GetError();
-                SDL_Quit();
-                throw std::runtime_error(error);
+                throw std::runtime_error(SDL_GetError());
             }
 
             LOG_CORE_INFO("Created window '{}'", m_Specification.Title);
@@ -49,7 +44,6 @@ namespace Life
         ~SDLWindow() override
         {
             m_WindowHandle.reset();
-            SDL_Quit();
 
             try
             {
@@ -58,19 +52,6 @@ namespace Life
             catch (...)
             {
                 std::fprintf(stderr, "Destroyed window '%s'\n", m_Specification.Title.c_str());
-            }
-        }
-
-        Scope<Event> PollEvent() override
-        {
-            for (;;)
-            {
-                SDL_Event sdlEvent;
-                if (!SDL_PollEvent(&sdlEvent))
-                    return nullptr;
-
-                if (Scope<Event> event = TranslateSDLEvent(sdlEvent))
-                    return event;
             }
         }
 
@@ -89,8 +70,41 @@ namespace Life
         Scope<SDL_Window, SDLWindowDeleter> m_WindowHandle;
     };
 
-    Scope<Window> CreatePlatformWindow(const WindowSpecification& specification)
+    class SDLApplicationRuntime final : public ApplicationRuntime
     {
-        return CreateScope<SDLWindow>(specification);
+    public:
+        SDLApplicationRuntime()
+        {
+            if (!SDL_Init(SDL_INIT_VIDEO))
+                throw std::runtime_error(SDL_GetError());
+        }
+
+        ~SDLApplicationRuntime() override
+        {
+            SDL_Quit();
+        }
+
+        Scope<Window> CreatePlatformWindow(const WindowSpecification& specification) override
+        {
+            return CreateScope<SDLWindow>(specification);
+        }
+
+        Scope<Event> PollEvent() override
+        {
+            for (;;)
+            {
+                SDL_Event sdlEvent;
+                if (!SDL_PollEvent(&sdlEvent))
+                    return nullptr;
+
+                if (Scope<Event> event = TranslateSDLEvent(sdlEvent))
+                    return event;
+            }
+        }
+    };
+
+    Scope<ApplicationRuntime> CreatePlatformApplicationRuntime()
+    {
+        return CreateScope<SDLApplicationRuntime>();
     }
 }

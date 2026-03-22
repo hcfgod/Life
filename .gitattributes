@@ -6,3 +6,11 @@
 #
 *.meta text eol=lf
 *.sh text eol=lf
+*.ps1 text eol=lf
+*.h text eol=lf
+*.hpp text eol=lf
+*.cpp text eol=lf
+*.lua text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf

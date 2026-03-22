@@ -4,9 +4,26 @@ setlocal EnableExtensions
 set "PREMAKE_VERSION=5.0.0-beta2"
 set "CMAKE_VERSION=4.3.0"
 set "CMAKE_CMD="
+set "TARGET_ARCH="
+set "SDL_CMAKE_ARCHITECTURE="
 set "PREMAKE_ACTION_ARG=%~1"
 if not "%~1"=="" shift
 set "PREMAKE_EXTRA_ARGS=%*"
+
+for %%A in (%PREMAKE_EXTRA_ARGS%) do (
+    set "CURRENT_ARG=%%~A"
+    call :capture_arch_arg
+    if errorlevel 1 goto :error
+)
+
+if not defined TARGET_ARCH set "TARGET_ARCH=x64"
+if /i "%TARGET_ARCH%"=="amd64" set "TARGET_ARCH=x64"
+if /i "%TARGET_ARCH%"=="x86_64" set "TARGET_ARCH=x64"
+if /i "%TARGET_ARCH%"=="aarch64" set "TARGET_ARCH=arm64"
+if /i not "%TARGET_ARCH%"=="x64" if /i not "%TARGET_ARCH%"=="arm64" (
+    echo [Setup] Unsupported target architecture: %TARGET_ARCH%
+    goto :error
+)
 
 pushd "%~dp0" >nul || goto :error
 
@@ -95,11 +112,22 @@ exit /b 1
 
 :build_sdl_config
 set "SDL_CONFIG=%~1"
-set "SDL_BUILD_DIR=Vendor\SDL3\Build\windows\x64\%SDL_CONFIG%"
-set "SDL_INSTALL_DIR=%CD%\Vendor\SDL3\Install\windows\x64\%SDL_CONFIG%"
+set "SDL_BUILD_DIR=Vendor\SDL3\Build\windows\%TARGET_ARCH%\%SDL_CONFIG%"
+set "SDL_INSTALL_DIR=%CD%\Vendor\SDL3\Install\windows\%TARGET_ARCH%\%SDL_CONFIG%"
+
+if exist "%SDL_BUILD_DIR%\CMakeCache.txt" if exist "%SDL_INSTALL_DIR%\lib\SDL3.lib" if exist "%SDL_INSTALL_DIR%\bin\SDL3.dll" (
+    echo [Setup] SDL3 %SDL_CONFIG% is already available. Skipping build.
+    exit /b 0
+)
+
+if /i "%TARGET_ARCH%"=="arm64" (
+    set "SDL_CMAKE_ARCHITECTURE=ARM64"
+) else (
+    set "SDL_CMAKE_ARCHITECTURE=x64"
+)
 
 echo [Setup] Building SDL3 (%SDL_CONFIG%)...
-"%CMAKE_CMD%" -S "Vendor\SDL3" -B "%SDL_BUILD_DIR%" -G "%SDL_CMAKE_GENERATOR%" -A x64 -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_INSTALL=ON -DCMAKE_INSTALL_PREFIX="%SDL_INSTALL_DIR%"
+"%CMAKE_CMD%" -S "Vendor\SDL3" -B "%SDL_BUILD_DIR%" -G "%SDL_CMAKE_GENERATOR%" -A %SDL_CMAKE_ARCHITECTURE% -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_INSTALL=ON -DCMAKE_INSTALL_PREFIX="%SDL_INSTALL_DIR%"
 if errorlevel 1 exit /b 1
 
 "%CMAKE_CMD%" --build "%SDL_BUILD_DIR%" --config %SDL_CONFIG% --target install
@@ -157,6 +185,11 @@ if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\SDL3\*" set "NEEDS_BOOTSTRAP=1"
 if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\spdlog\*" set "NEEDS_BOOTSTRAP=1"
 if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\json\*" set "NEEDS_BOOTSTRAP=1"
 if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\doctest\*" set "NEEDS_BOOTSTRAP=1"
+exit /b 0
+
+:capture_arch_arg
+if not defined CURRENT_ARG exit /b 0
+if /i "%CURRENT_ARG:~0,7%"=="--arch=" set "TARGET_ARCH=%CURRENT_ARG:~7%"
 exit /b 0
 
 :error

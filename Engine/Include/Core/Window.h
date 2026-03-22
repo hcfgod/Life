@@ -1,8 +1,5 @@
 #pragma once
 
-#include "Core/Events/Event.h"
-#include "Core/Memory.h"
-
 #include <cstdint>
 #include <string>
 
@@ -26,13 +23,10 @@ namespace Life
         Window(Window&&) = delete;
         Window& operator=(Window&&) = delete;
 
-        virtual Scope<Event> PollEvent() = 0;
         virtual const WindowSpecification& GetSpecification() const = 0;
         virtual void* GetNativeHandle() const = 0;
 
     protected:
         Window() = default;
     };
-
-    Scope<Window> CreatePlatformWindow(const WindowSpecification& specification);
 }

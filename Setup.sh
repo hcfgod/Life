@@ -11,6 +11,61 @@ PREMAKE_ACTION=${1:-}
 if [ $# -gt 0 ]; then
     shift
 fi
+TARGET_ARCH=""
+for premake_arg in "$@"; do
+    case "$premake_arg" in
+        --arch=*)
+            TARGET_ARCH=${premake_arg#--arch=}
+            ;;
+    esac
+done
+
+normalize_target_architecture() {
+    target_architecture=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+    case "$target_architecture" in
+        amd64|x86_64)
+            printf '%s' "x64"
+            ;;
+        arm64|aarch64)
+            printf '%s' "arm64"
+            ;;
+        *)
+            printf '%s' "$target_architecture"
+            ;;
+    esac
+}
+
+resolve_host_architecture() {
+    normalize_target_architecture "$(uname -m)"
+}
+
+resolve_target_architecture() {
+    if [ -n "$TARGET_ARCH" ]; then
+        normalize_target_architecture "$TARGET_ARCH"
+        return 0
+    fi
+
+    host_architecture=$(resolve_host_architecture)
+    if [ "$host_architecture" = "arm64" ]; then
+        printf '%s' "arm64"
+        return 0
+    fi
+
+    printf '%s' "x64"
+}
+
+HOST_ARCH=$(resolve_host_architecture)
+TARGET_ARCH=$(resolve_target_architecture)
+if [ "$TARGET_ARCH" != "x64" ] && [ "$TARGET_ARCH" != "arm64" ]; then
+    echo "[Setup] Unsupported target architecture: $TARGET_ARCH"
+    exit 1
+fi
+
+if [ "$(uname -s)" = "Linux" ] && [ "$HOST_ARCH" != "$TARGET_ARCH" ]; then
+    echo "[Setup] Linux cross-architecture generation is not configured in Setup.sh. Install/configure an explicit cross toolchain before targeting $TARGET_ARCH from $HOST_ARCH."
+    exit 1
+fi
+
 if [ -z "$PREMAKE_ACTION" ]; then
     case "$(uname -s)" in
         Darwin)
@@ -84,8 +139,13 @@ resolve_cmake() {
             ;;
         Linux)
             cmake_platform="linux"
-            cmake_archive_name="cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz"
-            cmake_root_dir="cmake-${CMAKE_VERSION}-linux-x86_64"
+            if [ "$HOST_ARCH" = "arm64" ]; then
+                cmake_archive_name="cmake-${CMAKE_VERSION}-linux-aarch64.tar.gz"
+                cmake_root_dir="cmake-${CMAKE_VERSION}-linux-aarch64"
+            else
+                cmake_archive_name="cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz"
+                cmake_root_dir="cmake-${CMAKE_VERSION}-linux-x86_64"
+            fi
             ;;
         *)
             echo "[Setup] Unsupported platform for CMake download."
@@ -126,10 +186,32 @@ resolve_cmake() {
     exit 1
 }
 
+have_sdl_install_artifacts() {
+    sdl_install_dir="$1"
+    sdl_platform_name="$2"
+
+    case "$sdl_platform_name" in
+        Linux|linux)
+            [ -d "$sdl_install_dir/lib" ] && find "$sdl_install_dir/lib" -maxdepth 1 \( -name 'libSDL3.so' -o -name 'libSDL3.so.*' \) | grep -q .
+            ;;
+        Darwin|macos)
+            [ -f "$sdl_install_dir/lib/libSDL3.0.dylib" ]
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 build_sdl() {
     case "$(uname -s)" in
         Darwin)
             sdl_platform="macos"
+            if [ "$TARGET_ARCH" = "arm64" ]; then
+                SDL_CMAKE_ARCHITECTURE="arm64"
+            else
+                SDL_CMAKE_ARCHITECTURE="x86_64"
+            fi
             if [ "$PREMAKE_ACTION" = "xcode4" ]; then
                 SDL_CMAKE_GENERATOR="Xcode"
             else
@@ -138,6 +220,7 @@ build_sdl() {
             ;;
         Linux)
             sdl_platform="linux"
+            SDL_CMAKE_ARCHITECTURE=""
             SDL_CMAKE_GENERATOR="Unix Makefiles"
             ;;
         *)
@@ -152,11 +235,20 @@ build_sdl() {
 
 build_sdl_config() {
     sdl_config="$1"
-    sdl_build_dir="$REPO_ROOT/Vendor/SDL3/Build/$sdl_platform/x64/$sdl_config"
-    sdl_install_dir="$REPO_ROOT/Vendor/SDL3/Install/$sdl_platform/x64/$sdl_config"
+    sdl_build_dir="$REPO_ROOT/Vendor/SDL3/Build/$sdl_platform/$TARGET_ARCH/$sdl_config"
+    sdl_install_dir="$REPO_ROOT/Vendor/SDL3/Install/$sdl_platform/$TARGET_ARCH/$sdl_config"
+
+    if [ -f "$sdl_build_dir/CMakeCache.txt" ] && have_sdl_install_artifacts "$sdl_install_dir" "$sdl_platform"; then
+        echo "[Setup] SDL3 ($sdl_config) is already available. Skipping build."
+        return 0
+    fi
 
     echo "[Setup] Building SDL3 ($sdl_config)..."
-    "$CMAKE_CMD" -S "$REPO_ROOT/Vendor/SDL3" -B "$sdl_build_dir" -G "$SDL_CMAKE_GENERATOR" -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_INSTALL=ON -DCMAKE_BUILD_TYPE="$sdl_config" -DCMAKE_INSTALL_PREFIX="$sdl_install_dir"
+    if [ -n "$SDL_CMAKE_ARCHITECTURE" ]; then
+        "$CMAKE_CMD" -S "$REPO_ROOT/Vendor/SDL3" -B "$sdl_build_dir" -G "$SDL_CMAKE_GENERATOR" -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_INSTALL=ON -DCMAKE_BUILD_TYPE="$sdl_config" -DCMAKE_OSX_ARCHITECTURES="$SDL_CMAKE_ARCHITECTURE" -DCMAKE_INSTALL_PREFIX="$sdl_install_dir"
+    else
+        "$CMAKE_CMD" -S "$REPO_ROOT/Vendor/SDL3" -B "$sdl_build_dir" -G "$SDL_CMAKE_GENERATOR" -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_INSTALL=ON -DCMAKE_BUILD_TYPE="$sdl_config" -DCMAKE_INSTALL_PREFIX="$sdl_install_dir"
+    fi
     "$CMAKE_CMD" --build "$sdl_build_dir" --config "$sdl_config" --target install
 }
 
@@ -164,6 +256,11 @@ resolve_premake() {
     if command -v premake5 >/dev/null 2>&1; then
         PREMAKE_CMD="premake5"
         return 0
+    fi
+
+    if [ "$(uname -s)" = "Linux" ] && [ "$HOST_ARCH" = "arm64" ]; then
+        echo "[Setup] Premake was not found. Automatic Premake bootstrap is not configured for Linux arm64 yet; install premake5 manually and rerun Setup.sh."
+        exit 1
     fi
 
     case "$(uname -s)" in

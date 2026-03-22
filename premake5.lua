@@ -1,10 +1,76 @@
-workspace "Life"
-    architecture "x64"
-    configurations
-    {
-        "Debug",
-        "Release",
-        "Dist"
+local function Trim(value)
+     return (value:gsub("^%s+", ""):gsub("%s+$", ""))
+ end
+
+ local function NormalizeArchitecture(value)
+     if value == nil then
+         return nil
+     end
+
+     local normalizedValue = Trim(value:lower())
+     if normalizedValue == "amd64" or normalizedValue == "x86_64" then
+         return "x64"
+     end
+
+     if normalizedValue == "aarch64" or normalizedValue == "arm64" then
+         return "arm64"
+     end
+
+     return normalizedValue
+ end
+
+ local function ResolveHostArchitecture()
+     local environmentArchitecture = os.getenv("PROCESSOR_ARCHITEW6432") or os.getenv("PROCESSOR_ARCHITECTURE")
+     local normalizedEnvironmentArchitecture = NormalizeArchitecture(environmentArchitecture)
+     if normalizedEnvironmentArchitecture ~= nil then
+         return normalizedEnvironmentArchitecture
+     end
+
+     local machineArchitecture = os.outputof("uname -m")
+     local normalizedMachineArchitecture = NormalizeArchitecture(machineArchitecture)
+     if normalizedMachineArchitecture ~= nil then
+         return normalizedMachineArchitecture
+     end
+
+     return "x64"
+ end
+
+ local function ResolveTargetArchitecture()
+     local requestedArchitecture = NormalizeArchitecture(_OPTIONS["arch"])
+     if requestedArchitecture == "x64" or requestedArchitecture == "arm64" then
+         return requestedArchitecture
+     end
+
+     local hostArchitecture = ResolveHostArchitecture()
+     if hostArchitecture == "arm64" then
+         return "arm64"
+     end
+
+     return "x64"
+ end
+
+ newoption
+ {
+     trigger = "arch",
+     value = "ARCH",
+     description = "Select the target architecture",
+     allowed =
+     {
+         { "x64", "x64" },
+         { "arm64", "arm64" }
+     }
+ }
+
+ TargetArchitecture = ResolveTargetArchitecture()
+ PremakeArchitecture = TargetArchitecture == "arm64" and "ARM64" or "x64"
+
+ workspace "Life"
+     architecture (PremakeArchitecture)
+     configurations
+     {
+         "Debug",
+         "Release",
+         "Dist"
     }
 
     startproject "Runtime"
@@ -32,40 +98,44 @@ newoption
     description = "Enable ThreadSanitizer instrumentation for supported targets"
 }
 
-RootDir = os.getcwd()
+ RootDir = os.getcwd()
 
-outputdir = "%{cfg.system}-%{cfg.architecture}/%{cfg.buildcfg}"
+ outputdir = "%{cfg.system}-" .. TargetArchitecture .. "/%{cfg.buildcfg}"
 
-IncludeDir = {}
-IncludeDir["Engine"] = path.join(RootDir, "Engine/Include")
-IncludeDir["SDL3"] = path.join(RootDir, "Vendor/SDL3/include")
-IncludeDir["spdlog"] = path.join(RootDir, "Vendor/spdlog/include")
-IncludeDir["json"] = path.join(RootDir, "Vendor/json/include")
-IncludeDir["doctest"] = path.join(RootDir, "Vendor/doctest")
+ IncludeDir = {}
+ IncludeDir["Engine"] = path.join(RootDir, "Engine/Include")
+ IncludeDir["SDL3"] = path.join(RootDir, "Vendor/SDL3/include")
+ IncludeDir["spdlog"] = path.join(RootDir, "Vendor/spdlog/include")
+ IncludeDir["json"] = path.join(RootDir, "Vendor/json/include")
+ IncludeDir["doctest"] = path.join(RootDir, "Vendor/doctest")
 
-LibraryDir = {}
-LibraryDir["SDL3_Windows_Debug"] = path.join(RootDir, "Vendor/SDL3/Install/windows/x64/Debug/lib")
-LibraryDir["SDL3_Windows_Release"] = path.join(RootDir, "Vendor/SDL3/Install/windows/x64/Release/lib")
-LibraryDir["SDL3_Linux_Debug"] = path.join(RootDir, "Vendor/SDL3/Install/linux/x64/Debug/lib")
-LibraryDir["SDL3_Linux_Release"] = path.join(RootDir, "Vendor/SDL3/Install/linux/x64/Release/lib")
-LibraryDir["SDL3_MacOS_Debug"] = path.join(RootDir, "Vendor/SDL3/Install/macos/x64/Debug/lib")
-LibraryDir["SDL3_MacOS_Release"] = path.join(RootDir, "Vendor/SDL3/Install/macos/x64/Release/lib")
+ local function GetSDLInstallPath(platformName, configuration, leaf)
+     return path.join(RootDir, "Vendor/SDL3/Install/" .. platformName .. "/" .. TargetArchitecture .. "/" .. configuration .. "/" .. leaf)
+ end
 
-BinaryDir = {}
-BinaryDir["SDL3_Windows_Debug"] = path.join(RootDir, "Vendor/SDL3/Install/windows/x64/Debug/bin")
-BinaryDir["SDL3_Windows_Release"] = path.join(RootDir, "Vendor/SDL3/Install/windows/x64/Release/bin")
-BinaryDir["SDL3_Linux_Debug"] = path.join(RootDir, "Vendor/SDL3/Install/linux/x64/Debug/lib")
-BinaryDir["SDL3_Linux_Release"] = path.join(RootDir, "Vendor/SDL3/Install/linux/x64/Release/lib")
-BinaryDir["SDL3_MacOS_Debug"] = path.join(RootDir, "Vendor/SDL3/Install/macos/x64/Debug/lib")
-BinaryDir["SDL3_MacOS_Release"] = path.join(RootDir, "Vendor/SDL3/Install/macos/x64/Release/lib")
+ LibraryDir = {}
+ LibraryDir["SDL3_Windows_Debug"] = GetSDLInstallPath("windows", "Debug", "lib")
+ LibraryDir["SDL3_Windows_Release"] = GetSDLInstallPath("windows", "Release", "lib")
+ LibraryDir["SDL3_Linux_Debug"] = GetSDLInstallPath("linux", "Debug", "lib")
+ LibraryDir["SDL3_Linux_Release"] = GetSDLInstallPath("linux", "Release", "lib")
+ LibraryDir["SDL3_MacOS_Debug"] = GetSDLInstallPath("macos", "Debug", "lib")
+ LibraryDir["SDL3_MacOS_Release"] = GetSDLInstallPath("macos", "Release", "lib")
 
-BinaryFile = {}
-BinaryFile["SDL3_Windows_Debug"] = path.getabsolute(BinaryDir["SDL3_Windows_Debug"] .. "/SDL3.dll")
-BinaryFile["SDL3_Windows_Release"] = path.getabsolute(BinaryDir["SDL3_Windows_Release"] .. "/SDL3.dll")
-BinaryFile["SDL3_Linux_Debug"] = path.getabsolute(BinaryDir["SDL3_Linux_Debug"] .. "/libSDL3.so.0")
-BinaryFile["SDL3_Linux_Release"] = path.getabsolute(BinaryDir["SDL3_Linux_Release"] .. "/libSDL3.so.0")
-BinaryFile["SDL3_MacOS_Debug"] = path.getabsolute(BinaryDir["SDL3_MacOS_Debug"] .. "/libSDL3.0.dylib")
-BinaryFile["SDL3_MacOS_Release"] = path.getabsolute(BinaryDir["SDL3_MacOS_Release"] .. "/libSDL3.0.dylib")
+ BinaryDir = {}
+ BinaryDir["SDL3_Windows_Debug"] = GetSDLInstallPath("windows", "Debug", "bin")
+ BinaryDir["SDL3_Windows_Release"] = GetSDLInstallPath("windows", "Release", "bin")
+ BinaryDir["SDL3_Linux_Debug"] = GetSDLInstallPath("linux", "Debug", "lib")
+ BinaryDir["SDL3_Linux_Release"] = GetSDLInstallPath("linux", "Release", "lib")
+ BinaryDir["SDL3_MacOS_Debug"] = GetSDLInstallPath("macos", "Debug", "lib")
+ BinaryDir["SDL3_MacOS_Release"] = GetSDLInstallPath("macos", "Release", "lib")
+
+ BinaryFile = {}
+ BinaryFile["SDL3_Windows_Debug"] = path.getabsolute(BinaryDir["SDL3_Windows_Debug"] .. "/SDL3.dll")
+ BinaryFile["SDL3_Windows_Release"] = path.getabsolute(BinaryDir["SDL3_Windows_Release"] .. "/SDL3.dll")
+ BinaryFile["SDL3_Linux_Debug"] = path.getabsolute(BinaryDir["SDL3_Linux_Debug"] .. "/libSDL3.so.0")
+ BinaryFile["SDL3_Linux_Release"] = path.getabsolute(BinaryDir["SDL3_Linux_Release"] .. "/libSDL3.so.0")
+ BinaryFile["SDL3_MacOS_Debug"] = path.getabsolute(BinaryDir["SDL3_MacOS_Debug"] .. "/libSDL3.0.dylib")
+ BinaryFile["SDL3_MacOS_Release"] = path.getabsolute(BinaryDir["SDL3_MacOS_Release"] .. "/libSDL3.0.dylib")
 
 function SetupProject()
     language "C++"
@@ -107,6 +177,14 @@ function ConfigureCommonProject()
 
     filter "system:linux"
         pic "On"
+
+    filter { "system:macosx", "architecture:ARM64" }
+        buildoptions { "-arch", "arm64" }
+        linkoptions { "-arch", "arm64" }
+
+    filter { "system:macosx", "architecture:x64" }
+        buildoptions { "-arch", "x86_64" }
+        linkoptions { "-arch", "x86_64" }
 
     filter {}
 

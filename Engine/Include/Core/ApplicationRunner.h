@@ -2,9 +2,6 @@
 
 #include "Core/Application.h"
 #include "Core/Log.h"
-#include "Platform/SDL/SDLEvent.h"
-
-#include <SDL3/SDL.h>
 
 #include <chrono>
 #include <exception>
@@ -20,7 +17,81 @@ namespace Life
         std::chrono::steady_clock::time_point LastFrameTime;
         std::mutex EventMutex;
         std::vector<Scope<Event>> PendingEvents;
+        bool UseExternalEventPump = false;
     };
+
+    inline void DispatchApplicationEvents(Application& application, std::vector<Scope<Event>>& pendingEvents)
+    {
+        for (Scope<Event>& event : pendingEvents)
+        {
+            application.HandleEvent(*event);
+
+            if (!application.IsRunning())
+                break;
+        }
+
+        pendingEvents.clear();
+    }
+
+    inline void PollApplicationRuntimeEvents(Application& application)
+    {
+        while (application.IsRunning())
+        {
+            Scope<Event> event = application.GetRuntime().PollEvent();
+            if (!event)
+                return;
+
+            application.HandleEvent(*event);
+        }
+    }
+
+    inline bool RunApplicationLoopIteration(
+        Application& application,
+        std::chrono::steady_clock::time_point& lastFrameTime,
+        std::vector<Scope<Event>>& pendingEvents,
+        bool useExternalEventPump)
+    {
+        if (!application.IsRunning())
+            return false;
+
+        DispatchApplicationEvents(application, pendingEvents);
+
+        if (application.IsRunning() && !useExternalEventPump)
+            PollApplicationRuntimeEvents(application);
+
+        if (!application.IsRunning())
+            return false;
+
+        auto currentFrameTime = std::chrono::steady_clock::now();
+        float timestep = std::chrono::duration<float>(currentFrameTime - lastFrameTime).count();
+        lastFrameTime = currentFrameTime;
+
+        application.RunFrame(timestep);
+        return application.IsRunning();
+    }
+
+    inline void RunApplication(Application& application)
+    {
+        Log::Init();
+        application.Initialize();
+
+        struct ApplicationFinalizer
+        {
+            Application& Instance;
+
+            ~ApplicationFinalizer()
+            {
+                Instance.Finalize();
+            }
+        } finalizer{ application };
+
+        std::vector<Scope<Event>> pendingEvents;
+        auto lastFrameTime = std::chrono::steady_clock::now();
+
+        while (RunApplicationLoopIteration(application, lastFrameTime, pendingEvents, false))
+        {
+        }
+    }
 
     inline ApplicationRunnerState* CreateApplicationRunner(ApplicationCommandLineArgs args, bool useExternalEventPump)
     {
@@ -28,7 +99,8 @@ namespace Life
 
         Scope<ApplicationRunnerState> state = CreateScope<ApplicationRunnerState>();
         state->ApplicationInstance = CreateApplication(args);
-        state->ApplicationInstance->Initialize(useExternalEventPump);
+        state->UseExternalEventPump = useExternalEventPump;
+        state->ApplicationInstance->Initialize();
         state->LastFrameTime = std::chrono::steady_clock::now();
         return state.release();
     }
@@ -42,11 +114,6 @@ namespace Life
         state->PendingEvents.emplace_back(std::move(event));
     }
 
-    inline void QueueSDLEvent(ApplicationRunnerState* state, const SDL_Event& event)
-    {
-        QueueApplicationEvent(state, TranslateSDLEvent(event));
-    }
-
     inline bool RunApplicationRunnerIteration(ApplicationRunnerState* state)
     {
         if (state == nullptr || state->ApplicationInstance == nullptr)
@@ -58,15 +125,11 @@ namespace Life
             pendingEvents.swap(state->PendingEvents);
         }
 
-        for (Scope<Event>& event : pendingEvents)
-            state->ApplicationInstance->HandleEvent(*event);
-
-        auto currentFrameTime = std::chrono::steady_clock::now();
-        float timestep = std::chrono::duration<float>(currentFrameTime - state->LastFrameTime).count();
-        state->LastFrameTime = currentFrameTime;
-
-        state->ApplicationInstance->RunFrame(timestep);
-        return state->ApplicationInstance->IsRunning();
+        return RunApplicationLoopIteration(
+            *state->ApplicationInstance,
+            state->LastFrameTime,
+            pendingEvents,
+            state->UseExternalEventPump);
     }
 
     inline void DestroyApplicationRunner(ApplicationRunnerState*& state)
@@ -86,23 +149,26 @@ namespace Life
         return 1;
     }
 
-    inline SDL_AppResult HandleSDLApplicationBootstrapException(const std::exception& exception)
-    {
-        LOG_CORE_ERROR("Application terminated with an exception: {}", exception.what());
-        return SDL_APP_FAILURE;
-    }
-
     inline int RunApplicationMain(ApplicationCommandLineArgs args)
     {
         try
         {
             ApplicationRunnerState* state = CreateApplicationRunner(args, false);
 
+            struct ApplicationRunnerDestroyer
+            {
+                ApplicationRunnerState*& Instance;
+
+                ~ApplicationRunnerDestroyer()
+                {
+                    DestroyApplicationRunner(Instance);
+                }
+            } destroyer{ state };
+
             while (RunApplicationRunnerIteration(state))
             {
             }
 
-            DestroyApplicationRunner(state);
             return 0;
         }
         catch (const std::exception& exception)

@@ -5,11 +5,43 @@ CONFIGURATION=${1:-Debug}
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 
+resolve_target_arch_suffix() {
+    case "$(uname -s)" in
+        Darwin)
+            case "$(uname -m)" in
+                arm64|aarch64)
+                    printf '%s' "arm64"
+                    ;;
+                *)
+                    printf '%s' "x64"
+                    ;;
+            esac
+            ;;
+        Linux)
+            case "$(uname -m)" in
+                arm64|aarch64)
+                    printf '%s' "arm64"
+                    ;;
+                *)
+                    printf '%s' "x64"
+                    ;;
+            esac
+            ;;
+        *)
+            printf '%s' "x64"
+            ;;
+    esac
+}
+
+TARGET_ARCH_SUFFIX=$(resolve_target_arch_suffix)
+
 find_test_binary() {
     system_name=$1
 
     for test_binary in \
+        "$REPO_ROOT/Build/${system_name}-${TARGET_ARCH_SUFFIX}/${CONFIGURATION}/Test/Test" \
         "$REPO_ROOT/Build/${system_name}-x64/${CONFIGURATION}/Test/Test" \
+        "$REPO_ROOT/Build/${system_name}-arm64/${CONFIGURATION}/Test/Test" \
         "$REPO_ROOT/Build/${system_name}-x86_64/${CONFIGURATION}/Test/Test"
     do
         if [ -x "$test_binary" ]; then
@@ -39,8 +71,12 @@ find_sdl_lib_dir() {
     esac
 
     for sdl_lib_dir in \
+        "$REPO_ROOT/Vendor/SDL3/Install/${sdl_platform}/${TARGET_ARCH_SUFFIX}/${CONFIGURATION}/lib" \
+        "$REPO_ROOT/Vendor/SDL3/Install/${sdl_platform}/${TARGET_ARCH_SUFFIX}/Release/lib" \
         "$REPO_ROOT/Vendor/SDL3/Install/${sdl_platform}/x64/${CONFIGURATION}/lib" \
-        "$REPO_ROOT/Vendor/SDL3/Install/${sdl_platform}/x64/Release/lib"
+        "$REPO_ROOT/Vendor/SDL3/Install/${sdl_platform}/x64/Release/lib" \
+        "$REPO_ROOT/Vendor/SDL3/Install/${sdl_platform}/arm64/${CONFIGURATION}/lib" \
+        "$REPO_ROOT/Vendor/SDL3/Install/${sdl_platform}/arm64/Release/lib"
     do
         if [ -d "$sdl_lib_dir" ]; then
             printf '%s' "$sdl_lib_dir"

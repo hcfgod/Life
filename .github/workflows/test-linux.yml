@@ -9,74 +9,21 @@ permissions:
 
 jobs:
   build-test-linux:
-    name: Build and Test Linux
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            clang \
-            pkg-config \
-            ninja-build \
-            libasound2-dev \
-            libpulse-dev \
-            libaudio-dev \
-            libjack-dev \
-            libsndio-dev \
-            libusb-1.0-0-dev \
-            libx11-dev \
-            libxext-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxfixes-dev \
-            libxrender-dev \
-            libxss-dev \
-            libxtst-dev \
-            libxkbcommon-dev \
-            libwayland-dev \
-            wayland-protocols \
-            libegl1-mesa-dev \
-            libgl1-mesa-dev \
-            libgles2-mesa-dev \
-            libdrm-dev \
-            libgbm-dev \
-            libdbus-1-dev \
-            libudev-dev
-
-      - name: Make scripts executable
-        run: chmod +x Setup.sh Scripts/CI/*.sh
-
-      - name: Prepare project files
-        run: ./Setup.sh gmake2
-
-      - name: Build workspace
-        run: ./Scripts/CI/build_make.sh Debug clean all
-
-      - name: Run tests
-        run: ./Scripts/CI/run_tests.sh Debug
-
-      - name: Upload Linux test artifacts
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: linux-debug-build
-          path: |
-            Build/linux-*/Debug/Runtime/**
-            Build/linux-*/Debug/Test/**
-          if-no-files-found: ignore
+    uses: ./.github/workflows/reusable-platform-job.yml
+    with:
+      job_name: Build and Test Linux
+      runs_on: ubuntu-latest
+      platform: linux
+      dependency_profile: linux
+      premake_cache_dir: linux
+      cmake_cache_dir: linux
+      sdl_cache_dir: linux/x64
+      setup_command: ./Setup.sh gmake2 --arch=x64
+      build_command: ./Scripts/CI/build_make.sh Debug clean all
+      test_command: ./Scripts/CI/run_tests.sh Debug
+      artifact_name: linux-debug-build
+      artifact_path: |
+        Build/linux-*/Debug/Runtime/**
+        Build/linux-*/Debug/Test/**
+      cc: clang
+      cxx: clang++

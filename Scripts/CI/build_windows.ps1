@@ -7,11 +7,34 @@ param(
     [string]$SolutionPath = 'Life.sln',
 
     [Parameter(Mandatory = $false)]
-    [string]$Platform = 'x64',
+    [string]$Platform = '',
 
     [Parameter(Mandatory = $false)]
     [string]$LogPath = ''
 )
+
+function Resolve-NormalizedPlatform([string]$RequestedPlatform) {
+    if (-not [string]::IsNullOrWhiteSpace($RequestedPlatform)) {
+        $normalized = $RequestedPlatform.Trim().ToLowerInvariant()
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($env:PROCESSOR_ARCHITEW6432)) {
+        $normalized = $env:PROCESSOR_ARCHITEW6432.Trim().ToLowerInvariant()
+    }
+    else {
+        $normalized = $env:PROCESSOR_ARCHITECTURE.Trim().ToLowerInvariant()
+    }
+
+    switch ($normalized) {
+        'amd64' { return 'x64' }
+        'x86_64' { return 'x64' }
+        'x64' { return 'x64' }
+        'arm64' { return 'ARM64' }
+        'aarch64' { return 'ARM64' }
+        default { throw "Unsupported MSBuild platform '$RequestedPlatform'." }
+    }
+}
+
+$Platform = Resolve-NormalizedPlatform $Platform
 
 if ($LogPath -ne '') {
     $logDirectory = Split-Path -Path $LogPath -Parent

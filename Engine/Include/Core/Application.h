@@ -1,6 +1,8 @@
 #pragma once
 
+#include "Core/ApplicationRuntime.h"
 #include "Core/Events/Event.h"
+#include "Core/Log.h"
 #include "Core/Memory.h"
 #include "Core/Window.h"
 
@@ -27,6 +29,7 @@ namespace Life
         uint32_t Width = 1280;
         uint32_t Height = 720;
         bool VSync = true;
+        LogSpecification Logging;
         ApplicationCommandLineArgs CommandLineArgs;
     };
 
@@ -36,7 +39,7 @@ namespace Life
         explicit Application(ApplicationSpecification specification);
         virtual ~Application();
 
-        void Initialize(bool useExternalEventPump = false);
+        void Initialize();
         void Startup();
         void RunFrame(float timestep);
         void HandleEvent(Event& event);
@@ -74,25 +77,26 @@ namespace Life
         bool IsInitialized() const { return m_Initialized; }
 
         const ApplicationSpecification& GetSpecification() const { return m_Specification; }
+        ApplicationRuntime& GetRuntime() { return *m_Runtime; }
+        const ApplicationRuntime& GetRuntime() const { return *m_Runtime; }
         Window& GetWindow() { return *m_Window; }
         const Window& GetWindow() const { return *m_Window; }
 
     protected:
+        Application(ApplicationSpecification specification, Scope<ApplicationRuntime> runtime);
+
         virtual void OnInit() {}
         virtual void OnShutdown() {}
         virtual void OnUpdate(float timestep) {}
         virtual void OnEvent(Event& event) {}
 
     private:
-        void ProcessEvents();
-
-    private:
         ApplicationSpecification m_Specification;
+        Scope<ApplicationRuntime> m_Runtime;
         Scope<Window> m_Window;
         EventBus m_EventBus;
         bool m_Running = false;
         bool m_Initialized = false;
-        bool m_UseExternalEventPump = false;
     };
 
     Scope<Application> CreateApplication(ApplicationCommandLineArgs args);

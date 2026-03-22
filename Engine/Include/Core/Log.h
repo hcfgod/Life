@@ -1,30 +1,56 @@
 #pragma once
 
+#include <cstddef>
 #include <memory>
+#include <mutex>
+#include <string>
 
 #include <spdlog/spdlog.h>
 
 namespace Life
 {
+    struct LogSpecification
+    {
+        std::string CoreLoggerName = "LIFE";
+        std::string ClientLoggerName = "APP";
+        std::string Pattern = "%^[%Y-%m-%d %T.%e] [thread %t] %n: %v%$";
+        spdlog::level::level_enum CoreLevel = spdlog::level::trace;
+        spdlog::level::level_enum ClientLevel = spdlog::level::trace;
+        spdlog::level::level_enum FlushLevel = spdlog::level::warn;
+        bool EnableConsole = true;
+        bool EnableFile = false;
+        std::string FilePath = "logs/life.log";
+        std::size_t MaxFileSize = 5 * 1024 * 1024;
+        std::size_t MaxFileCount = 3;
+    };
+
     class Log
     {
     public:
         static void Init();
+        static void Configure(const LogSpecification& specification);
+        static LogSpecification GetSpecification();
 
-        static std::shared_ptr<spdlog::logger>& GetCoreLogger();
-        static std::shared_ptr<spdlog::logger>& GetClientLogger();
+        static std::shared_ptr<spdlog::logger> GetCoreLogger();
+        static std::shared_ptr<spdlog::logger> GetClientLogger();
 
     private:
+        static void EnsureInitializedLocked();
+        static void ReinitializeLocked();
+
+        static std::mutex s_Mutex;
+        static bool s_Initialized;
+        static LogSpecification s_Specification;
         static std::shared_ptr<spdlog::logger> s_CoreLogger;
         static std::shared_ptr<spdlog::logger> s_ClientLogger;
     };
 }
 
-#define LOG_CORE_TRACE(...) ::Life::Log::GetCoreLogger()->trace(__VA_ARGS__)
-#define LOG_CORE_INFO(...) ::Life::Log::GetCoreLogger()->info(__VA_ARGS__)
-#define LOG_CORE_WARN(...) ::Life::Log::GetCoreLogger()->warn(__VA_ARGS__)
-#define LOG_CORE_ERROR(...) ::Life::Log::GetCoreLogger()->error(__VA_ARGS__)
-#define LOG_TRACE(...) ::Life::Log::GetClientLogger()->trace(__VA_ARGS__)
-#define LOG_INFO(...) ::Life::Log::GetClientLogger()->info(__VA_ARGS__)
-#define LOG_WARN(...) ::Life::Log::GetClientLogger()->warn(__VA_ARGS__)
-#define LOG_ERROR(...) ::Life::Log::GetClientLogger()->error(__VA_ARGS__)
+#define LOG_CORE_TRACE(...) do { if (auto logger = ::Life::Log::GetCoreLogger()) logger->trace(__VA_ARGS__); } while (false)
+#define LOG_CORE_INFO(...) do { if (auto logger = ::Life::Log::GetCoreLogger()) logger->info(__VA_ARGS__); } while (false)
+#define LOG_CORE_WARN(...) do { if (auto logger = ::Life::Log::GetCoreLogger()) logger->warn(__VA_ARGS__); } while (false)
+#define LOG_CORE_ERROR(...) do { if (auto logger = ::Life::Log::GetCoreLogger()) logger->error(__VA_ARGS__); } while (false)
+#define LOG_TRACE(...) do { if (auto logger = ::Life::Log::GetClientLogger()) logger->trace(__VA_ARGS__); } while (false)
+#define LOG_INFO(...) do { if (auto logger = ::Life::Log::GetClientLogger()) logger->info(__VA_ARGS__); } while (false)
+#define LOG_WARN(...) do { if (auto logger = ::Life::Log::GetClientLogger()) logger->warn(__VA_ARGS__); } while (false)
+#define LOG_ERROR(...) do { if (auto logger = ::Life::Log::GetClientLogger()) logger->error(__VA_ARGS__); } while (false)

@@ -10,133 +10,66 @@ permissions:
 jobs:
   linux-quality-gates:
     name: Linux ${{ matrix.gate_name }}
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - gate_name: Clang-Tidy
             premake_args: ''
-            run_clang_tidy: true
-            sanitizer_options: ''
+            build_command: |
+              mkdir -p Build/compile_commands/linux
+              bear --output Build/compile_commands/linux/compile_commands.json -- ./Scripts/CI/build_make.sh Debug clean all
+              python Scripts/CI/normalize_compile_commands.py Build/compile_commands/linux/compile_commands.json --repo-root . --project-root Engine --project-root Runtime --project-root Test
+            analysis_command: |
+              python Scripts/CI/collect_changed_files.py \
+                --repo-root . \
+                --event-name "${{ github.event_name }}" \
+                --base-ref "${{ github.base_ref }}" \
+                --base-sha "${{ github.event.before }}" \
+                --head-sha "${{ github.sha }}" \
+                --pattern '^(Engine|Runtime)/.*\.(c|cc|cpp|cxx)$' \
+                --compile-commands Build/compile_commands/linux/compile_commands.json \
+                --fallback-compile-db-pattern '^(Engine|Runtime)/.*\.(c|cc|cpp|cxx)$' \
+                --output Build/Logs/linux-clang-tidy-files.txt
+              python Scripts/CI/run_clang_tidy.py \
+                --repo-root . \
+                --compile-commands Build/compile_commands/linux/compile_commands.json \
+                --files Build/Logs/linux-clang-tidy-files.txt \
+                --clang-tidy-binary clang-tidy \
+                --jobs 4
+            test_command: ''
             timeout_minutes: 30
           - gate_name: ASan+UBSan
             premake_args: '--asan --ubsan'
-            run_clang_tidy: false
-            sanitizer_options: 'ASAN_OPTIONS=detect_leaks=1:strict_string_checks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1'
+            build_command: ./Scripts/CI/build_make.sh Debug clean all
+            analysis_command: ''
+            test_command: 'ASAN_OPTIONS=detect_leaks=1:strict_string_checks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./Scripts/CI/run_tests.sh Debug'
             timeout_minutes: 30
           - gate_name: TSan
             premake_args: '--tsan'
-            run_clang_tidy: false
-            sanitizer_options: 'TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1:history_size=7'
+            build_command: ./Scripts/CI/build_make.sh Debug clean all
+            analysis_command: ''
+            test_command: 'TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1:history_size=7 ./Scripts/CI/run_tests.sh Debug'
             timeout_minutes: 45
-    env:
-      CC: clang
-      CXX: clang++
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            clang \
-            clang-tidy \
-            bear \
-            pkg-config \
-            ninja-build \
-            libaudio-dev \
-            libjack-dev \
-            libsndio-dev \
-            libusb-1.0-0-dev \
-            libasound2-dev \
-            libpulse-dev \
-            libx11-dev \
-            libxext-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxfixes-dev \
-            libxrender-dev \
-            libxss-dev \
-            libxtst-dev \
-            libxkbcommon-dev \
-            libwayland-dev \
-            wayland-protocols \
-            libegl1-mesa-dev \
-            libgl1-mesa-dev \
-            libgles2-mesa-dev \
-            libdrm-dev \
-            libgbm-dev \
-            libdbus-1-dev \
-            libudev-dev
-
-      - name: Make scripts executable
-        run: chmod +x Setup.sh Scripts/CI/*.sh
-
-      - name: Prepare project files
-        run: ./Setup.sh gmake2 ${{ matrix.premake_args }}
-
-      - name: Build with compilation database
-        if: matrix.run_clang_tidy
-        run: |
-          mkdir -p Build/compile_commands/linux
-          bear --output Build/compile_commands/linux/compile_commands.json -- ./Scripts/CI/build_make.sh Debug clean all
-          python Scripts/CI/normalize_compile_commands.py Build/compile_commands/linux/compile_commands.json --repo-root . --project-root Engine --project-root Runtime --project-root Test
-
-      - name: Select clang-tidy files
-        if: matrix.run_clang_tidy
-        run: |
-          python Scripts/CI/collect_changed_files.py \
-            --repo-root . \
-            --event-name "${{ github.event_name }}" \
-            --base-ref "${{ github.base_ref }}" \
-            --base-sha "${{ github.event.before }}" \
-            --head-sha "${{ github.sha }}" \
-            --pattern '^(Engine|Runtime)/.*\.(c|cc|cpp|cxx)$' \
-            --compile-commands Build/compile_commands/linux/compile_commands.json \
-            --fallback-compile-db-pattern '^(Engine|Runtime)/.*\.(c|cc|cpp|cxx)$' \
-            --output Build/Logs/linux-clang-tidy-files.txt
-
-      - name: Run clang-tidy
-        if: matrix.run_clang_tidy
-        run: |
-          python Scripts/CI/run_clang_tidy.py \
-            --repo-root . \
-            --compile-commands Build/compile_commands/linux/compile_commands.json \
-            --files Build/Logs/linux-clang-tidy-files.txt \
-            --clang-tidy-binary clang-tidy \
-            --jobs 4
-
-      - name: Build sanitizer configuration
-        if: ${{ !matrix.run_clang_tidy }}
-        run: ./Scripts/CI/build_make.sh Debug clean all
-
-      - name: Run sanitizer tests
-        if: ${{ !matrix.run_clang_tidy }}
-        run: ${{ matrix.sanitizer_options }} ./Scripts/CI/run_tests.sh Debug
-
-      - name: Upload Linux quality artifacts
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: linux-${{ matrix.gate_name }}
-          path: |
-            Build/compile_commands/linux/compile_commands.json
-            Build/Logs/linux-clang-tidy-files.txt
-            Build/linux-*/Debug/Runtime/**
-            Build/linux-*/Debug/Test/**
-          if-no-files-found: ignore
+    uses: ./.github/workflows/reusable-platform-job.yml
+    with:
+      job_name: Linux ${{ matrix.gate_name }}
+      runs_on: ubuntu-latest
+      platform: linux
+      dependency_profile: linux-quality
+      premake_cache_dir: linux
+      cmake_cache_dir: linux
+      sdl_cache_dir: linux/x64
+      setup_command: ./Setup.sh gmake2 --arch=x64 ${{ matrix.premake_args }}
+      build_command: ${{ matrix.build_command }}
+      test_command: ${{ matrix.test_command }}
+      analysis_command: ${{ matrix.analysis_command }}
+      artifact_name: linux-${{ matrix.gate_name }}
+      artifact_path: |
+        Build/compile_commands/linux/compile_commands.json
+        Build/Logs/linux-clang-tidy-files.txt
+        Build/linux-*/Debug/Runtime/**
+        Build/linux-*/Debug/Test/**
+      timeout_minutes: ${{ matrix.timeout_minutes }}
+      cc: clang
+      cxx: clang++

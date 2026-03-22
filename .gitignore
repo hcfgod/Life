@@ -7,6 +7,8 @@ obj/
 out/
 Scripts/CMake/*
 Scripts/Premake/*
+Vendor/SDL3/Build/
+Vendor/SDL3/Install/
 
 # Visual Studio files
 .vs/
@@ -20,8 +22,6 @@ Scripts/Premake/*
 *.pch
 *.vspscc
 *.vssscc
-*_i.c
-*_p.c
 *.ilk
 *.obj
 *.pdb
@@ -35,12 +35,10 @@ Scripts/Premake/*
 *.tmp
 *.tmp_proj
 *.log
-*.vspscc
-*.vssscc
-.builds
 *.pidb
 *.svclog
 *.scc
+.builds
 
 # NOTE: Do NOT ignore Unity-style `.meta` files.
 # The asset system uses `.meta` as the stable GUID source-of-truth.
@@ -69,7 +67,6 @@ desktop.ini
 *~
 
 # Logs
-*.log
 logs/
 test_logs/
 
@@ -106,9 +103,6 @@ coverage/
 # Core dumps
 core
 core.*
-# Keep vendored msdfgen source directory tracked for CI builds.
-!Limitless/Vendor/msdf-atlas-gen/msdfgen/core/
-!Limitless/Vendor/msdf-atlas-gen/msdfgen/core/**
 
 # Backup files
 *.bak

@@ -1,0 +1,278 @@
+name: Reusable Platform Job
+
+on:
+  workflow_call:
+    inputs:
+      job_name:
+        required: true
+        type: string
+      runs_on:
+        required: true
+        type: string
+      platform:
+        required: true
+        type: string
+      dependency_profile:
+        required: true
+        type: string
+      premake_cache_dir:
+        required: true
+        type: string
+      cmake_cache_dir:
+        required: true
+        type: string
+      sdl_cache_dir:
+        required: true
+        type: string
+      setup_command:
+        required: true
+        type: string
+      build_command:
+        required: true
+        type: string
+      test_command:
+        required: false
+        type: string
+        default: ''
+      analysis_command:
+        required: false
+        type: string
+        default: ''
+      package_command:
+        required: false
+        type: string
+        default: ''
+      artifact_name:
+        required: true
+        type: string
+      artifact_path:
+        required: true
+        type: string
+      artifact_if_no_files:
+        required: false
+        type: string
+        default: ignore
+      timeout_minutes:
+        required: false
+        type: number
+        default: 30
+      cc:
+        required: false
+        type: string
+        default: ''
+      cxx:
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  platform-job:
+    name: ${{ inputs.job_name }}
+    runs-on: ${{ inputs.runs_on }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up MSBuild
+        if: inputs.platform == 'windows'
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Install Linux build dependencies
+        if: inputs.dependency_profile == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            clang \
+            pkg-config \
+            ninja-build \
+            libasound2-dev \
+            libpulse-dev \
+            libaudio-dev \
+            libjack-dev \
+            libsndio-dev \
+            libusb-1.0-0-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxfixes-dev \
+            libxrender-dev \
+            libxss-dev \
+            libxtst-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            wayland-protocols \
+            libegl1-mesa-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libdrm-dev \
+            libgbm-dev \
+            libdbus-1-dev \
+            libudev-dev
+
+      - name: Install Linux quality dependencies
+        if: inputs.dependency_profile == 'linux-quality'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            clang \
+            clang-tidy \
+            bear \
+            pkg-config \
+            ninja-build \
+            libaudio-dev \
+            libjack-dev \
+            libsndio-dev \
+            libusb-1.0-0-dev \
+            libasound2-dev \
+            libpulse-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxfixes-dev \
+            libxrender-dev \
+            libxss-dev \
+            libxtst-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            wayland-protocols \
+            libegl1-mesa-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libdrm-dev \
+            libgbm-dev \
+            libdbus-1-dev \
+            libudev-dev
+
+      - name: Install macOS quality dependencies
+        if: inputs.dependency_profile == 'macos-quality'
+        run: |
+          brew install llvm bear
+          echo "LLVM_PREFIX=$(brew --prefix llvm)" >> "$GITHUB_ENV"
+          echo "MACOS_SDKROOT=$(xcrun --show-sdk-path)" >> "$GITHUB_ENV"
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+
+      - name: Install macOS LLVM toolchain
+        if: inputs.dependency_profile == 'macos-llvm'
+        run: |
+          brew install llvm
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+
+      - name: Make scripts executable
+        if: inputs.platform != 'windows'
+        run: chmod +x Setup.sh Scripts/CI/*.sh
+
+      - name: Cache downloaded toolchains
+        uses: actions/cache@v4
+        with:
+          path: |
+            Scripts/Premake/${{ inputs.premake_cache_dir }}
+            Scripts/CMake/${{ inputs.cmake_cache_dir }}
+          key: life-tools-${{ runner.os }}-${{ inputs.premake_cache_dir }}-${{ inputs.cmake_cache_dir }}-${{ hashFiles('Setup.bat', 'Setup.sh') }}
+          restore-keys: |
+            life-tools-${{ runner.os }}-${{ inputs.premake_cache_dir }}-${{ inputs.cmake_cache_dir }}-
+
+      - name: Cache SDL build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            Vendor/SDL3/Build/${{ inputs.sdl_cache_dir }}
+            Vendor/SDL3/Install/${{ inputs.sdl_cache_dir }}
+          key: life-sdl-${{ runner.os }}-${{ inputs.sdl_cache_dir }}-${{ hashFiles('.gitmodules', 'Setup.bat', 'Setup.sh', 'premake5.lua', 'Engine/premake5.lua', 'Runtime/premake5.lua', 'Test/premake5.lua', 'Vendor/SDL3/CMakeLists.txt') }}
+          restore-keys: |
+            life-sdl-${{ runner.os }}-${{ inputs.sdl_cache_dir }}-
+
+      - name: Prepare project files (Windows)
+        if: inputs.platform == 'windows'
+        shell: cmd
+        run: ${{ inputs.setup_command }}
+
+      - name: Prepare project files (Unix)
+        if: inputs.platform != 'windows'
+        shell: bash
+        run: ${{ inputs.setup_command }}
+        env:
+          CC: ${{ inputs.cc }}
+          CXX: ${{ inputs.cxx }}
+
+      - name: Build workspace (Windows)
+        if: inputs.platform == 'windows'
+        shell: pwsh
+        run: ${{ inputs.build_command }}
+
+      - name: Build workspace (Unix)
+        if: inputs.platform != 'windows'
+        shell: bash
+        run: ${{ inputs.build_command }}
+        env:
+          CC: ${{ inputs.cc }}
+          CXX: ${{ inputs.cxx }}
+
+      - name: Run tests (Windows)
+        if: inputs.platform == 'windows' && inputs.test_command != ''
+        shell: pwsh
+        run: ${{ inputs.test_command }}
+
+      - name: Run tests (Unix)
+        if: inputs.platform != 'windows' && inputs.test_command != ''
+        shell: bash
+        run: ${{ inputs.test_command }}
+        env:
+          CC: ${{ inputs.cc }}
+          CXX: ${{ inputs.cxx }}
+
+      - name: Run analysis (Windows)
+        if: inputs.platform == 'windows' && inputs.analysis_command != ''
+        shell: pwsh
+        run: ${{ inputs.analysis_command }}
+
+      - name: Run analysis (Unix)
+        if: inputs.platform != 'windows' && inputs.analysis_command != ''
+        shell: bash
+        run: ${{ inputs.analysis_command }}
+        env:
+          CC: ${{ inputs.cc }}
+          CXX: ${{ inputs.cxx }}
+
+      - name: Package artifacts (Windows)
+        if: inputs.platform == 'windows' && inputs.package_command != ''
+        shell: pwsh
+        run: ${{ inputs.package_command }}
+
+      - name: Package artifacts (Unix)
+        if: inputs.platform != 'windows' && inputs.package_command != ''
+        shell: bash
+        run: ${{ inputs.package_command }}
+        env:
+          CC: ${{ inputs.cc }}
+          CXX: ${{ inputs.cxx }}
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ inputs.artifact_path }}
+          if-no-files-found: ${{ inputs.artifact_if_no_files }}
