@@ -23,7 +23,14 @@ namespace Life
     Application::~Application()
     {
         m_Window.reset();
-        LOG_CORE_INFO("Shut down application '{}'", m_Specification.Name);
+
+        try
+        {
+            LOG_CORE_INFO("Shut down application '{}'", m_Specification.Name);
+        }
+        catch (...)
+        {
+        }
     }
 
     void Application::Initialize(bool useExternalEventPump)

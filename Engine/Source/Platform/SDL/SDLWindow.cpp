@@ -49,7 +49,14 @@ namespace Life
         {
             m_WindowHandle.reset();
             SDL_Quit();
-            LOG_CORE_INFO("Destroyed window '{}'", m_Specification.Title);
+
+            try
+            {
+                LOG_CORE_INFO("Destroyed window '{}'", m_Specification.Title);
+            }
+            catch (...)
+            {
+            }
         }
 
         Scope<Event> PollEvent() override
