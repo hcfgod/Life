@@ -174,7 +174,6 @@ function ConfigureCommonProject()
 
     filter { "system:windows", "action:vs*" }
         buildoptions { "/analyze:external-" }
-
     filter "system:linux"
         pic "On"
 
@@ -188,16 +187,22 @@ function ConfigureCommonProject()
 
     filter {}
 
-    filter "configurations:Debug"
+    filter { "system:windows", "configurations:Debug" }
         runtime "Debug"
+
+    filter { "system:windows", "configurations:Release" }
+        runtime "Release"
+
+    filter { "system:windows", "configurations:Dist" }
+        runtime "Release"
+
+    filter "configurations:Debug"
         symbols "On"
 
     filter "configurations:Release"
-        runtime "Release"
         optimize "On"
 
     filter "configurations:Dist"
-        runtime "Release"
         optimize "Full"
 
     filter {}

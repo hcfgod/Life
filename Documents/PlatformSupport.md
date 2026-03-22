@@ -30,7 +30,7 @@ Architecture support is implemented through the core build surface rather than t
 
 - `premake5.lua` resolves a target architecture and supports `--arch=x64` and `--arch=arm64`.
 - `Setup.bat` resolves `--arch=` for Windows SDL builds and generates architecture-specific install/output paths.
-- `Setup.sh` resolves the effective target architecture, builds SDL into architecture-specific install directories, and passes `CMAKE_OSX_ARCHITECTURES` for macOS SDL builds.
+- `Setup.sh` resolves the effective target architecture, builds SDL into architecture-specific install directories, passes `CMAKE_OSX_ARCHITECTURES` for macOS SDL builds, and bootstraps Premake from source on Linux arm64 when needed.
 - Unix build/test helper scripts resolve `arm64` outputs and SDL install trees for both Linux and macOS.
 - Windows build/test helpers resolve `x64` and `arm64` outputs.
 - CI keeps existing Windows/Linux jobs explicitly pinned to `x64` while macOS validates both Intel and Apple Silicon.
@@ -66,7 +66,7 @@ Current expectation is Visual Studio 2022 with ARM64 toolchain support installed
 
 ## Linux ARM64
 
-Linux ARM64 support is designed as a native-host path.
+Linux ARM64 support works as both a native-host path and a Linux cross-compilation target.
 
 Typical local flow:
 
@@ -76,11 +76,21 @@ Typical local flow:
 ./Scripts/CI/run_tests.sh Debug
 ```
 
+Typical Linux cross-compilation flow from `x64 -> arm64` or `arm64 -> x64`:
+
+```bash
+./Setup.sh gmake2 --arch=arm64
+./Scripts/CI/build_make.sh Debug clean all --arch=arm64
+```
+
 Important limitations:
 
-- `Setup.sh` does not claim generic Linux cross-compilation between `x64` and `arm64`.
-- If `premake5` is not already installed on Linux arm64, install it manually first; automatic Premake bootstrap is not configured for Linux arm64 yet.
+- Linux cross-compilation requires a matching target toolchain. By default the setup/build helpers look for GNU-style prefixes such as `aarch64-linux-gnu-*` or `x86_64-linux-gnu-*`.
+- If the target toolchain is not on the default prefix, set `LIFE_LINUX_CROSS_PREFIX`, `CC` / `CXX` / `AR` / `RANLIB`, or `LIFE_LINUX_CMAKE_TOOLCHAIN_FILE` explicitly.
+- `LIFE_LINUX_SYSROOT` may also be provided when the cross build needs an explicit sysroot.
+- If `premake5` is not already installed on Linux arm64, `Setup.sh` bootstraps Premake from source automatically and caches the resulting binary under `Scripts/Premake/linux/arm64`.
 - CMake bootstrap is architecture-aware on Linux and selects the appropriate host archive for `x64` vs `arm64`.
+- Running cross-compiled Linux binaries still requires a compatible runtime environment on the host, either native or emulated.
 
 ## Local Build Examples
 

@@ -101,7 +101,28 @@ To target Linux arm64 on an arm64 host explicitly:
 ./Scripts/CI/run_tests.sh Debug
 ```
 
-If `premake5` is not already installed on Linux arm64, install it manually first; automatic Premake bootstrap is not configured for Linux arm64 yet.
+If `premake5` is not already installed on Linux arm64, `Setup.sh` now bootstraps Premake automatically from source and caches the resulting binary under `Scripts/Premake/linux/arm64`.
+
+Linux cross-compilation between `x64` and `arm64` is also supported when a matching GNU cross toolchain is available. Typical examples:
+
+```bash
+./Setup.sh gmake2 --arch=arm64
+./Scripts/CI/build_make.sh Debug clean all --arch=arm64
+```
+
+```bash
+./Setup.sh gmake2 --arch=x64
+./Scripts/CI/build_make.sh Debug clean all --arch=x64
+```
+
+If the toolchain is not on the default prefix for the target, set one of:
+
+- `LIFE_LINUX_CROSS_PREFIX`
+- `CC` / `CXX` / `AR` / `RANLIB`
+- `LIFE_LINUX_CMAKE_TOOLCHAIN_FILE`
+- `LIFE_LINUX_SYSROOT`
+
+Cross-compiling does not imply same-host execution of the produced target binary. Use `./Scripts/CI/run_tests.sh Debug --arch=...` only when the target architecture is runnable on the current machine, either natively or through your configured emulation layer.
 
 ### macOS
 
@@ -153,6 +174,7 @@ To target Intel explicitly:
 
 - `Setup.bat` and `Setup.sh` initialize submodules, resolve/download Premake and CMake if necessary, build SDL3, and generate project files.
 - `Setup.bat` accepts `--arch=x64` and `--arch=arm64`; `Setup.sh` does the same for native Unix hosts.
+- On Linux arm64 hosts, `Setup.sh` bootstraps Premake from source when a preinstalled `premake5` is not available.
 - CI caches downloaded toolchains and reusable SDL build/install outputs to reduce repeated setup work.
 - Logging is configured through `ApplicationSpecification.Logging`, giving the engine a thread-safe, configurable logging surface backed by `spdlog` multi-threaded sinks.
 - Generated artifacts stay out of source control; the repository tracks source, scripts, configuration, and documentation rather than build outputs.

@@ -61,10 +61,91 @@ if [ "$TARGET_ARCH" != "x64" ] && [ "$TARGET_ARCH" != "arm64" ]; then
     exit 1
 fi
 
-if [ "$(uname -s)" = "Linux" ] && [ "$HOST_ARCH" != "$TARGET_ARCH" ]; then
-    echo "[Setup] Linux cross-architecture generation is not configured in Setup.sh. Install/configure an explicit cross toolchain before targeting $TARGET_ARCH from $HOST_ARCH."
-    exit 1
-fi
+LINUX_CROSS_COMPILE=0
+LINUX_CROSS_PREFIX=${LIFE_LINUX_CROSS_PREFIX:-}
+LINUX_SYSROOT=${LIFE_LINUX_SYSROOT:-}
+LINUX_CMAKE_TOOLCHAIN_FILE=${LIFE_LINUX_CMAKE_TOOLCHAIN_FILE:-}
+LINUX_CMAKE_SYSTEM_PROCESSOR=""
+LINUX_CC=""
+LINUX_CXX=""
+LINUX_AR=""
+LINUX_RANLIB=""
+
+resolve_linux_target_processor() {
+    case "$TARGET_ARCH" in
+        arm64)
+            printf '%s' "aarch64"
+            ;;
+        *)
+            printf '%s' "x86_64"
+            ;;
+    esac
+}
+
+resolve_linux_cross_prefix() {
+    case "$TARGET_ARCH" in
+        arm64)
+            printf '%s' "aarch64-linux-gnu"
+            ;;
+        *)
+            printf '%s' "x86_64-linux-gnu"
+            ;;
+    esac
+}
+
+configure_linux_cross_toolchain() {
+    if [ "$(uname -s)" != "Linux" ] || [ "$HOST_ARCH" = "$TARGET_ARCH" ]; then
+        return 0
+    fi
+
+    if [ -z "$LINUX_CROSS_PREFIX" ]; then
+        LINUX_CROSS_PREFIX=$(resolve_linux_cross_prefix)
+    fi
+
+    if [ -n "${CC:-}" ]; then
+        LINUX_CC=$CC
+    else
+        LINUX_CC="${LINUX_CROSS_PREFIX}-gcc"
+    fi
+
+    if [ -n "${CXX:-}" ]; then
+        LINUX_CXX=$CXX
+    else
+        LINUX_CXX="${LINUX_CROSS_PREFIX}-g++"
+    fi
+
+    if [ -n "${AR:-}" ]; then
+        LINUX_AR=$AR
+    else
+        LINUX_AR="${LINUX_CROSS_PREFIX}-ar"
+    fi
+
+    if [ -n "${RANLIB:-}" ]; then
+        LINUX_RANLIB=$RANLIB
+    else
+        LINUX_RANLIB="${LINUX_CROSS_PREFIX}-ranlib"
+    fi
+
+    for required_tool in "$LINUX_CC" "$LINUX_CXX" "$LINUX_AR" "$LINUX_RANLIB"; do
+        if ! command -v "$required_tool" >/dev/null 2>&1; then
+            echo "[Setup] Linux cross-compilation requires '$required_tool'. Install the target toolchain or set CC/CXX/AR/RANLIB (or LIFE_LINUX_CROSS_PREFIX) explicitly."
+            exit 1
+        fi
+    done
+
+    if [ -n "$LINUX_CMAKE_TOOLCHAIN_FILE" ] && [ ! -f "$LINUX_CMAKE_TOOLCHAIN_FILE" ]; then
+        echo "[Setup] Linux CMake toolchain file was not found: $LINUX_CMAKE_TOOLCHAIN_FILE"
+        exit 1
+    fi
+
+    if [ -n "$LINUX_SYSROOT" ] && [ ! -e "$LINUX_SYSROOT" ]; then
+        echo "[Setup] Linux sysroot path was not found: $LINUX_SYSROOT"
+        exit 1
+    fi
+
+    LINUX_CROSS_COMPILE=1
+    LINUX_CMAKE_SYSTEM_PROCESSOR=$(resolve_linux_target_processor)
+}
 
 if [ -z "$PREMAKE_ACTION" ]; then
     case "$(uname -s)" in
@@ -244,23 +325,117 @@ build_sdl_config() {
     fi
 
     echo "[Setup] Building SDL3 ($sdl_config)..."
+    set -- "$CMAKE_CMD" -S "$REPO_ROOT/Vendor/SDL3" -B "$sdl_build_dir" -G "$SDL_CMAKE_GENERATOR" -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_INSTALL=ON -DCMAKE_BUILD_TYPE="$sdl_config" -DCMAKE_INSTALL_PREFIX="$sdl_install_dir"
+
     if [ -n "$SDL_CMAKE_ARCHITECTURE" ]; then
-        "$CMAKE_CMD" -S "$REPO_ROOT/Vendor/SDL3" -B "$sdl_build_dir" -G "$SDL_CMAKE_GENERATOR" -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_INSTALL=ON -DCMAKE_BUILD_TYPE="$sdl_config" -DCMAKE_OSX_ARCHITECTURES="$SDL_CMAKE_ARCHITECTURE" -DCMAKE_INSTALL_PREFIX="$sdl_install_dir"
-    else
-        "$CMAKE_CMD" -S "$REPO_ROOT/Vendor/SDL3" -B "$sdl_build_dir" -G "$SDL_CMAKE_GENERATOR" -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_INSTALL=ON -DCMAKE_BUILD_TYPE="$sdl_config" -DCMAKE_INSTALL_PREFIX="$sdl_install_dir"
+        set -- "$@" -DCMAKE_OSX_ARCHITECTURES="$SDL_CMAKE_ARCHITECTURE"
     fi
+
+    if [ "$sdl_platform" = "linux" ] && [ "$LINUX_CROSS_COMPILE" -eq 1 ]; then
+        if [ -n "$LINUX_CMAKE_TOOLCHAIN_FILE" ]; then
+            set -- "$@" -DCMAKE_TOOLCHAIN_FILE="$LINUX_CMAKE_TOOLCHAIN_FILE"
+        else
+            set -- "$@" -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR="$LINUX_CMAKE_SYSTEM_PROCESSOR" -DCMAKE_C_COMPILER="$LINUX_CC" -DCMAKE_CXX_COMPILER="$LINUX_CXX" -DCMAKE_AR="$LINUX_AR" -DCMAKE_RANLIB="$LINUX_RANLIB"
+        fi
+
+        if [ -n "$LINUX_SYSROOT" ]; then
+            set -- "$@" -DCMAKE_SYSROOT="$LINUX_SYSROOT"
+        fi
+    fi
+
+    "$@"
     "$CMAKE_CMD" --build "$sdl_build_dir" --config "$sdl_config" --target install
+}
+
+bootstrap_premake_from_source() {
+    premake_dir="$1"
+    premake_bin="$2"
+    premake_archive="$premake_dir/premake-${PREMAKE_VERSION}-source.tar.gz"
+    premake_source_root="$premake_dir/source"
+    premake_source_url="https://github.com/premake/premake-core/archive/refs/tags/v${PREMAKE_VERSION}.tar.gz"
+    premake_bootstrap_cc=${LIFE_PREMAKE_BOOTSTRAP_CC:-}
+
+    if ! command -v make >/dev/null 2>&1; then
+        echo "[Setup] make is required to bootstrap Premake from source on Linux $HOST_ARCH."
+        exit 1
+    fi
+
+    if [ -z "$premake_bootstrap_cc" ]; then
+        if command -v cc >/dev/null 2>&1; then
+            premake_bootstrap_cc="cc"
+        elif command -v gcc >/dev/null 2>&1; then
+            premake_bootstrap_cc="gcc"
+        elif command -v clang >/dev/null 2>&1; then
+            premake_bootstrap_cc="clang"
+        else
+            echo "[Setup] Unable to find a host C compiler for Premake bootstrap. Set LIFE_PREMAKE_BOOTSTRAP_CC to a native compiler and rerun Setup.sh."
+            exit 1
+        fi
+    fi
+
+    if ! command -v "$premake_bootstrap_cc" >/dev/null 2>&1; then
+        echo "[Setup] Host compiler '$premake_bootstrap_cc' for Premake bootstrap was not found."
+        exit 1
+    fi
+
+    echo "[Setup] Premake was not found. Bootstrapping Premake $PREMAKE_VERSION from source for Linux $HOST_ARCH..."
+    mkdir -p "$premake_dir"
+    rm -rf "$premake_source_root"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -L --fail -o "$premake_archive" "$premake_source_url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -O "$premake_archive" "$premake_source_url"
+    else
+        echo "[Setup] Neither curl nor wget is available to download Premake source."
+        exit 1
+    fi
+
+    mkdir -p "$premake_source_root"
+    tar -xzf "$premake_archive" -C "$premake_source_root"
+    rm -f "$premake_archive"
+
+    premake_source_dir=$(find "$premake_source_root" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+    if [ -z "$premake_source_dir" ]; then
+        echo "[Setup] Failed to extract Premake source archive."
+        exit 1
+    fi
+
+    (
+        cd "$premake_source_dir"
+        make -f Bootstrap.mak linux CC="$premake_bootstrap_cc"
+    )
+
+    built_premake_bin=""
+    for candidate in \
+        "$premake_source_dir/bin/release/premake5" \
+        "$premake_source_dir/bin/debug/premake5" \
+        "$premake_source_dir/build/bootstrap/bin/release/premake5" \
+        "$premake_source_dir/build/bootstrap/bin/debug/premake5"
+    do
+        if [ -f "$candidate" ]; then
+            built_premake_bin="$candidate"
+            break
+        fi
+    done
+
+    if [ -z "$built_premake_bin" ]; then
+        built_premake_bin=$(find "$premake_source_dir" -type f -name premake5 | head -n 1)
+    fi
+
+    if [ -z "$built_premake_bin" ] || [ ! -f "$built_premake_bin" ]; then
+        echo "[Setup] Premake source bootstrap completed but no premake5 binary was found."
+        exit 1
+    fi
+
+    cp "$built_premake_bin" "$premake_bin"
+    chmod +x "$premake_bin"
 }
 
 resolve_premake() {
     if command -v premake5 >/dev/null 2>&1; then
         PREMAKE_CMD="premake5"
         return 0
-    fi
-
-    if [ "$(uname -s)" = "Linux" ] && [ "$HOST_ARCH" = "arm64" ]; then
-        echo "[Setup] Premake was not found. Automatic Premake bootstrap is not configured for Linux arm64 yet; install premake5 manually and rerun Setup.sh."
-        exit 1
     fi
 
     case "$(uname -s)" in
@@ -277,6 +452,21 @@ resolve_premake() {
             exit 1
             ;;
     esac
+
+    if [ "$premake_platform" = "linux" ] && [ "$HOST_ARCH" = "arm64" ]; then
+        premake_dir="$REPO_ROOT/Scripts/Premake/$premake_platform/$HOST_ARCH"
+        premake_bin="$premake_dir/premake5"
+
+        if [ -f "$premake_bin" ]; then
+            chmod +x "$premake_bin"
+            PREMAKE_CMD="$premake_bin"
+            return 0
+        fi
+
+        bootstrap_premake_from_source "$premake_dir" "$premake_bin"
+        PREMAKE_CMD="$premake_bin"
+        return 0
+    fi
 
     premake_dir="$REPO_ROOT/Scripts/Premake/$premake_platform"
     premake_bin="$premake_dir/premake5"
@@ -309,9 +499,10 @@ resolve_premake() {
     PREMAKE_CMD="$premake_bin"
 }
 
-resolve_cmake
-build_sdl
 resolve_premake
+resolve_cmake
+configure_linux_cross_toolchain
+build_sdl
 
 echo "[Setup] Generating project files with Premake ($PREMAKE_ACTION)..."
 "$PREMAKE_CMD" "$PREMAKE_ACTION" "$@"

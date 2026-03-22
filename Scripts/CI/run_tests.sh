@@ -2,10 +2,40 @@
 set -eu
 
 CONFIGURATION=${1:-Debug}
+shift || true
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
+TARGET_ARCH=${LIFE_TARGET_ARCH:-}
+
+for test_arg in "$@"; do
+    case "$test_arg" in
+        --arch=*)
+            TARGET_ARCH=${test_arg#--arch=}
+            ;;
+    esac
+done
+
+normalize_architecture() {
+    architecture=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+    case "$architecture" in
+        amd64|x86_64)
+            printf '%s' "x64"
+            ;;
+        arm64|aarch64)
+            printf '%s' "arm64"
+            ;;
+        *)
+            printf '%s' "$architecture"
+            ;;
+    esac
+}
 
 resolve_target_arch_suffix() {
+    if [ -n "$TARGET_ARCH" ]; then
+        normalize_architecture "$TARGET_ARCH"
+        return 0
+    fi
+
     case "$(uname -s)" in
         Darwin)
             case "$(uname -m)" in
