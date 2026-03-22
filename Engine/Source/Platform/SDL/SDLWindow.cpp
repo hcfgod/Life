@@ -4,6 +4,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -56,6 +57,7 @@ namespace Life
             }
             catch (...)
             {
+                std::fprintf(stderr, "Destroyed window '%s'\n", m_Specification.Title.c_str());
             }
         }
 

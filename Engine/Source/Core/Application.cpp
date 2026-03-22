@@ -2,6 +2,7 @@
 #include "Core/Events/ApplicationEvent.h"
 #include "Core/Log.h"
 
+#include <cstdio>
 #include <chrono>
 #include <utility>
 
@@ -30,6 +31,7 @@ namespace Life
         }
         catch (...)
         {
+            std::fprintf(stderr, "Shut down application '%s'\n", m_Specification.Name.c_str());
         }
     }
 
