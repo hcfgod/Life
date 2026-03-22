@@ -165,6 +165,7 @@ function UseEngineIncludeDirs(extraIncludeDirs)
     end
 
     includedirs(includeDirs)
+    includedirs(externalIncludeDirs)
     externalincludedirs(externalIncludeDirs)
 end
 
