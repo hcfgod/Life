@@ -433,11 +433,6 @@ bootstrap_premake_from_source() {
 }
 
 resolve_premake() {
-    if command -v premake5 >/dev/null 2>&1; then
-        PREMAKE_CMD="premake5"
-        return 0
-    fi
-
     case "$(uname -s)" in
         Darwin)
             premake_platform="macosx"
@@ -477,6 +472,11 @@ resolve_premake() {
         return 0
     fi
 
+    if command -v premake5 >/dev/null 2>&1; then
+        PREMAKE_CMD="premake5"
+        return 0
+    fi
+
     premake_archive="$premake_dir/$premake_archive_name"
     premake_url="https://github.com/premake/premake-core/releases/download/v${PREMAKE_VERSION}/${premake_archive_name}"
 
@@ -504,6 +504,7 @@ resolve_cmake
 configure_linux_cross_toolchain
 build_sdl
 
+echo "[Setup] Using Premake command: $PREMAKE_CMD"
 echo "[Setup] Generating project files with Premake ($PREMAKE_ACTION)..."
 "$PREMAKE_CMD" "$PREMAKE_ACTION" "$@"
 

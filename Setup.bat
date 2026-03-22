@@ -52,6 +52,7 @@ if errorlevel 1 goto :error
 call :build_sdl
 if errorlevel 1 goto :error
 
+echo [Setup] Resolved Premake command: "%PREMAKE_CMD%"
 echo [Setup] Generating project files with Premake (%PREMAKE_ACTION%)...
 call "%PREMAKE_CMD%" %PREMAKE_ACTION% %PREMAKE_EXTRA_ARGS%
 if errorlevel 1 goto :error
@@ -140,6 +141,13 @@ set "PREMAKE_ACTION=%~1"
 if "%PREMAKE_ACTION%"=="" set "PREMAKE_ACTION=vs2022"
 
 set "PREMAKE_CMD="
+set "PREMAKE_DIR=Scripts\Premake\windows"
+set "PREMAKE_EXE=%PREMAKE_DIR%\premake5.exe"
+if exist "%PREMAKE_EXE%" (
+    set "PREMAKE_CMD=%PREMAKE_EXE%"
+    exit /b 0
+)
+
 where premake5 >nul 2>&1
 if not errorlevel 1 set "PREMAKE_CMD=premake5"
 if defined PREMAKE_CMD exit /b 0
@@ -147,13 +155,6 @@ if defined PREMAKE_CMD exit /b 0
 where premake5.exe >nul 2>&1
 if not errorlevel 1 set "PREMAKE_CMD=premake5.exe"
 if defined PREMAKE_CMD exit /b 0
-
-set "PREMAKE_DIR=Scripts\Premake\windows"
-set "PREMAKE_EXE=%PREMAKE_DIR%\premake5.exe"
-if exist "%PREMAKE_EXE%" (
-    set "PREMAKE_CMD=%PREMAKE_EXE%"
-    exit /b 0
-)
 
 set "PREMAKE_ARCHIVE=%PREMAKE_DIR%\premake-%PREMAKE_VERSION%-windows.zip"
 set "PREMAKE_URL=https://github.com/premake/premake-core/releases/download/v%PREMAKE_VERSION%/premake-%PREMAKE_VERSION%-windows.zip"
