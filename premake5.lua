@@ -166,7 +166,11 @@ function UseEngineIncludeDirs(extraIncludeDirs)
 
     includedirs(includeDirs)
     includedirs(externalIncludeDirs)
-    externalincludedirs(externalIncludeDirs)
+
+    filter { "system:windows", "action:vs*" }
+        externalincludedirs(externalIncludeDirs)
+
+    filter {}
 end
 
 function ConfigureCommonProject()
