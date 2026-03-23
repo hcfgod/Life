@@ -1,10 +1,10 @@
 #pragma once
 
-#include "Core/ApplicationRuntime.h"
+#include "Core/ApplicationContext.h"
+#include "Core/ApplicationEventRouter.h"
 #include "Core/Events/Event.h"
 #include "Core/Log.h"
 #include "Core/Memory.h"
-#include "Core/Window.h"
 
 #include <cstdint>
 #include <string>
@@ -40,19 +40,18 @@ namespace Life
         virtual ~Application();
 
         void Initialize();
-        void Startup();
         void RunFrame(float timestep);
         void HandleEvent(Event& event);
 
         template<typename TEvent, typename TFunction>
         EventSubscriptionId SubscribeEvent(TFunction&& function)
         {
-            return m_EventBus.Subscribe<TEvent>(std::forward<TFunction>(function));
+            return RequireEventRouter().Subscribe<TEvent>(std::forward<TFunction>(function));
         }
 
         bool UnsubscribeEvent(EventSubscriptionId subscriptionId)
         {
-            return m_EventBus.Unsubscribe(subscriptionId);
+            return RequireEventRouter().Unsubscribe(subscriptionId);
         }
 
         void DispatchEvent(Event& event)
@@ -73,30 +72,39 @@ namespace Life
         void Shutdown();
         void Finalize();
 
-        bool IsRunning() const { return m_Running; }
-        bool IsInitialized() const { return m_Initialized; }
+        bool IsRunning() const;
+        bool IsInitialized() const;
 
         const ApplicationSpecification& GetSpecification() const { return m_Specification; }
-        ApplicationRuntime& GetRuntime() { return *m_Runtime; }
-        const ApplicationRuntime& GetRuntime() const { return *m_Runtime; }
-        Window& GetWindow() { return *m_Window; }
-        const Window& GetWindow() const { return *m_Window; }
+        Window& GetWindow();
+        const Window& GetWindow() const;
+        ApplicationContext& GetContext();
+        const ApplicationContext& GetContext() const;
 
     protected:
-        Application(ApplicationSpecification specification, Scope<ApplicationRuntime> runtime);
-
         virtual void OnInit() {}
         virtual void OnShutdown() {}
         virtual void OnUpdate(float timestep) {}
         virtual void OnEvent(Event& event) {}
 
     private:
+        friend class ApplicationEventRouter;
+        friend class ApplicationHost;
+
+        void BindHost(ApplicationContext& context, ApplicationEventRouter& eventRouter);
+
+        ApplicationContext& RequireContext();
+        const ApplicationContext& RequireContext() const;
+        ApplicationEventRouter& RequireEventRouter();
+        const ApplicationEventRouter& RequireEventRouter() const;
+
+        void OnHostInitialize();
+        void OnHostRunFrame(float timestep);
+        void OnHostFinalize();
+
         ApplicationSpecification m_Specification;
-        Scope<ApplicationRuntime> m_Runtime;
-        Scope<Window> m_Window;
-        EventBus m_EventBus;
-        bool m_Running = false;
-        bool m_Initialized = false;
+        ApplicationContext* m_Context = nullptr;
+        ApplicationEventRouter* m_EventRouter = nullptr;
     };
 
     Scope<Application> CreateApplication(ApplicationCommandLineArgs args);

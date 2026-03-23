@@ -1,0 +1,798 @@
+#include "Platform/Platform.h"
+#include "Core/Log.h"
+#include "Core/Error.h"
+#include <iostream>
+#include <sstream>
+#include <chrono>
+#include <filesystem>
+#include <cstdlib>
+
+// Platform-specific includes
+#ifdef LIFE_PLATFORM_WINDOWS
+    #include <windows.h>
+    #include <winternl.h>
+    #include <psapi.h>
+
+    #include <intrin.h>
+    #include <direct.h>
+    #include <shlobj.h>
+    #include <sysinfoapi.h>
+    #include <memoryapi.h>
+#elif defined(LIFE_PLATFORM_MACOS)
+    #include <sys/sysctl.h>
+    #include <sys/types.h>
+    #include <sys/stat.h>
+
+    #include <unistd.h>
+    #include <limits.h>
+    #include <mach-o/dyld.h>
+    #include <mach/mach.h>
+    #include <mach/mach_host.h>
+    #include <mach/mach_time.h>
+    #include <dlfcn.h>
+    #include <pwd.h>
+    #include <sys/utsname.h>
+    #include <stdlib.h>
+    #include <signal.h>
+    #include <pthread.h>
+    #include <sys/malloc.h>
+#elif defined(LIFE_PLATFORM_LINUX)
+    #include <sys/sysinfo.h>
+    #include <sys/stat.h>
+    #include <unistd.h>
+    #include <limits.h>
+    #include <dlfcn.h>
+    #include <pwd.h>
+    #include <sys/utsname.h>
+    #include <cpuid.h>
+    #include <stdlib.h>
+    #include <signal.h>
+    #include <pthread.h>
+#endif
+
+namespace Life
+{
+    // Static member initialization
+    PlatformInfo PlatformDetection::s_PlatformInfo;
+    bool PlatformDetection::s_Initialized = false;
+
+    const PlatformInfo& PlatformDetection::GetPlatformInfo()
+    {
+        if (!s_Initialized)
+        {
+            Initialize();
+        }
+        return s_PlatformInfo;
+    }
+
+    void PlatformDetection::Initialize()
+    {
+        if (s_Initialized)
+            return;
+
+        try
+        {
+            DetectPlatform();
+            DetectArchitecture();
+            DetectCompiler();
+            DetectOS();
+            DetectCapabilities();
+            DetectPaths();
+            DetectGraphicsAPIs();
+
+            s_PlatformInfo.buildDate = __DATE__;
+            s_PlatformInfo.buildTime = __TIME__;
+            s_PlatformInfo.buildType = LIFE_BUILD_TYPE;
+
+            s_Initialized = true;
+            
+            LOG_CORE_INFO("Platform detection initialized:");
+            LOG_CORE_INFO("  Platform: {} ({})", s_PlatformInfo.platformName, GetPlatformString());
+            LOG_CORE_INFO("  Architecture: {} ({})", s_PlatformInfo.architectureName, GetArchitectureString());
+            LOG_CORE_INFO("  Compiler: {} ({})", s_PlatformInfo.compilerName, GetCompilerString());
+            LOG_CORE_INFO("  OS: {} ({})", s_PlatformInfo.osName, GetOSString());
+            LOG_CORE_INFO("  CPU Cores: {}", s_PlatformInfo.capabilities.cpuCount);
+            LOG_CORE_INFO("  Total Memory: {} MB", s_PlatformInfo.capabilities.totalMemory / (1024 * 1024));
+        }
+        catch (const std::exception& e)
+        {
+            std::string errorMsg = std::string("Failed to initialize platform detection: ") + e.what();
+            PlatformError error(errorMsg, std::source_location::current());
+            error.SetFunctionName("PlatformDetection::Initialize");
+            error.SetClassName("PlatformDetection");
+            error.SetModuleName("Platform");
+            
+            LOG_CORE_ERROR("{}", errorMsg);
+            Error::LogError(error);
+            throw error;
+        }
+    }
+
+    void PlatformDetection::RefreshCapabilities()
+    {
+        DetectCapabilities();
+        DetectGraphicsAPIs();
+    }
+    
+    bool PlatformDetection::IsInitialized()
+    {
+        return s_Initialized;
+    }
+
+    void PlatformDetection::DetectPlatform()
+    {
+        #ifdef LIFE_PLATFORM_WINDOWS
+            s_PlatformInfo.platform = Platform::Windows;
+            s_PlatformInfo.platformName = "Windows";
+        #elif defined(LIFE_PLATFORM_MACOS)
+            s_PlatformInfo.platform = Platform::macOS;
+            s_PlatformInfo.platformName = "macOS";
+        #elif defined(LIFE_PLATFORM_LINUX)
+            s_PlatformInfo.platform = Platform::Linux;
+            s_PlatformInfo.platformName = "Linux";
+        #else
+            s_PlatformInfo.platform = Platform::Unknown;
+            s_PlatformInfo.platformName = "Unknown";
+        #endif
+    }
+
+    void PlatformDetection::DetectArchitecture()
+    {
+        #ifdef LIFE_ARCHITECTURE_X64
+            s_PlatformInfo.architecture = Architecture::x64;
+            s_PlatformInfo.architectureName = "x64";
+        #elif defined(LIFE_ARCHITECTURE_X86)
+            s_PlatformInfo.architecture = Architecture::x86;
+            s_PlatformInfo.architectureName = "x86";
+        #elif defined(LIFE_ARCHITECTURE_ARM64)
+            s_PlatformInfo.architecture = Architecture::ARM64;
+            s_PlatformInfo.architectureName = "ARM64";
+        #elif defined(LIFE_ARCHITECTURE_ARM32)
+            s_PlatformInfo.architecture = Architecture::ARM32;
+            s_PlatformInfo.architectureName = "ARM32";
+        #else
+            s_PlatformInfo.architecture = Architecture::Unknown;
+            s_PlatformInfo.architectureName = "Unknown";
+        #endif
+    }
+
+    void PlatformDetection::DetectCompiler()
+    {
+        #ifdef LIFE_COMPILER_MSVC
+            s_PlatformInfo.compiler = Compiler::MSVC;
+            s_PlatformInfo.compilerName = "MSVC";
+            s_PlatformInfo.compilerVersion = std::to_string(_MSC_VER);
+        #elif defined(LIFE_COMPILER_GCC)
+            s_PlatformInfo.compiler = Compiler::GCC;
+            s_PlatformInfo.compilerName = "GCC";
+            s_PlatformInfo.compilerVersion = std::to_string(__GNUC__) + "." + std::to_string(__GNUC_MINOR__);
+        #elif defined(LIFE_COMPILER_APPLE_CLANG)
+            s_PlatformInfo.compiler = Compiler::AppleClang;
+            s_PlatformInfo.compilerName = "AppleClang";
+            s_PlatformInfo.compilerVersion = std::to_string(__clang_major__) + "." + std::to_string(__clang_minor__);
+        #elif defined(LIFE_COMPILER_CLANG)
+            s_PlatformInfo.compiler = Compiler::Clang;
+            s_PlatformInfo.compilerName = "Clang";
+            s_PlatformInfo.compilerVersion = std::to_string(__clang_major__) + "." + std::to_string(__clang_minor__);
+        #else
+            s_PlatformInfo.compiler = Compiler::Unknown;
+            s_PlatformInfo.compilerName = "Unknown";
+            s_PlatformInfo.compilerVersion = "Unknown";
+        #endif
+    }
+
+    void PlatformDetection::DetectOS()
+    {
+        #ifdef LIFE_PLATFORM_WINDOWS
+            s_PlatformInfo.osName = "Windows";
+            s_PlatformInfo.osVersion = "Unknown";
+            s_PlatformInfo.osBuild = "Unknown";
+
+            RTL_OSVERSIONINFOW osvi{};
+            osvi.dwOSVersionInfoSize = sizeof(osvi);
+            using RtlGetVersionFn = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
+            const HMODULE ntdllModule = GetModuleHandleW(L"ntdll.dll");
+            if (ntdllModule != nullptr)
+            {
+                const auto rtlGetVersion = reinterpret_cast<RtlGetVersionFn>(GetProcAddress(ntdllModule, "RtlGetVersion"));
+                if (rtlGetVersion != nullptr && rtlGetVersion(&osvi) >= 0)
+                {
+                    s_PlatformInfo.osVersion = std::to_string(osvi.dwMajorVersion) + "." + std::to_string(osvi.dwMinorVersion);
+                    s_PlatformInfo.osBuild = std::to_string(osvi.dwBuildNumber);
+                }
+            }
+        #elif defined(LIFE_PLATFORM_MACOS)
+            s_PlatformInfo.osName = "macOS";
+            
+            // Get macOS version
+            char version[256];
+            size_t size = sizeof(version);
+            if (sysctlbyname("kern.osrelease", version, &size, nullptr, 0) == 0)
+            {
+                s_PlatformInfo.osVersion = version;
+            }
+            
+            // Get build number
+            char build[256];
+            size = sizeof(build);
+            if (sysctlbyname("kern.osversion", build, &size, nullptr, 0) == 0)
+            {
+                s_PlatformInfo.osBuild = build;
+            }
+            
+        #elif defined(LIFE_PLATFORM_LINUX)
+            struct utsname uts;
+            if (uname(&uts) == 0)
+            {
+                s_PlatformInfo.osName = uts.sysname;
+                s_PlatformInfo.osVersion = uts.release;
+                s_PlatformInfo.osBuild = uts.version;
+            }
+            else
+            {
+                s_PlatformInfo.osName = "Linux";
+                s_PlatformInfo.osVersion = "Unknown";
+                s_PlatformInfo.osBuild = "Unknown";
+            }
+        #else
+            s_PlatformInfo.osName = "Unknown";
+            s_PlatformInfo.osVersion = "Unknown";
+            s_PlatformInfo.osBuild = "Unknown";
+        #endif
+    }
+
+    void PlatformDetection::DetectCapabilities()
+    {
+        // CPU count
+        #ifdef LIFE_PLATFORM_WINDOWS
+            SYSTEM_INFO sysInfo;
+            GetSystemInfo(&sysInfo);
+            s_PlatformInfo.capabilities.cpuCount = sysInfo.dwNumberOfProcessors;
+        #elif defined(LIFE_PLATFORM_MACOS)
+            int cpuCount;
+            size_t cpuSize = sizeof(cpuCount);
+            if (sysctlbyname("hw.ncpu", &cpuCount, &cpuSize, nullptr, 0) == 0)
+            {
+                s_PlatformInfo.capabilities.cpuCount = static_cast<uint32_t>(cpuCount);
+            }
+        #elif defined(LIFE_PLATFORM_LINUX)
+            s_PlatformInfo.capabilities.cpuCount = static_cast<uint32_t>(sysconf(_SC_NPROCESSORS_ONLN));
+        #endif
+
+        // Memory information
+        #ifdef LIFE_PLATFORM_WINDOWS
+            MEMORYSTATUSEX memInfo;
+            memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+            if (GlobalMemoryStatusEx(&memInfo))
+            {
+                s_PlatformInfo.capabilities.totalMemory = memInfo.ullTotalPhys;
+                s_PlatformInfo.capabilities.availableMemory = memInfo.ullAvailPhys;
+            }
+        #elif defined(LIFE_PLATFORM_MACOS)
+            int64_t totalMem;
+            size_t memSize = sizeof(totalMem);
+            if (sysctlbyname("hw.memsize", &totalMem, &memSize, nullptr, 0) == 0)
+            {
+                s_PlatformInfo.capabilities.totalMemory = static_cast<uint64_t>(totalMem);
+                
+                // Get available memory
+                vm_size_t pageSize;
+                host_page_size(mach_host_self(), &pageSize);
+                
+                vm_statistics64_data_t vmStats;
+                mach_msg_type_number_t infoCount = sizeof(vmStats) / sizeof(natural_t);
+                if (host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t)&vmStats, &infoCount) == KERN_SUCCESS)
+                {
+                    uint64_t freeMem = static_cast<uint64_t>(vmStats.free_count) * pageSize;
+                    s_PlatformInfo.capabilities.availableMemory = freeMem;
+                }
+            }
+        #elif defined(LIFE_PLATFORM_LINUX)
+            struct sysinfo si;
+            if (sysinfo(&si) == 0)
+            {
+                s_PlatformInfo.capabilities.totalMemory = static_cast<uint64_t>(si.totalram) * si.mem_unit;
+                s_PlatformInfo.capabilities.availableMemory = static_cast<uint64_t>(si.freeram) * si.mem_unit;
+            }
+        #endif
+
+        // CPU instruction set detection
+        #if defined(LIFE_ARCHITECTURE_X64) || defined(LIFE_ARCHITECTURE_X86)
+            // Correct AVX-family detection requires BOTH:
+            // - CPU support bits (CPUID)
+            // - OS support for saving YMM/ZMM state (OSXSAVE + XGETBV(XCR0))
+            //
+            // References:
+            // - AVX: CPUID.(EAX=1):ECX.AVX[bit 28] + OSXSAVE[bit 27] + XCR0[1:2] == 11b
+            // - AVX2: CPUID.(EAX=7,ECX=0):EBX.AVX2[bit 5] + AVX usable
+            // - AVX-512F: CPUID.(EAX=7,ECX=0):EBX.AVX512F[bit 16] + XCR0 enables Opmask/ZMM state
+            #if defined(LIFE_PLATFORM_WINDOWS)
+                int cpuInfo[4] = {};
+                __cpuid(cpuInfo, 1);
+
+                s_PlatformInfo.capabilities.hasSSE2 = (cpuInfo[3] & (1 << 26)) != 0;
+                s_PlatformInfo.capabilities.hasSSE3 = (cpuInfo[2] & (1 << 0)) != 0;
+                s_PlatformInfo.capabilities.hasSSE4_1 = (cpuInfo[2] & (1 << 19)) != 0;
+                s_PlatformInfo.capabilities.hasSSE4_2 = (cpuInfo[2] & (1 << 20)) != 0;
+
+                const bool cpuHasXSAVE   = (cpuInfo[2] & (1 << 26)) != 0;
+                const bool cpuHasOSXSAVE = (cpuInfo[2] & (1 << 27)) != 0;
+                const bool cpuHasAVX     = (cpuInfo[2] & (1 << 28)) != 0;
+
+                uint64_t xcr0 = 0;
+                if (cpuHasXSAVE && cpuHasOSXSAVE)
+                {
+                    xcr0 = _xgetbv(0);
+                }
+
+                // XCR0 bit 1 = XMM state, bit 2 = YMM state
+                const bool osHasAVXState = (xcr0 & 0x6) == 0x6;
+                s_PlatformInfo.capabilities.hasAVX = cpuHasAVX && cpuHasXSAVE && cpuHasOSXSAVE && osHasAVXState;
+
+                // Leaf 7 feature bits
+                __cpuidex(cpuInfo, 7, 0);
+                const bool cpuHasAVX2    = (cpuInfo[1] & (1 << 5)) != 0;   // EBX bit 5
+                const bool cpuHasAVX512F = (cpuInfo[1] & (1 << 16)) != 0;  // EBX bit 16
+
+                s_PlatformInfo.capabilities.hasAVX2 = s_PlatformInfo.capabilities.hasAVX && cpuHasAVX2;
+
+                // XCR0 bits required for AVX-512: XMM(1), YMM(2), Opmask(5), ZMM_hi256(6), Hi16_ZMM(7)
+                const bool osHasAVX512State = (xcr0 & 0xE6) == 0xE6;
+                s_PlatformInfo.capabilities.hasAVX512 = s_PlatformInfo.capabilities.hasAVX && cpuHasAVX512F && osHasAVX512State;
+
+            #elif defined(LIFE_PLATFORM_LINUX)
+                // Local helper: XGETBV is required to validate OS support for AVX/AVX-512 state.
+                auto XGetBV = [](uint32_t index) -> uint64_t
+                {
+                    uint32_t eax = 0;
+                    uint32_t edx = 0;
+                    __asm__ volatile("xgetbv" : "=a"(eax), "=d"(edx) : "c"(index));
+                    return (static_cast<uint64_t>(edx) << 32) | eax;
+                };
+
+                unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
+                if (__get_cpuid(1, &eax, &ebx, &ecx, &edx))
+                {
+                    s_PlatformInfo.capabilities.hasSSE2 = (edx & (1 << 26)) != 0;
+                    s_PlatformInfo.capabilities.hasSSE3 = (ecx & (1 << 0)) != 0;
+                    s_PlatformInfo.capabilities.hasSSE4_1 = (ecx & (1 << 19)) != 0;
+                    s_PlatformInfo.capabilities.hasSSE4_2 = (ecx & (1 << 20)) != 0;
+
+                    const bool cpuHasXSAVE   = (ecx & (1 << 26)) != 0;
+                    const bool cpuHasOSXSAVE = (ecx & (1 << 27)) != 0;
+                    const bool cpuHasAVX     = (ecx & (1 << 28)) != 0;
+
+                    uint64_t xcr0 = 0;
+                    if (cpuHasXSAVE && cpuHasOSXSAVE)
+                    {
+                        xcr0 = XGetBV(0);
+                    }
+
+                    const bool osHasAVXState = (xcr0 & 0x6) == 0x6;
+                    s_PlatformInfo.capabilities.hasAVX = cpuHasAVX && cpuHasXSAVE && cpuHasOSXSAVE && osHasAVXState;
+
+                    // CPUID leaf 7 is queried via __get_cpuid_count(7, 0, ...)
+                    if (__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx))
+                    {
+                        const bool cpuHasAVX2    = (ebx & (1 << 5)) != 0;   // EBX bit 5
+                        const bool cpuHasAVX512F = (ebx & (1 << 16)) != 0;  // EBX bit 16
+
+                        s_PlatformInfo.capabilities.hasAVX2 = s_PlatformInfo.capabilities.hasAVX && cpuHasAVX2;
+
+                        const bool osHasAVX512State = (xcr0 & 0xE6) == 0xE6;
+                        s_PlatformInfo.capabilities.hasAVX512 = s_PlatformInfo.capabilities.hasAVX && cpuHasAVX512F && osHasAVX512State;
+                    }
+                }
+            #endif
+        #endif // x86/x64
+
+        // ARM-specific capabilities
+        #if defined(LIFE_ARCHITECTURE_ARM64) || defined(LIFE_ARCHITECTURE_ARM32)
+            s_PlatformInfo.capabilities.hasNEON = true;
+        #endif
+
+        // PowerPC capabilities (if applicable)
+        #ifdef __powerpc__
+            s_PlatformInfo.capabilities.hasAltiVec = true;
+        #endif
+    }
+
+    void PlatformDetection::DetectPaths()
+    {
+        // Executable path
+        #ifdef LIFE_PLATFORM_WINDOWS
+            char path[MAX_PATH];
+            GetModuleFileNameA(nullptr, path, MAX_PATH);
+            s_PlatformInfo.executablePath = path;
+        #elif defined(LIFE_PLATFORM_MACOS)
+            // macOS does not provide /proc/self/exe. Use the dyld API to locate the current executable.
+            char path[PATH_MAX];
+            uint32_t size = sizeof(path);
+            if (_NSGetExecutablePath(path, &size) == 0)
+            {
+                // _NSGetExecutablePath may return a path containing symlinks or relative components.
+                // Resolve it to an absolute canonical path when possible.
+                char resolved[PATH_MAX];
+                if (realpath(path, resolved) != nullptr)
+                {
+                    s_PlatformInfo.executablePath = resolved;
+                }
+                else
+                {
+                    // Fall back to the dyld path if realpath fails (should be rare).
+                    s_PlatformInfo.executablePath = path;
+                }
+            }
+            else if (size > 0)
+            {
+                // Buffer was too small; allocate the requested size and retry.
+                std::string tmp;
+                tmp.resize(size);
+                if (_NSGetExecutablePath(tmp.data(), &size) == 0)
+                {
+                    char resolved[PATH_MAX];
+                    if (realpath(tmp.c_str(), resolved) != nullptr)
+                    {
+                        s_PlatformInfo.executablePath = resolved;
+                    }
+                    else
+                    {
+                        s_PlatformInfo.executablePath = tmp.c_str();
+                    }
+                }
+            }
+        #elif defined(LIFE_PLATFORM_LINUX)
+            // Linux: /proc/self/exe points to the running executable.
+            char path[PATH_MAX];
+            const ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
+            if (len > 0)
+            {
+                path[len] = '\0';
+                s_PlatformInfo.executablePath = path;
+            }
+        #endif
+
+        // Working directory
+        #ifdef LIFE_PLATFORM_WINDOWS
+            char cwd[MAX_PATH];
+            if (_getcwd(cwd, MAX_PATH) != nullptr)
+            {
+                s_PlatformInfo.workingDirectory = cwd;
+            }
+        #elif defined(LIFE_PLATFORM_MACOS) || defined(LIFE_PLATFORM_LINUX)
+            char cwd[PATH_MAX];
+            if (getcwd(cwd, PATH_MAX) != nullptr)
+            {
+                s_PlatformInfo.workingDirectory = cwd;
+            }
+        #endif
+
+        // User data path
+        #ifdef LIFE_PLATFORM_WINDOWS
+            char appData[MAX_PATH];
+            if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_APPDATA, nullptr, 0, appData)))
+            {
+                s_PlatformInfo.userDataPath = std::string(appData) + "\\Life";
+            }
+        #elif defined(LIFE_PLATFORM_MACOS)
+            const char* home = getenv("HOME");
+            if (home)
+            {
+                s_PlatformInfo.userDataPath = std::string(home) + "/Library/Application Support/Life";
+            }
+        #elif defined(LIFE_PLATFORM_LINUX)
+            const char* home = getenv("HOME");
+            if (home)
+            {
+                s_PlatformInfo.userDataPath = std::string(home) + "/.local/share/Life";
+            }
+        #endif
+
+        // Temp path
+        #ifdef LIFE_PLATFORM_WINDOWS
+            char tempPath[MAX_PATH];
+            if (GetTempPathA(MAX_PATH, tempPath) != 0)
+            {
+                s_PlatformInfo.tempPath = tempPath;
+            }
+        #elif defined(LIFE_PLATFORM_MACOS) || defined(LIFE_PLATFORM_LINUX)
+            const char* temp = getenv("TMPDIR");
+            if (temp)
+            {
+                s_PlatformInfo.tempPath = temp;
+            }
+            else
+            {
+                s_PlatformInfo.tempPath = "/tmp";
+            }
+        #endif
+
+        // System path
+        #ifdef LIFE_PLATFORM_WINDOWS
+            char systemPath[MAX_PATH];
+            if (GetSystemDirectoryA(systemPath, MAX_PATH) != 0)
+            {
+                s_PlatformInfo.systemPath = systemPath;
+            }
+        #elif defined(LIFE_PLATFORM_MACOS)
+            s_PlatformInfo.systemPath = "/System";
+        #elif defined(LIFE_PLATFORM_LINUX)
+            s_PlatformInfo.systemPath = "/usr";
+        #endif
+    }
+
+    void PlatformDetection::DetectGraphicsAPIs()
+    {
+        // This would typically involve checking for available graphics APIs
+        // For now, we'll set basic defaults based on platform
+        
+        #ifdef LIFE_PLATFORM_WINDOWS
+            s_PlatformInfo.capabilities.hasDirectX = true;
+            s_PlatformInfo.capabilities.hasOpenGL = true;
+            s_PlatformInfo.capabilities.hasVulkan = true;
+        #elif defined(LIFE_PLATFORM_MACOS)
+            s_PlatformInfo.capabilities.hasMetal = true;
+            s_PlatformInfo.capabilities.hasOpenGL = true;
+            s_PlatformInfo.capabilities.hasVulkan = false; // macOS doesn't support Vulkan natively
+        #elif defined(LIFE_PLATFORM_LINUX)
+            s_PlatformInfo.capabilities.hasOpenGL = true;
+            s_PlatformInfo.capabilities.hasVulkan = true;
+        #endif
+    }
+
+    std::string PlatformDetection::GetPlatformString()
+    {
+        return s_PlatformInfo.platformName;
+    }
+
+    std::string PlatformDetection::GetArchitectureString()
+    {
+        return s_PlatformInfo.architectureName;
+    }
+
+    std::string PlatformDetection::GetCompilerString()
+    {
+        return s_PlatformInfo.compilerName + " " + s_PlatformInfo.compilerVersion;
+    }
+
+    std::string PlatformDetection::GetOSString()
+    {
+        return s_PlatformInfo.osName + " " + s_PlatformInfo.osVersion;
+    }
+
+    // PlatformUtils implementation
+    namespace PlatformUtils
+    {
+        std::string GetPathSeparator()
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                return "\\";
+            #else
+                return "/";
+            #endif
+        }
+
+        std::string NormalizePath(const std::string& path)
+        {
+            std::filesystem::path fsPath(path);
+            return fsPath.lexically_normal().string();
+        }
+
+        std::string JoinPath(const std::string& path1, const std::string& path2)
+        {
+            std::filesystem::path fsPath1(path1);
+            std::filesystem::path fsPath2(path2);
+            return (fsPath1 / fsPath2).string();
+        }
+
+        std::string GetDirectoryName(const std::string& path)
+        {
+            std::filesystem::path fsPath(path);
+            return fsPath.parent_path().string();
+        }
+
+        std::string GetFileName(const std::string& path)
+        {
+            std::filesystem::path fsPath(path);
+            return fsPath.filename().string();
+        }
+
+        std::string GetFileExtension(const std::string& path)
+        {
+            std::filesystem::path fsPath(path);
+            return fsPath.extension().string();
+        }
+
+        std::optional<std::string> GetEnvironmentVariable(const std::string& name)
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                char* value = nullptr;
+                size_t size = 0;
+                if (_dupenv_s(&value, &size, name.c_str()) == 0 && value != nullptr)
+                {
+                    std::string result(value);
+                    free(value);
+                    return result;
+                }
+            #else
+                const char* value = getenv(name.c_str());
+                if (value != nullptr)
+                {
+                    return std::string(value);
+                }
+            #endif
+            return std::nullopt;
+        }
+
+        bool SetEnvironmentVariable(const std::string& name, const std::string& value)
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                return _putenv_s(name.c_str(), value.c_str()) == 0;
+            #else
+                return setenv(name.c_str(), value.c_str(), 1) == 0;
+            #endif
+        }
+
+        uint32_t GetCurrentProcessId()
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                return static_cast<uint32_t>(::GetCurrentProcessId());
+            #else
+                return static_cast<uint32_t>(getpid());
+            #endif
+        }
+
+        uint32_t GetCurrentThreadId()
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                return static_cast<uint32_t>(::GetCurrentThreadId());
+            #elif defined(LIFE_PLATFORM_MACOS)
+                // On macOS, pthread_t is a pointer type, so we need to get a unique ID differently
+                uint64_t threadId;
+                pthread_threadid_np(pthread_self(), &threadId);
+                return static_cast<uint32_t>(threadId);
+            #else
+                return static_cast<uint32_t>(pthread_self());
+            #endif
+        }
+
+        void Sleep(uint32_t milliseconds)
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                ::Sleep(milliseconds);
+            #else
+                usleep(milliseconds * 1000);
+            #endif
+        }
+
+        void* LoadLibrary(const std::string& path)
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                return LoadLibraryA(path.c_str());
+            #else
+                return dlopen(path.c_str(), RTLD_LAZY);
+            #endif
+        }
+
+        void* GetProcAddress(void* library, const std::string& name)
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                return ::GetProcAddress(static_cast<HMODULE>(library), name.c_str());
+            #else
+                return dlsym(library, name.c_str());
+            #endif
+        }
+
+        void FreeLibrary(void* library)
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                ::FreeLibrary(static_cast<HMODULE>(library));
+            #else
+                dlclose(library);
+            #endif
+        }
+
+        void* AllocateAligned(size_t size, size_t alignment)
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                return _aligned_malloc(size, alignment);
+            #else
+                void* ptr = nullptr;
+                if (posix_memalign(&ptr, alignment, size) == 0)
+                {
+                    return ptr;
+                }
+                return nullptr;
+            #endif
+        }
+
+        void FreeAligned(void* ptr)
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                _aligned_free(ptr);
+            #else
+                free(ptr);
+            #endif
+        }
+
+        uint64_t GetHighResolutionTime()
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                LARGE_INTEGER frequency, counter;
+                QueryPerformanceFrequency(&frequency);
+                QueryPerformanceCounter(&counter);
+                return static_cast<uint64_t>((counter.QuadPart * 1000000) / frequency.QuadPart);
+            #elif defined(LIFE_PLATFORM_MACOS)
+                return static_cast<uint64_t>(mach_absolute_time() / 1000); // Convert to microseconds
+            #else
+                auto now = std::chrono::high_resolution_clock::now();
+                auto duration = now.time_since_epoch();
+                return std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+            #endif
+        }
+
+        uint64_t GetSystemTime()
+        {
+            auto now = std::chrono::system_clock::now();
+            auto duration = now.time_since_epoch();
+            return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+        }
+
+        void SetConsoleColor(uint32_t color)
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+                SetConsoleTextAttribute(hConsole, static_cast<WORD>(color));
+            #else
+                // ANSI color codes
+                #ifdef LIFE_CONSOLE_LOGGING_ENABLED
+                std::cout << "\033[" << color << "m";
+                #endif
+            #endif
+        }
+
+        void ResetConsoleColor()
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+                SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+            #else
+                #ifdef LIFE_CONSOLE_LOGGING_ENABLED
+                std::cout << "\033[0m";
+                #endif
+            #endif
+        }
+
+        bool IsConsoleAvailable()
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                return GetConsoleWindow() != nullptr;
+            #else
+                return isatty(STDOUT_FILENO) != 0;
+            #endif
+        }
+
+        void BreakIntoDebugger()
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                __debugbreak();
+            #elif defined(LIFE_PLATFORM_MACOS)
+                __builtin_trap();
+            #else
+                raise(SIGTRAP);
+            #endif
+        }
+
+        void OutputDebugString(const std::string& message)
+        {
+            #ifdef LIFE_PLATFORM_WINDOWS
+                OutputDebugStringA(message.c_str());
+            #else
+                // On non-Windows platforms, just output to stderr
+                #ifdef LIFE_CONSOLE_LOGGING_ENABLED
+                std::cerr << "[DEBUG] " << message << std::endl;
+                #endif
+            #endif
+        }
+    }
+} 

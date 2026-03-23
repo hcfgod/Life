@@ -7,6 +7,12 @@ public:
     explicit RuntimeApplication(const Life::ApplicationSpecification& specification)
         : Life::Application(specification)
     {
+    }
+
+protected:
+    void OnInit() override
+    {
+        const Life::ApplicationSpecification& specification = GetSpecification();
         nlohmann::json startupConfig =
         {
             { "name", specification.Name },
@@ -16,11 +22,6 @@ public:
         };
 
         LOG_INFO("Runtime sandbox boot config: {}", startupConfig.dump());
-    }
-
-protected:
-    void OnInit() override
-    {
         LOG_INFO("Runtime sandbox initialized.");
     }
 
@@ -58,3 +59,9 @@ namespace Life
         return CreateScope<RuntimeApplication>(specification);
     }
 }
+
+#ifdef LIFE_ENABLE_ENTRYPOINT
+#include "Core/EntryPoint.h"
+#elif defined(LIFE_ENABLE_SDL_ENTRYPOINT)
+#include "Core/SDLEntryPoint.h"
+#endif

@@ -36,7 +36,7 @@ namespace Life
 
     private:
         static void EnsureInitializedLocked();
-        static void ReinitializeLocked();
+        static void ReinitializeLocked(const LogSpecification& specification);
 
         static std::mutex s_Mutex;
         static bool s_Initialized;
@@ -50,7 +50,9 @@ namespace Life
 #define LOG_CORE_INFO(...) do { if (auto logger = ::Life::Log::GetCoreLogger()) logger->info(__VA_ARGS__); } while (false)
 #define LOG_CORE_WARN(...) do { if (auto logger = ::Life::Log::GetCoreLogger()) logger->warn(__VA_ARGS__); } while (false)
 #define LOG_CORE_ERROR(...) do { if (auto logger = ::Life::Log::GetCoreLogger()) logger->error(__VA_ARGS__); } while (false)
+#define LOG_CORE_CRITICAL(...) do { if (auto logger = ::Life::Log::GetCoreLogger()) logger->critical(__VA_ARGS__); } while (false)
 #define LOG_TRACE(...) do { if (auto logger = ::Life::Log::GetClientLogger()) logger->trace(__VA_ARGS__); } while (false)
 #define LOG_INFO(...) do { if (auto logger = ::Life::Log::GetClientLogger()) logger->info(__VA_ARGS__); } while (false)
 #define LOG_WARN(...) do { if (auto logger = ::Life::Log::GetClientLogger()) logger->warn(__VA_ARGS__); } while (false)
 #define LOG_ERROR(...) do { if (auto logger = ::Life::Log::GetClientLogger()) logger->error(__VA_ARGS__); } while (false)
+#define LOG_CRITICAL(...) do { if (auto logger = ::Life::Log::GetClientLogger()) logger->critical(__VA_ARGS__); } while (false)

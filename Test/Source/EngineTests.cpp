@@ -1,9 +1,12 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include "Core/ApplicationHost.h"
 #include "Core/ApplicationRunner.h"
 #include "Engine.h"
+#include "Platform/SDL/SDLEvent.h"
 
+#include <filesystem>
 #include <string>
 #include <utility>
 #include <vector>
@@ -67,8 +70,8 @@ namespace
     class TestApplication final : public Life::Application
     {
     public:
-        explicit TestApplication(Life::Scope<Life::ApplicationRuntime> runtime)
-            : Life::Application(CreateSpecification(), std::move(runtime))
+        TestApplication()
+            : Life::Application(CreateSpecification())
         {
         }
 
@@ -84,7 +87,7 @@ namespace
 
         TestRuntime& GetTestRuntime()
         {
-            return static_cast<TestRuntime&>(GetRuntime());
+            return static_cast<TestRuntime&>(GetContext().GetRuntime());
         }
 
         const std::vector<std::string>& GetTrace() const
@@ -192,6 +195,59 @@ TEST_CASE("EventBus unsubscribes handlers")
     CHECK(callCount == 0);
 }
 
+TEST_CASE("EventBus subscriber mutations apply on the next dispatch")
+{
+    Life::EventBus bus;
+    Life::EventSubscriptionId secondSubscriptionId = 0;
+    bool removedSecondSubscription = false;
+    bool addedLateSubscription = false;
+    int firstCallCount = 0;
+    int secondCallCount = 0;
+    int lateCallCount = 0;
+
+    bus.Subscribe<Life::WindowCloseEvent>([&](Life::WindowCloseEvent& event)
+    {
+        CHECK(event.GetEventType() == Life::EventType::WindowClose);
+        ++firstCallCount;
+
+        if (!removedSecondSubscription)
+        {
+            CHECK(bus.Unsubscribe(secondSubscriptionId));
+            removedSecondSubscription = true;
+        }
+
+        if (!addedLateSubscription)
+        {
+            bus.Subscribe<Life::WindowCloseEvent>([&](Life::WindowCloseEvent& lateEvent)
+            {
+                CHECK(lateEvent.GetEventType() == Life::EventType::WindowClose);
+                ++lateCallCount;
+                return false;
+            });
+            addedLateSubscription = true;
+        }
+
+        return false;
+    });
+
+    secondSubscriptionId = bus.Subscribe<Life::WindowCloseEvent>([&](Life::WindowCloseEvent& event)
+    {
+        CHECK(event.GetEventType() == Life::EventType::WindowClose);
+        ++secondCallCount;
+        return false;
+    });
+
+    CHECK_FALSE(bus.Dispatch<Life::WindowCloseEvent>());
+    CHECK(firstCallCount == 1);
+    CHECK(secondCallCount == 1);
+    CHECK(lateCallCount == 0);
+
+    CHECK_FALSE(bus.Dispatch<Life::WindowCloseEvent>());
+    CHECK(firstCallCount == 2);
+    CHECK(secondCallCount == 1);
+    CHECK(lateCallCount == 1);
+}
+
 TEST_CASE("WindowResizeEvent stores its dimensions")
 {
     Life::WindowResizeEvent event(1600, 900);
@@ -200,6 +256,128 @@ TEST_CASE("WindowResizeEvent stores its dimensions")
     CHECK(event.GetHeight() == 900);
     CHECK(event.IsInCategory(Life::EventCategory::Window));
     CHECK(event.IsInCategory(Life::EventCategory::Application));
+}
+
+TEST_CASE("Unbound application context operations throw")
+{
+    Life::ApplicationContext context;
+
+    CHECK_FALSE(context.IsBound());
+    CHECK_THROWS_AS(context.Initialize(), std::logic_error);
+    CHECK_THROWS_AS(context.RunFrame(0.016f), std::logic_error);
+    CHECK_THROWS_AS(context.RequestShutdown(), std::logic_error);
+    CHECK_THROWS_AS(context.Finalize(), std::logic_error);
+    CHECK_THROWS_AS(context.IsRunning(), std::logic_error);
+    CHECK_THROWS_AS(context.IsInitialized(), std::logic_error);
+    CHECK_THROWS_AS(context.GetRuntime(), std::logic_error);
+    CHECK_THROWS_AS(context.GetWindow(), std::logic_error);
+}
+
+TEST_CASE("Unbound application host dependent operations throw")
+{
+    TestApplication application;
+    Life::WindowCloseEvent event;
+
+    CHECK_FALSE(application.IsRunning());
+    CHECK_FALSE(application.IsInitialized());
+    CHECK_THROWS_AS(application.Initialize(), std::logic_error);
+    CHECK_THROWS_AS(application.RunFrame(0.016f), std::logic_error);
+    CHECK_THROWS_AS(application.HandleEvent(event), std::logic_error);
+    CHECK_THROWS_AS(application.Shutdown(), std::logic_error);
+    CHECK_THROWS_AS(application.Finalize(), std::logic_error);
+    CHECK_THROWS_AS(application.GetWindow(), std::logic_error);
+    CHECK_THROWS_AS(application.GetContext(), std::logic_error);
+    CHECK_THROWS_AS(application.SubscribeEvent<Life::WindowCloseEvent>([](Life::WindowCloseEvent&) { return false; }), std::logic_error);
+    CHECK_THROWS_AS(application.UnsubscribeEvent(1), std::logic_error);
+}
+
+TEST_CASE("TranslateSDLEvent maps SDL window lifecycle events")
+{
+    const auto requireTranslatedType = [](Uint32 eventType, Life::EventType expectedType)
+    {
+        SDL_Event event{};
+        event.type = eventType;
+
+        Life::Scope<Life::Event> translatedEvent = Life::TranslateSDLEvent(event);
+        REQUIRE(translatedEvent != nullptr);
+        CHECK(translatedEvent->GetEventType() == expectedType);
+    };
+
+    requireTranslatedType(SDL_EVENT_QUIT, Life::WindowCloseEvent::GetStaticType());
+    requireTranslatedType(SDL_EVENT_WINDOW_CLOSE_REQUESTED, Life::WindowCloseEvent::GetStaticType());
+    requireTranslatedType(SDL_EVENT_WINDOW_FOCUS_GAINED, Life::WindowFocusGainedEvent::GetStaticType());
+    requireTranslatedType(SDL_EVENT_WINDOW_FOCUS_LOST, Life::WindowFocusLostEvent::GetStaticType());
+    requireTranslatedType(SDL_EVENT_WINDOW_MINIMIZED, Life::WindowMinimizedEvent::GetStaticType());
+    requireTranslatedType(SDL_EVENT_WINDOW_RESTORED, Life::WindowRestoredEvent::GetStaticType());
+}
+
+TEST_CASE("TranslateSDLEvent preserves SDL window resize and move payloads")
+{
+    SDL_Event resizeEvent{};
+    resizeEvent.type = SDL_EVENT_WINDOW_RESIZED;
+    resizeEvent.window.data1 = 1600;
+    resizeEvent.window.data2 = 900;
+
+    Life::Scope<Life::Event> translatedResizeEvent = Life::TranslateSDLEvent(resizeEvent);
+    REQUIRE(translatedResizeEvent != nullptr);
+    REQUIRE(translatedResizeEvent->GetEventType() == Life::WindowResizeEvent::GetStaticType());
+    const auto& windowResizeEvent = static_cast<const Life::WindowResizeEvent&>(*translatedResizeEvent);
+    CHECK(windowResizeEvent.GetWidth() == 1600);
+    CHECK(windowResizeEvent.GetHeight() == 900);
+
+    SDL_Event movedEvent{};
+    movedEvent.type = SDL_EVENT_WINDOW_MOVED;
+    movedEvent.window.data1 = -25;
+    movedEvent.window.data2 = 75;
+
+    Life::Scope<Life::Event> translatedMovedEvent = Life::TranslateSDLEvent(movedEvent);
+    REQUIRE(translatedMovedEvent != nullptr);
+    REQUIRE(translatedMovedEvent->GetEventType() == Life::WindowMovedEvent::GetStaticType());
+    const auto& windowMovedEvent = static_cast<const Life::WindowMovedEvent&>(*translatedMovedEvent);
+    CHECK(windowMovedEvent.GetX() == -25);
+    CHECK(windowMovedEvent.GetY() == 75);
+}
+
+TEST_CASE("TranslateSDLEvent returns null for unsupported SDL events")
+{
+    SDL_Event event{};
+    event.type = SDL_EVENT_MOUSE_MOTION;
+
+    CHECK(Life::TranslateSDLEvent(event) == nullptr);
+}
+
+TEST_CASE("Platform detection initializes and exposes basic metadata")
+{
+    Life::Log::Init();
+
+    Life::PlatformDetection::Initialize();
+    CHECK(Life::PlatformDetection::IsInitialized());
+
+    const Life::PlatformInfo& platformInfo = Life::PlatformDetection::GetPlatformInfo();
+    CHECK_FALSE(platformInfo.platformName.empty());
+    CHECK_FALSE(platformInfo.architectureName.empty());
+    CHECK_FALSE(platformInfo.compilerName.empty());
+    CHECK_FALSE(platformInfo.buildDate.empty());
+    CHECK_FALSE(platformInfo.buildTime.empty());
+    CHECK_FALSE(platformInfo.buildType.empty());
+}
+
+TEST_CASE("Error handling captures engine error details in Result")
+{
+    Life::PlatformDetection::Initialize();
+
+    Life::Result<int> result = Life::ErrorHandling::Try([]() -> int
+    {
+        LIFE_THROW_ERROR(Life::ErrorCode::InvalidState, "result failure");
+        return 0;
+    });
+
+    REQUIRE(result.IsFailure());
+    CHECK(result.GetError().GetCode() == Life::ErrorCode::InvalidState);
+    CHECK(result.GetError().GetErrorMessage() == "result failure");
+    CHECK_FALSE(result.GetError().GetContext().threadId.empty());
+    CHECK(result.GetError().GetContext().timestamp > 0);
+    CHECK(result.GetError().ToString().find("InvalidState") != std::string::npos);
 }
 
 TEST_CASE("Log configuration updates logger names and levels")
@@ -228,94 +406,214 @@ TEST_CASE("Log configuration updates logger names and levels")
     Life::Log::Configure(originalSpecification);
 }
 
+TEST_CASE("Log configuration creates file sink directories")
+{
+    const Life::LogSpecification originalSpecification = Life::Log::GetSpecification();
+    const std::filesystem::path logDirectory = std::filesystem::temp_directory_path() / "LifeTests" / "LoggingDirectoryCreation";
+    const std::filesystem::path logFilePath = logDirectory / "life.log";
+
+    std::filesystem::remove_all(logDirectory);
+
+    Life::LogSpecification fileSpecification = originalSpecification;
+    fileSpecification.CoreLoggerName = "TEST_FILE_CORE";
+    fileSpecification.ClientLoggerName = "TEST_FILE_CLIENT";
+    fileSpecification.EnableConsole = false;
+    fileSpecification.EnableFile = true;
+    fileSpecification.FilePath = logFilePath.string();
+
+    Life::Log::Configure(fileSpecification);
+
+    std::shared_ptr<spdlog::logger> coreLogger = Life::Log::GetCoreLogger();
+    REQUIRE(coreLogger != nullptr);
+    coreLogger->info("file sink initialization");
+    coreLogger->flush();
+
+    CHECK(std::filesystem::exists(logDirectory));
+    CHECK(std::filesystem::exists(logFilePath));
+
+    coreLogger.reset();
+    Life::Log::Configure(originalSpecification);
+    std::filesystem::remove_all(logDirectory);
+}
+
+TEST_CASE("Log configuration failure preserves the current logger state")
+{
+    const Life::LogSpecification originalSpecification = Life::Log::GetSpecification();
+
+    Life::LogSpecification validSpecification = originalSpecification;
+    validSpecification.CoreLoggerName = "TEST_STABLE_CORE";
+    validSpecification.ClientLoggerName = "TEST_STABLE_CLIENT";
+    validSpecification.EnableFile = false;
+
+    Life::Log::Configure(validSpecification);
+
+    Life::LogSpecification invalidSpecification = validSpecification;
+    invalidSpecification.EnableFile = true;
+    invalidSpecification.FilePath.clear();
+
+    CHECK_THROWS_AS(Life::Log::Configure(invalidSpecification), std::runtime_error);
+
+    const std::shared_ptr<spdlog::logger> coreLogger = Life::Log::GetCoreLogger();
+    const std::shared_ptr<spdlog::logger> clientLogger = Life::Log::GetClientLogger();
+    const Life::LogSpecification activeSpecification = Life::Log::GetSpecification();
+
+    REQUIRE(coreLogger != nullptr);
+    REQUIRE(clientLogger != nullptr);
+    CHECK(coreLogger->name() == validSpecification.CoreLoggerName);
+    CHECK(clientLogger->name() == validSpecification.ClientLoggerName);
+    CHECK(activeSpecification.CoreLoggerName == validSpecification.CoreLoggerName);
+    CHECK(activeSpecification.ClientLoggerName == validSpecification.ClientLoggerName);
+    CHECK(activeSpecification.EnableFile == validSpecification.EnableFile);
+
+    Life::Log::Configure(originalSpecification);
+}
+
 TEST_CASE("Application startup preserves init close shutdown ordering")
 {
     Life::Log::Init();
 
-    TestApplication application(Life::CreateScope<TestRuntime>());
-    application.GetTestRuntime().QueueEvent<Life::WindowCloseEvent>();
+    auto application = Life::CreateScope<TestApplication>();
+    auto* applicationInstance = application.get();
+    auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<TestRuntime>());
+    applicationInstance->GetTestRuntime().QueueEvent<Life::WindowCloseEvent>();
 
-    application.Startup();
+    Life::RunApplication(*host);
 
-    CHECK(application.InitCount == 1);
-    CHECK(application.ShutdownCount == 1);
-    CHECK(application.UpdateCount == 0);
-    CHECK(application.GetTrace() == std::vector<std::string>{ "init", "on_event:WindowCloseEvent", "shutdown" });
+    CHECK(applicationInstance->InitCount == 1);
+    CHECK(applicationInstance->ShutdownCount == 1);
+    CHECK(applicationInstance->UpdateCount == 0);
+    CHECK(applicationInstance->GetTrace() == std::vector<std::string>{ "init", "on_event:WindowCloseEvent", "shutdown" });
+}
+
+TEST_CASE("Application Initialize aliases host bound initialization")
+{
+    Life::Log::Init();
+
+    auto application = Life::CreateScope<TestApplication>();
+    auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<TestRuntime>());
+    auto& applicationInstance = static_cast<TestApplication&>(host->GetApplication());
+
+    applicationInstance.Initialize();
+
+    CHECK(host->IsInitialized());
+    CHECK(host->IsRunning());
+    CHECK(applicationInstance.InitCount == 1);
+    CHECK(applicationInstance.GetTrace() == std::vector<std::string>{ "init" });
+
+    host->Finalize();
+    CHECK(applicationInstance.ShutdownCount == 1);
+}
+
+TEST_CASE("Application lifecycle operations are idempotent when host bound")
+{
+    Life::Log::Init();
+
+    auto application = Life::CreateScope<TestApplication>();
+    auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<TestRuntime>());
+    auto& applicationInstance = static_cast<TestApplication&>(host->GetApplication());
+
+    applicationInstance.Initialize();
+    applicationInstance.Initialize();
+
+    CHECK(host->IsInitialized());
+    CHECK(host->IsRunning());
+    CHECK(applicationInstance.InitCount == 1);
+
+    applicationInstance.Shutdown();
+    applicationInstance.Shutdown();
+
+    CHECK_FALSE(host->IsRunning());
+    CHECK(applicationInstance.ShutdownCount == 0);
+
+    applicationInstance.Finalize();
+    applicationInstance.Finalize();
+
+    CHECK_FALSE(host->IsInitialized());
+    CHECK(applicationInstance.ShutdownCount == 1);
+    CHECK(applicationInstance.GetTrace() == std::vector<std::string>{ "init", "shutdown" });
 }
 
 TEST_CASE("Application event propagation order is OnEvent then EventBus then built in shutdown")
 {
     Life::Log::Init();
 
-    TestApplication application(Life::CreateScope<TestRuntime>());
-    application.Initialize();
-    application.SubscribeEvent<Life::WindowCloseEvent>([&](Life::WindowCloseEvent& event)
+    auto application = Life::CreateScope<TestApplication>();
+    auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<TestRuntime>());
+    auto& applicationInstance = static_cast<TestApplication&>(host->GetApplication());
+    host->Initialize();
+    applicationInstance.SubscribeEvent<Life::WindowCloseEvent>([&](Life::WindowCloseEvent& event)
     {
-        application.Trace.emplace_back(std::string("event_bus:") + event.GetName());
+        applicationInstance.Trace.emplace_back(std::string("event_bus:") + event.GetName());
         return false;
     });
 
     Life::WindowCloseEvent event;
-    application.HandleEvent(event);
+    host->HandleEvent(event);
 
     CHECK(event.Handled);
-    CHECK_FALSE(application.IsRunning());
-    CHECK(application.GetTrace() == std::vector<std::string>{ "init", "on_event:WindowCloseEvent", "event_bus:WindowCloseEvent" });
+    CHECK_FALSE(host->IsRunning());
+    CHECK(applicationInstance.GetTrace() == std::vector<std::string>{ "init", "on_event:WindowCloseEvent", "event_bus:WindowCloseEvent" });
 
-    application.Finalize();
-    CHECK(application.ShutdownCount == 1);
+    host->Finalize();
+    CHECK(applicationInstance.ShutdownCount == 1);
 }
 
 TEST_CASE("External event pump close event triggers shutdown before update")
 {
     Life::Log::Init();
 
-    TestApplication application(Life::CreateScope<TestRuntime>());
-    application.Initialize();
+    auto application = Life::CreateScope<TestApplication>();
+    auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<TestRuntime>());
+    auto& applicationInstance = static_cast<TestApplication&>(host->GetApplication());
+    host->Initialize();
 
     std::vector<Life::Scope<Life::Event>> pendingEvents;
     pendingEvents.emplace_back(Life::CreateScope<Life::WindowCloseEvent>());
     auto lastFrameTime = std::chrono::steady_clock::now();
 
-    CHECK_FALSE(Life::RunApplicationLoopIteration(application, lastFrameTime, pendingEvents, true));
-    CHECK(application.GetTestRuntime().PollCount == 0);
-    CHECK(application.UpdateCount == 0);
-    CHECK(application.GetTrace() == std::vector<std::string>{ "init", "on_event:WindowCloseEvent" });
+    CHECK_FALSE(Life::RunApplicationLoopIteration(*host, lastFrameTime, pendingEvents, true));
+    CHECK(applicationInstance.GetTestRuntime().PollCount == 0);
+    CHECK(applicationInstance.UpdateCount == 0);
+    CHECK(applicationInstance.GetTrace() == std::vector<std::string>{ "init", "on_event:WindowCloseEvent" });
 
-    application.Finalize();
-    CHECK(application.ShutdownCount == 1);
+    host->Finalize();
+    CHECK(applicationInstance.ShutdownCount == 1);
 }
 
 TEST_CASE("Handled close events do not trigger built in shutdown")
 {
     Life::Log::Init();
 
-    TestApplication application(Life::CreateScope<TestRuntime>());
-    application.HandleCloseInOnEvent = true;
-    application.Initialize();
+    auto application = Life::CreateScope<TestApplication>();
+    auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<TestRuntime>());
+    auto& applicationInstance = static_cast<TestApplication&>(host->GetApplication());
+    applicationInstance.HandleCloseInOnEvent = true;
+    host->Initialize();
 
     Life::WindowCloseEvent event;
-    application.HandleEvent(event);
+    host->HandleEvent(event);
 
     CHECK(event.Handled);
-    CHECK(application.IsRunning());
-    CHECK(application.GetTrace() == std::vector<std::string>{ "init", "on_event:WindowCloseEvent" });
+    CHECK(host->IsRunning());
+    CHECK(applicationInstance.GetTrace() == std::vector<std::string>{ "init", "on_event:WindowCloseEvent" });
 
-    application.Finalize();
-    CHECK(application.ShutdownCount == 1);
+    host->Finalize();
+    CHECK(applicationInstance.ShutdownCount == 1);
 }
 
 TEST_CASE("External event pump path delivers queued events without polling runtime")
 {
     Life::Log::Init();
 
-    TestApplication application(Life::CreateScope<TestRuntime>());
-    application.ShutdownOnUpdate = true;
-    application.Initialize();
-    application.GetTestRuntime().QueueEvent<Life::WindowCloseEvent>();
-    application.SubscribeEvent<Life::WindowResizeEvent>([&](Life::WindowResizeEvent& event)
+    auto application = Life::CreateScope<TestApplication>();
+    auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<TestRuntime>());
+    auto& applicationInstance = static_cast<TestApplication&>(host->GetApplication());
+    applicationInstance.ShutdownOnUpdate = true;
+    host->Initialize();
+    applicationInstance.GetTestRuntime().QueueEvent<Life::WindowCloseEvent>();
+    applicationInstance.SubscribeEvent<Life::WindowResizeEvent>([&](Life::WindowResizeEvent& event)
     {
-        application.Trace.emplace_back(std::string("event_bus:") + event.GetName());
+        applicationInstance.Trace.emplace_back(std::string("event_bus:") + event.GetName());
         CHECK(event.GetWidth() == 1600);
         CHECK(event.GetHeight() == 900);
         return false;
@@ -325,12 +623,12 @@ TEST_CASE("External event pump path delivers queued events without polling runti
     pendingEvents.emplace_back(Life::CreateScope<Life::WindowResizeEvent>(1600, 900));
     auto lastFrameTime = std::chrono::steady_clock::now();
 
-    CHECK_FALSE(Life::RunApplicationLoopIteration(application, lastFrameTime, pendingEvents, true));
-    CHECK(application.GetTestRuntime().PollCount == 0);
-    CHECK(application.GetTestRuntime().QueuedEvents.size() == 1);
-    CHECK(application.UpdateCount == 1);
-    CHECK(application.GetTrace() == std::vector<std::string>{ "init", "on_event:WindowResizeEvent", "event_bus:WindowResizeEvent", "update" });
+    CHECK_FALSE(Life::RunApplicationLoopIteration(*host, lastFrameTime, pendingEvents, true));
+    CHECK(applicationInstance.GetTestRuntime().PollCount == 0);
+    CHECK(applicationInstance.GetTestRuntime().QueuedEvents.size() == 1);
+    CHECK(applicationInstance.UpdateCount == 1);
+    CHECK(applicationInstance.GetTrace() == std::vector<std::string>{ "init", "on_event:WindowResizeEvent", "event_bus:WindowResizeEvent", "update" });
 
-    application.Finalize();
-    CHECK(application.ShutdownCount == 1);
+    host->Finalize();
+    CHECK(applicationInstance.ShutdownCount == 1);
 }

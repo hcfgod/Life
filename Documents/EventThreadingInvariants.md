@@ -24,7 +24,7 @@ That means:
 
 - normal app execution flows through `RunApplicationMain(...)`
 - SDL callback execution flows through the same runner state and iteration helpers
-- `Application::Startup()` is only a thin convenience entrypoint over the same loop behavior
+- application initialization and finalization are host-bound via `Application::Initialize()` and `Application::Finalize()`, and do not own the main loop
 
 Any future changes to frame timing, queued events, or shutdown semantics should be made in the runner path first.
 

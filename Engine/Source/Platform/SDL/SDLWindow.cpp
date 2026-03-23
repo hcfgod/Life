@@ -1,12 +1,11 @@
 #include "Core/ApplicationRuntime.h"
+#include "Core/Error.h"
 #include "Core/Log.h"
 #include "Platform/SDL/SDLEvent.h"
 
 #include <SDL3/SDL.h>
 
 #include <cstdio>
-#include <stdexcept>
-#include <string>
 #include <utility>
 
 namespace Life
@@ -35,7 +34,7 @@ namespace Life
 
             if (!m_WindowHandle)
             {
-                throw std::runtime_error(SDL_GetError());
+                throw Error(ErrorCode::WindowCreationFailed, SDL_GetError(), std::source_location::current(), ErrorSeverity::Critical);
             }
 
             LOG_CORE_INFO("Created window '{}'", m_Specification.Title);
@@ -76,7 +75,7 @@ namespace Life
         SDLApplicationRuntime()
         {
             if (!SDL_Init(SDL_INIT_VIDEO))
-                throw std::runtime_error(SDL_GetError());
+                throw Error(ErrorCode::PlatformInitializationFailed, SDL_GetError(), std::source_location::current(), ErrorSeverity::Critical);
         }
 
         ~SDLApplicationRuntime() override

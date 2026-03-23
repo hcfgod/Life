@@ -3,6 +3,7 @@
 #include "Core/ApplicationRunner.h"
 #include "Core/Log.h"
 #include "Platform/SDL/SDLEvent.h"
+#include "Core/Error.h"
 
 #define SDL_MAIN_USE_CALLBACKS
 #include <SDL3/SDL_main.h>
@@ -11,6 +12,12 @@ namespace Life
 {
     inline SDL_AppResult HandleSDLApplicationBootstrapException(const std::exception& exception)
     {
+        if (const auto* error = dynamic_cast<const Error*>(&exception))
+        {
+            Error::LogError(*error);
+            return SDL_APP_FAILURE;
+        }
+
         LOG_CORE_ERROR("Application terminated with an exception: {}", exception.what());
         return SDL_APP_FAILURE;
     }
@@ -59,7 +66,7 @@ inline SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
     try
     {
         Life::QueueApplicationEvent(state, Life::TranslateSDLEvent(*event));
-        return state->ApplicationInstance->IsRunning() ? SDL_APP_CONTINUE : SDL_APP_SUCCESS;
+        return state->Host->IsRunning() ? SDL_APP_CONTINUE : SDL_APP_SUCCESS;
     }
     catch (const std::exception& exception)
     {

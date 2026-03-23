@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -66,6 +67,9 @@ namespace Life
             static_assert(std::is_base_of_v<Event, TEvent>);
 
             const std::size_t eventTypeIndex = GetEventTypeIndex(TEvent::GetStaticType());
+            if (eventTypeIndex >= m_Subscribers.size())
+                throw std::out_of_range("EventBus received an invalid event type for subscription.");
+
             EventSubscription subscription;
             subscription.Id = m_NextSubscriptionId++;
             subscription.Callback = [callback = std::forward<TFunction>(function)](Event& event) mutable
@@ -109,6 +113,9 @@ namespace Life
                 return;
 
             const std::size_t eventTypeIndex = GetEventTypeIndex(event.GetEventType());
+            if (eventTypeIndex >= m_Subscribers.size())
+                throw std::out_of_range("EventBus received an invalid event type for dispatch.");
+
             const auto subscribers = m_Subscribers[eventTypeIndex];
             for (const EventSubscription& subscription : subscribers)
             {
@@ -155,14 +162,22 @@ namespace Life
         }
 
         template<typename TEvent, typename TFunction>
-        bool Dispatch(const TFunction& function)
+        bool Dispatch(TFunction&& function)
         {
             static_assert(std::is_base_of_v<Event, TEvent>);
 
             if (m_Event.GetEventType() != TEvent::GetStaticType())
                 return false;
 
-            m_Event.Handled |= function(static_cast<TEvent&>(m_Event));
+            if constexpr (std::is_void_v<std::invoke_result_t<TFunction, TEvent&>>)
+            {
+                std::invoke(std::forward<TFunction>(function), static_cast<TEvent&>(m_Event));
+            }
+            else
+            {
+                m_Event.Handled |= static_cast<bool>(std::invoke(std::forward<TFunction>(function), static_cast<TEvent&>(m_Event)));
+            }
+
             return true;
         }
 

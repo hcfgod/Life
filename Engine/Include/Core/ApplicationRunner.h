@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Core/Application.h"
+#include "Core/Error.h"
+#include "Core/ApplicationHost.h"
 #include "Core/Log.h"
 
 #include <chrono>
@@ -13,94 +14,91 @@ namespace Life
 {
     struct ApplicationRunnerState
     {
-        Scope<Application> ApplicationInstance;
+        Scope<ApplicationHost> Host;
         std::chrono::steady_clock::time_point LastFrameTime;
         std::mutex EventMutex;
         std::vector<Scope<Event>> PendingEvents;
         bool UseExternalEventPump = false;
     };
 
-    inline void DispatchApplicationEvents(Application& application, std::vector<Scope<Event>>& pendingEvents)
+    inline void DispatchApplicationEvents(ApplicationHost& host, std::vector<Scope<Event>>& pendingEvents)
     {
         for (Scope<Event>& event : pendingEvents)
         {
-            application.HandleEvent(*event);
+            host.HandleEvent(*event);
 
-            if (!application.IsRunning())
+            if (!host.IsRunning())
                 break;
         }
 
         pendingEvents.clear();
     }
 
-    inline void PollApplicationRuntimeEvents(Application& application)
+    inline void PollApplicationRuntimeEvents(ApplicationHost& host)
     {
-        while (application.IsRunning())
+        while (host.IsRunning())
         {
-            Scope<Event> event = application.GetRuntime().PollEvent();
+            Scope<Event> event = host.GetRuntime().PollEvent();
             if (!event)
                 return;
 
-            application.HandleEvent(*event);
+            host.HandleEvent(*event);
         }
     }
 
     inline bool RunApplicationLoopIteration(
-        Application& application,
+        ApplicationHost& host,
         std::chrono::steady_clock::time_point& lastFrameTime,
         std::vector<Scope<Event>>& pendingEvents,
         bool useExternalEventPump)
     {
-        if (!application.IsRunning())
+        if (!host.IsRunning())
             return false;
 
-        DispatchApplicationEvents(application, pendingEvents);
+        DispatchApplicationEvents(host, pendingEvents);
 
-        if (application.IsRunning() && !useExternalEventPump)
-            PollApplicationRuntimeEvents(application);
+        if (host.IsRunning() && !useExternalEventPump)
+            PollApplicationRuntimeEvents(host);
 
-        if (!application.IsRunning())
+        if (!host.IsRunning())
             return false;
 
         auto currentFrameTime = std::chrono::steady_clock::now();
         float timestep = std::chrono::duration<float>(currentFrameTime - lastFrameTime).count();
         lastFrameTime = currentFrameTime;
 
-        application.RunFrame(timestep);
-        return application.IsRunning();
+        host.RunFrame(timestep);
+        return host.IsRunning();
     }
 
-    inline void RunApplication(Application& application)
+    inline void RunApplication(ApplicationHost& host)
     {
-        Log::Init();
-        application.Initialize();
+        host.Initialize();
 
         struct ApplicationFinalizer
         {
-            Application& Instance;
+            ApplicationHost& Instance;
 
             ~ApplicationFinalizer()
             {
                 Instance.Finalize();
             }
-        } finalizer{ application };
+        } finalizer{ host };
 
         std::vector<Scope<Event>> pendingEvents;
         auto lastFrameTime = std::chrono::steady_clock::now();
 
-        while (RunApplicationLoopIteration(application, lastFrameTime, pendingEvents, false))
+        while (RunApplicationLoopIteration(host, lastFrameTime, pendingEvents, false))
         {
         }
     }
 
     inline ApplicationRunnerState* CreateApplicationRunner(ApplicationCommandLineArgs args, bool useExternalEventPump)
     {
-        Log::Init();
-
         Scope<ApplicationRunnerState> state = CreateScope<ApplicationRunnerState>();
-        state->ApplicationInstance = CreateApplication(args);
+        state->Host = CreateApplicationHost(args);
         state->UseExternalEventPump = useExternalEventPump;
-        state->ApplicationInstance->Initialize();
+        state->Host->Initialize();
         state->LastFrameTime = std::chrono::steady_clock::now();
         return state.release();
     }
@@ -116,7 +114,7 @@ namespace Life
 
     inline bool RunApplicationRunnerIteration(ApplicationRunnerState* state)
     {
-        if (state == nullptr || state->ApplicationInstance == nullptr)
+        if (state == nullptr || state->Host == nullptr)
             return false;
 
         std::vector<Scope<Event>> pendingEvents;
@@ -126,7 +124,7 @@ namespace Life
         }
 
         return RunApplicationLoopIteration(
-            *state->ApplicationInstance,
+            *state->Host,
             state->LastFrameTime,
             pendingEvents,
             state->UseExternalEventPump);
@@ -137,14 +135,20 @@ namespace Life
         if (state == nullptr)
             return;
 
-        state->ApplicationInstance->Finalize();
-        state->ApplicationInstance.reset();
+        state->Host->Finalize();
+        state->Host.reset();
         delete state;
         state = nullptr;
     }
 
     inline int HandleApplicationBootstrapException(const std::exception& exception)
     {
+        if (const auto* error = dynamic_cast<const Error*>(&exception))
+        {
+            Error::LogError(*error);
+            return 1;
+        }
+
         LOG_CORE_ERROR("Application terminated with an exception: {}", exception.what());
         return 1;
     }
