@@ -140,7 +140,6 @@ newoption
 function SetupProject()
     language "C++"
     cppdialect "C++20"
-    staticruntime "off"
     targetdir (path.join(RootDir, "Build/" .. outputdir .. "/%{prj.name}"))
     objdir (path.join(RootDir, "Build/Intermediate/" .. outputdir .. "/%{prj.name}"))
 end
@@ -165,12 +164,7 @@ function UseEngineIncludeDirs(extraIncludeDirs)
     end
 
     includedirs(includeDirs)
-    includedirs(externalIncludeDirs)
-
-    filter { "system:windows", "action:vs*" }
-        externalincludedirs(externalIncludeDirs)
-
-    filter {}
+    externalincludedirs(externalIncludeDirs)
 end
 
 function ConfigureCommonProject()
@@ -193,12 +187,15 @@ function ConfigureCommonProject()
     filter {}
 
     filter { "system:windows", "configurations:Debug" }
+        staticruntime "off"
         runtime "Debug"
 
     filter { "system:windows", "configurations:Release" }
+        staticruntime "off"
         runtime "Release"
 
     filter { "system:windows", "configurations:Dist" }
+        staticruntime "off"
         runtime "Release"
 
     filter "configurations:Debug"
