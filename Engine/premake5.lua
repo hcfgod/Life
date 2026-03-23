@@ -14,5 +14,6 @@ project "Engine"
     }
 
     UseEngineIncludeDirs()
+    ConfigureProjectPCH("Core/LifePCH.h", "Source/Core/LifePCH.cpp")
     ConfigureSanitizers()
     ConfigureCommonProject()

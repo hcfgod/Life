@@ -144,6 +144,12 @@ function SetupProject()
     objdir (path.join(RootDir, "Build/Intermediate/" .. outputdir .. "/%{prj.name}"))
 end
 
+function ConfigureProjectPCH(header, source)
+    pchheader (header)
+    pchsource (source)
+    forceincludes { header }
+end
+
 function UseEngineIncludeDirs(extraIncludeDirs)
     local includeDirs =
     {
