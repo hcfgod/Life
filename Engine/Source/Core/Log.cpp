@@ -1,6 +1,7 @@
 #include "Core/Log.h"
 
 #include <filesystem>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -56,9 +57,19 @@ namespace Life
 
     std::mutex Log::s_Mutex;
     bool Log::s_Initialized = false;
-    LogSpecification Log::s_Specification;
     std::shared_ptr<spdlog::logger> Log::s_CoreLogger;
     std::shared_ptr<spdlog::logger> Log::s_ClientLogger;
+
+    LogSpecification& Log::GetMutableSpecification()
+    {
+        static std::optional<LogSpecification> specification;
+        if (!specification.has_value())
+        {
+            specification.emplace();
+        }
+
+        return *specification;
+    }
 
     void Log::Init()
     {
@@ -75,7 +86,7 @@ namespace Life
     LogSpecification Log::GetSpecification()
     {
         std::scoped_lock lock(s_Mutex);
-        return s_Specification;
+        return GetMutableSpecification();
     }
 
     std::shared_ptr<spdlog::logger> Log::GetCoreLogger()
@@ -105,7 +116,7 @@ namespace Life
         if (s_Initialized && std::atomic_load(&s_CoreLogger) && std::atomic_load(&s_ClientLogger))
             return;
 
-        ReinitializeLocked(s_Specification);
+        ReinitializeLocked(GetMutableSpecification());
     }
 
     void Log::ReinitializeLocked(const LogSpecification& specification)
@@ -114,7 +125,7 @@ namespace Life
 
         std::atomic_store(&s_CoreLogger, std::move(coreLogger));
         std::atomic_store(&s_ClientLogger, std::move(clientLogger));
-        s_Specification = specification;
+        GetMutableSpecification() = specification;
         s_Initialized = true;
     }
 }

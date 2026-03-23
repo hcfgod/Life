@@ -92,7 +92,7 @@ namespace Life
             LOG_CORE_INFO("  Compiler: {} ({})", s_PlatformInfo.compilerName, GetCompilerString());
             LOG_CORE_INFO("  OS: {} ({})", s_PlatformInfo.osName, GetOSString());
             LOG_CORE_INFO("  CPU Cores: {}", s_PlatformInfo.capabilities.cpuCount);
-            LOG_CORE_INFO("  Total Memory: {} MB", s_PlatformInfo.capabilities.totalMemory / (1024 * 1024));
+            LOG_CORE_INFO("  Total Memory: {} MB", s_PlatformInfo.capabilities.totalMemory / (static_cast<uint64_t>(1024) * static_cast<uint64_t>(1024)));
         }
         catch (const std::exception& e)
         {

@@ -1,14 +1,14 @@
 #include "Core/ApplicationContext.h"
 
 #include <stdexcept>
+#include <utility>
 
 namespace Life
 {
     void ApplicationContext::Bind(
         Window& window,
         ApplicationRuntime& runtime,
-        bool& running,
-        bool& initialized,
+        ApplicationContext::StateBinding stateBinding,
         std::function<void()> initializeCallback,
         std::function<void(float)> runFrameCallback,
         std::function<void()> shutdownCallback,
@@ -16,8 +16,8 @@ namespace Life
     {
         m_Window = &window;
         m_Runtime = &runtime;
-        m_Running = &running;
-        m_Initialized = &initialized;
+        m_Running = &stateBinding.Running;
+        m_Initialized = &stateBinding.Initialized;
         m_InitializeCallback = std::move(initializeCallback);
         m_RunFrameCallback = std::move(runFrameCallback);
         m_ShutdownCallback = std::move(shutdownCallback);

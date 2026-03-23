@@ -37,10 +37,10 @@ namespace Life
     private:
         static void EnsureInitializedLocked();
         static void ReinitializeLocked(const LogSpecification& specification);
+        static LogSpecification& GetMutableSpecification();
 
         static std::mutex s_Mutex;
         static bool s_Initialized;
-        static LogSpecification s_Specification;
         static std::shared_ptr<spdlog::logger> s_CoreLogger;
         static std::shared_ptr<spdlog::logger> s_ClientLogger;
     };

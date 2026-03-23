@@ -36,8 +36,7 @@ namespace Life
         m_Context.Bind(
             *m_Window,
             *m_Runtime,
-            m_Running,
-            m_Initialized,
+            ApplicationContext::StateBinding{ m_Running, m_Initialized },
             [this]() { Initialize(); },
             [this](float timestep) { RunFrame(timestep); },
             [this]() { Shutdown(); },

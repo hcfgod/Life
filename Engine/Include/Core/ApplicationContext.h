@@ -9,13 +9,18 @@ namespace Life
     class ApplicationContext
     {
     public:
+        struct StateBinding
+        {
+            bool& Running;
+            bool& Initialized;
+        };
+
         ApplicationContext() = default;
 
         void Bind(
             Window& window,
             ApplicationRuntime& runtime,
-            bool& running,
-            bool& initialized,
+            StateBinding stateBinding,
             std::function<void()> initializeCallback,
             std::function<void(float)> runFrameCallback,
             std::function<void()> shutdownCallback,
