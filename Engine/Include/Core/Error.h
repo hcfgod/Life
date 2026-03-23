@@ -1,0 +1,640 @@
+#pragma once
+
+#include <exception>
+#include <string>
+#include <stdexcept>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <vector>
+#include <unordered_map>
+#include <type_traits>
+#include <variant>
+
+// For MSVC, we need to check _MSVC_LANG instead of __cplusplus
+#if (defined(_MSC_VER) && _MSVC_LANG >= 202002L) || (!defined(_MSC_VER) && __cplusplus >= 202002L)
+    #include <source_location>
+#elif defined(__has_include) && __has_include(<experimental/source_location>)
+    #include <experimental/source_location>
+    namespace std {
+        using source_location = std::experimental::source_location;
+    }
+#else
+    // Fallback for older compilers
+    namespace std {
+        struct source_location {
+            static constexpr source_location current() noexcept { return {}; }
+            constexpr const char* file_name() const noexcept { return "unknown"; }
+            constexpr uint_least32_t line() const noexcept { return 0; }
+            constexpr uint_least32_t column() const noexcept { return 0; }
+            constexpr const char* function_name() const noexcept { return "unknown"; }
+        };
+    }
+#endif
+
+namespace Life
+{
+    // Forward declaration
+    struct PlatformInfo;
+
+    enum class ErrorCode
+    {
+        // General errors
+        Success = 0,
+        Unknown = 1,
+        InvalidArgument = 2,
+        OutOfMemory = 3,
+        Timeout = 4,
+        NotSupported = 5,
+        AlreadyInitialized = 6,
+        NotInitialized = 7,
+        InvalidState = 8,
+        ResourceExhausted = 9,
+        Cancelled = 10,
+        
+        // System errors
+        SystemError = 100,
+        FileNotFound = 101,
+        FileAccessDenied = 102,
+        FileCorrupted = 103,
+        FileTooLarge = 104,
+        FileExists = 105,
+        FileBusy = 106,
+        FileLocked = 107,
+        NetworkError = 108,
+        NetworkTimeout = 109,
+        NetworkUnreachable = 110,
+        NetworkConnectionRefused = 111,
+        NetworkConnectionReset = 112,
+        NetworkConnectionAborted = 113,
+        
+        // Platform-specific errors
+        PlatformError = 200,
+        PlatformNotSupported = 201,
+        PlatformInitializationFailed = 202,
+        PlatformShutdownFailed = 203,
+        PlatformCapabilityNotAvailable = 204,
+        PlatformPermissionDenied = 205,
+        PlatformResourceUnavailable = 206,
+        
+        // Windows-specific errors
+        WindowsError = 300,
+        WindowsApiError = 301,
+        WindowsRegistryError = 302,
+        WindowsServiceError = 303,
+        WindowsSecurityError = 304,
+        
+        // macOS-specific errors
+        MacOSError = 400,
+        MacOSApiError = 401,
+        MacOSPermissionError = 402,
+        MacOSEntitlementError = 403,
+        
+        // Linux-specific errors
+        LinuxError = 500,
+        LinuxApiError = 501,
+        LinuxPermissionError = 502,
+        LinuxKernelError = 503,
+        
+        // Graphics/Window errors
+        GraphicsError = 600,
+        WindowCreationFailed = 601,
+        ContextCreationFailed = 602,
+        ShaderCompilationFailed = 603,
+        TextureLoadFailed = 604,
+        RendererError = 605,
+        DisplayError = 606,
+        MonitorError = 607,
+        CursorError = 608,
+        ClipboardError = 609,
+        
+        // Audio errors
+        AudioError = 700,
+        AudioDeviceNotFound = 701,
+        AudioFormatNotSupported = 702,
+        AudioInitializationFailed = 703,
+        AudioPlaybackError = 704,
+        AudioRecordingError = 705,
+        
+        // Input errors
+        InputError = 800,
+        InputDeviceNotFound = 801,
+        InputMappingError = 802,
+        InputConfigurationError = 803,
+        InputPermissionDenied = 804,
+        
+        // Resource errors
+        ResourceError = 900,
+        ResourceNotFound = 901,
+        ResourceLoadFailed = 902,
+        ResourceCorrupted = 903,
+        ResourceVersionMismatch = 904,
+        ResourceFormatNotSupported = 905,
+        ResourceCompressionError = 906,
+        
+        // Configuration errors
+        ConfigError = 1000,
+        ConfigFileNotFound = 1001,
+        ConfigParseError = 1002,
+        ConfigValidationError = 1003,
+        ConfigSchemaError = 1004,
+        ConfigVersionMismatch = 1005,
+        
+        // Event system errors
+        EventError = 1100,
+        EventHandlerNotFound = 1101,
+        EventQueueFull = 1102,
+        EventDispatchError = 1103,
+        EventFilterError = 1104,
+        
+        // Memory errors
+        MemoryError = 1200,
+        MemoryAllocationFailed = 1201,
+        MemoryDeallocationFailed = 1202,
+        MemoryCorruption = 1203,
+        MemoryLeak = 1204,
+        MemoryAlignmentError = 1205,
+        
+        // Threading errors
+        ThreadError = 1300,
+        ThreadCreationFailed = 1301,
+        ThreadJoinFailed = 1302,
+        ThreadTerminationFailed = 1303,
+        ThreadDeadlock = 1304,
+        ThreadPermissionDenied = 1305,
+        
+        // Security errors
+        SecurityError = 1400,
+        SecurityPermissionDenied = 1401,
+        SecurityAuthenticationFailed = 1402,
+        SecurityAuthorizationFailed = 1403,
+        SecurityIntegrityCheckFailed = 1404,
+        
+        // Performance errors
+        PerformanceError = 1500,
+        PerformanceTimeout = 1501,
+        PerformanceResourceExhausted = 1502,
+        PerformanceCapabilityExceeded = 1503,
+        
+        // Debug/Development errors
+        DebugError = 1600,
+        DebugBreakpointError = 1601,
+        DebugSymbolError = 1602,
+        DebugProfilerError = 1603,
+        
+        // Hot reload errors
+        HotReloadError = 1700,
+        HotReloadFileChanged = 1701,
+        HotReloadCompilationFailed = 1702,
+        HotReloadReloadFailed = 1703,
+        HotReloadStateError = 1704
+    };
+
+    // Error severity levels
+    enum class ErrorSeverity
+    {
+        Info = 0,
+        Warning = 1,
+        Error = 2,
+        Critical = 3,
+        Fatal = 4
+    };
+
+    // Error context information
+    struct ErrorContext
+    {
+        std::string functionName;
+        std::string className;
+        std::string moduleName;
+        std::string threadId;
+        uint64_t timestamp = 0;
+
+        std::string platformInfo;
+        std::string systemInfo;
+        std::unordered_map<std::string, std::string> additionalData;
+    };
+
+    class Error : public std::exception
+    {
+    public:
+        Error(ErrorCode code, const std::string& message, 
+              const std::source_location& location,
+              ErrorSeverity severity = ErrorSeverity::Error);
+        Error(const Error&) = default;
+        Error(Error&&) noexcept = default;
+        Error& operator=(const Error&) = default;
+        Error& operator=(Error&&) noexcept = default;
+        ~Error() override = default;
+        
+        ErrorCode GetCode() const { return m_Code; }
+        const std::string& GetErrorMessage() const { return m_Message; }
+        const std::string& GetLocation() const { return m_Location; }
+        ErrorSeverity GetSeverity() const { return m_Severity; }
+        const ErrorContext& GetContext() const { return m_Context; }
+        
+        const char* what() const noexcept override;
+        
+        // Helper methods
+        bool IsSuccess() const { return m_Code == ErrorCode::Success; }
+        bool IsFailure() const { return m_Code != ErrorCode::Success; }
+        bool IsCritical() const { return m_Severity >= ErrorSeverity::Critical; }
+        bool IsFatal() const { return m_Severity == ErrorSeverity::Fatal; }
+        
+        // Convert to string
+        std::string ToString() const;
+        std::string ToDetailedString() const;
+        
+        // Log error using the logging system
+        static void LogError(const Error& error);
+        
+        // Add context information
+        void AddContext(const std::string& key, const std::string& value);
+        void SetFunctionName(const std::string& functionName);
+        void SetClassName(const std::string& className);
+        void SetModuleName(const std::string& moduleName);
+        
+        // Platform-specific error information
+        void SetPlatformInfo(const PlatformInfo& platformInfo);
+        void SetSystemErrorCode(int systemErrorCode);
+        int GetSystemErrorCode() const { return m_SystemErrorCode; }
+        
+        // Context access methods
+        std::string GetContextValue(const std::string& key) const;
+
+    private:
+        ErrorCode m_Code{ErrorCode::Success};
+        std::string m_Message{};
+        std::string m_Location{};
+        ErrorSeverity m_Severity{ErrorSeverity::Info};
+        ErrorContext m_Context{};
+        int m_SystemErrorCode{0};
+        mutable std::string m_WhatBuffer{};
+        
+        void BuildContext();
+        std::string GetSeverityString() const;
+        std::string GetErrorCodeString() const;
+    };
+
+    // Specific error types
+    class SystemError : public Error
+    {
+    public:
+        SystemError(const std::string& message, 
+                   const std::source_location& location,
+                   ErrorSeverity severity = ErrorSeverity::Error)
+            : Error(ErrorCode::SystemError, message, location, severity) {}
+    };
+
+    class PlatformError : public Error
+    {
+    public:
+        PlatformError(const std::string& message, 
+                     const std::source_location& location,
+                     ErrorSeverity severity = ErrorSeverity::Error)
+            : Error(ErrorCode::PlatformError, message, location, severity) {}
+    };
+
+    class GraphicsError : public Error
+    {
+    public:
+        GraphicsError(const std::string& message, 
+                     const std::source_location& location,
+                     ErrorSeverity severity = ErrorSeverity::Error)
+            : Error(ErrorCode::GraphicsError, message, location, severity) {}
+    };
+
+    class ResourceError : public Error
+    {
+    public:
+        ResourceError(const std::string& message, 
+                     const std::source_location& location,
+                     ErrorSeverity severity = ErrorSeverity::Error)
+            : Error(ErrorCode::ResourceError, message, location, severity) {}
+    };
+
+    class ConfigError : public Error
+    {
+    public:
+        ConfigError(const std::string& message, 
+                   const std::source_location& location,
+                   ErrorSeverity severity = ErrorSeverity::Error)
+            : Error(ErrorCode::ConfigError, message, location, severity) {}
+    };
+
+    class MemoryError : public Error
+    {
+    public:
+        MemoryError(const std::string& message, 
+                   const std::source_location& location,
+                   ErrorSeverity severity = ErrorSeverity::Error)
+            : Error(ErrorCode::MemoryError, message, location, severity) {}
+    };
+
+    class ThreadError : public Error
+    {
+    public:
+        ThreadError(const std::string& message, 
+                   const std::source_location& location,
+                   ErrorSeverity severity = ErrorSeverity::Error)
+            : Error(ErrorCode::ThreadError, message, location, severity) {}
+    };
+
+    // Result class for error handling
+    template<typename T>
+    class Result
+    {
+    public:
+        // Success constructors
+        Result(const T& value) : m_Storage(value) {}
+        Result(T&& value) : m_Storage(std::move(value)) {}
+
+        // Error constructors
+        Result(const Error& error) : m_Storage(error) {}
+        Result(Error&& error) : m_Storage(std::move(error)) {}
+
+        Result(ErrorCode code, const std::string& message,
+               const std::source_location& location = std::source_location::current(),
+               ErrorSeverity severity = ErrorSeverity::Error)
+            : m_Storage(Error(code, message, location, severity))
+        {
+        }
+        
+        // Check if successful
+        bool IsSuccess() const { return std::holds_alternative<T>(m_Storage); }
+        bool IsFailure() const { return std::holds_alternative<Error>(m_Storage); }
+        
+        // Get value (throws if error)
+        T& GetValue() 
+        { 
+            if (IsFailure()) throw GetError();
+            return std::get<T>(m_Storage);
+        }
+        
+        const T& GetValue() const 
+        { 
+            if (IsFailure()) throw GetError();
+            return std::get<T>(m_Storage);
+        }
+        
+        // Get error
+        const Error& GetError() const
+        {
+            if (IsSuccess())
+                throw std::logic_error("Result does not contain an error");
+            return std::get<Error>(m_Storage);
+        }
+
+        const Error* GetErrorPtr() const noexcept
+        {
+            return std::get_if<Error>(&m_Storage);
+        }
+        
+        // Safe value access
+        T* GetValuePtr() { return std::get_if<T>(&m_Storage); }
+        const T* GetValuePtr() const { return std::get_if<T>(&m_Storage); }
+        
+        // Value or default
+        T GetValueOr(const T& defaultValue) const
+        {
+            if (const T* value = std::get_if<T>(&m_Storage))
+                return *value;
+            return defaultValue;
+        }
+        
+        // Value or throw
+        T GetValueOrThrow() const 
+        { 
+            if (IsFailure()) throw GetError();
+            return std::get<T>(m_Storage);
+        }
+
+    private:
+        std::variant<T, Error> m_Storage;
+    };
+
+    // Specialization for void
+    template<>
+    class Result<void>
+    {
+    public:
+        // Success constructor
+        Result() : m_Storage(std::monostate{}) {}
+        
+        // Error constructor
+        Result(const Error& error) : m_Storage(error) {}
+        Result(Error&& error) : m_Storage(std::move(error)) {}
+
+        Result(ErrorCode code, const std::string& message,
+               const std::source_location& location = std::source_location::current(),
+               ErrorSeverity severity = ErrorSeverity::Error)
+            : m_Storage(Error(code, message, location, severity))
+        {
+        }
+        
+        // Check if successful
+        bool IsSuccess() const { return std::holds_alternative<std::monostate>(m_Storage); }
+        bool IsFailure() const { return std::holds_alternative<Error>(m_Storage); }
+        
+        // Get error
+        const Error& GetError() const
+        {
+            if (IsSuccess())
+                throw std::logic_error("Result does not contain an error");
+            return std::get<Error>(m_Storage);
+        }
+
+        const Error* GetErrorPtr() const noexcept
+        {
+            return std::get_if<Error>(&m_Storage);
+        }
+        
+        // Throw if error
+        void GetValue() const { if (IsFailure()) throw GetError(); }
+
+    private:
+        std::variant<std::monostate, Error> m_Storage;
+    };
+
+    // Error handling utilities
+    namespace ErrorHandling
+    {
+        // Error handler function type
+        using ErrorHandler = std::function<void(const Error&)>;
+        
+        // Set global error handler
+        void SetErrorHandler(ErrorHandler handler);
+        
+        // Get current error handler
+        ErrorHandler GetErrorHandler();
+
+        /// Temporarily override the global error handler (RAII).
+        ///
+        /// This is primarily intended for tests and tooling where errors are expected
+        /// (e.g. verifying that an assertion throws) and logging would add noisy output.
+        ///
+        /// Note: The error handler is a process-global setting. Do not use this to "silence"
+        /// errors in production code paths; prefer proper control of logging configuration instead.
+        class ScopedErrorHandlerOverride final
+        {
+        public:
+            explicit ScopedErrorHandlerOverride(ErrorHandler handler)
+                : m_Previous(GetErrorHandler())
+                , m_Active(true)
+            {
+                SetErrorHandler(std::move(handler));
+            }
+
+            ~ScopedErrorHandlerOverride()
+            {
+                if (m_Active)
+                {
+                    SetErrorHandler(m_Previous);
+                }
+            }
+
+            ScopedErrorHandlerOverride(const ScopedErrorHandlerOverride&) = delete;
+            ScopedErrorHandlerOverride& operator=(const ScopedErrorHandlerOverride&) = delete;
+
+            ScopedErrorHandlerOverride(ScopedErrorHandlerOverride&& other) noexcept
+                : m_Previous(std::move(other.m_Previous))
+                , m_Active(other.m_Active)
+            {
+                other.m_Active = false;
+            }
+
+            ScopedErrorHandlerOverride& operator=(ScopedErrorHandlerOverride&& other) noexcept
+            {
+                if (this != &other)
+                {
+                    if (m_Active)
+                    {
+                        SetErrorHandler(m_Previous);
+                    }
+
+                    m_Previous = std::move(other.m_Previous);
+                    m_Active = other.m_Active;
+                    other.m_Active = false;
+                }
+                return *this;
+            }
+
+        private:
+            ErrorHandler m_Previous;
+            bool m_Active = false;
+        };
+        
+        // Default error handling
+        void DefaultErrorHandler(const Error& error);
+        
+        // Assert with error
+        void Assert(bool condition, const std::string& message, 
+                   const std::source_location& location = std::source_location::current());
+        
+        // Verify with error
+        void Verify(bool condition, const std::string& message, 
+                   const std::source_location& location = std::source_location::current());
+        
+        // Try-catch wrapper for non-void functions
+        template<typename Func>
+        auto Try(Func&& func) -> typename std::enable_if<!std::is_same<decltype(func()), void>::value, Result<decltype(func())>>::type
+        {
+            try
+            {
+                return Result<decltype(func())>(func());
+            }
+            catch (const Error& error)
+            {
+                return Result<decltype(func())>(error);
+            }
+            catch (const std::exception& e)
+            {
+                return Result<decltype(func())>(Error(ErrorCode::Unknown, e.what(), std::source_location::current()));
+            }
+            catch (...)
+            {
+                return Result<decltype(func())>(Error(ErrorCode::Unknown, "Unknown exception", std::source_location::current()));
+            }
+        }
+
+        // Try-catch wrapper for void functions
+        template<typename Func>
+        auto Try(Func&& func) -> typename std::enable_if<std::is_same<decltype(func()), void>::value, Result<void>>::type
+        {
+            try
+            {
+                func();
+                return Result<void>();
+            }
+            catch (const Error& error)
+            {
+                return Result<void>(error);
+            }
+            catch (const std::exception& e)
+            {
+                return Result<void>(Error(ErrorCode::Unknown, e.what(), std::source_location::current()));
+            }
+            catch (...)
+            {
+                return Result<void>(Error(ErrorCode::Unknown, "Unknown exception", std::source_location::current()));
+            }
+        }
+
+        // Explicit void function wrapper
+        Result<void> TryVoid(std::function<void()> func);
+        
+
+        
+        // Error code utilities
+        std::string GetErrorCodeString(ErrorCode code);
+        std::string GetErrorCodeDescription(ErrorCode code);
+        ErrorSeverity GetErrorCodeSeverity(ErrorCode code);
+        
+        // System error utilities
+        int GetLastSystemError();
+        std::string GetSystemErrorString(int errorCode);
+        ErrorCode ConvertSystemError(int systemErrorCode);
+    }
+
+    // Convenience macros
+    #define LIFE_ASSERT(condition, message) \
+        ::Life::ErrorHandling::Assert(condition, message)
+
+    #define LIFE_VERIFY(condition, message) \
+        ::Life::ErrorHandling::Verify(condition, message)
+
+    #define LIFE_THROW_ERROR(code, message) \
+        throw ::Life::Error(code, message, std::source_location::current())
+
+    #define LIFE_THROW_SYSTEM_ERROR(message) \
+        throw ::Life::SystemError(message, std::source_location::current())
+
+    #define LIFE_THROW_PLATFORM_ERROR(message) \
+        throw ::Life::PlatformError(message, std::source_location::current())
+
+    #define LIFE_THROW_GRAPHICS_ERROR(message) \
+        throw ::Life::GraphicsError(message, std::source_location::current())
+
+    #define LIFE_THROW_RESOURCE_ERROR(message) \
+        throw ::Life::ResourceError(message, std::source_location::current())
+
+    #define LIFE_THROW_CONFIG_ERROR(message) \
+        throw ::Life::ConfigError(message, std::source_location::current())
+
+    #define LIFE_THROW_MEMORY_ERROR(message) \
+        throw ::Life::MemoryError(message, std::source_location::current())
+
+    #define LIFE_THROW_THREAD_ERROR(message) \
+        throw ::Life::ThreadError(message, std::source_location::current())
+
+    #define LIFE_TRY(expr) \
+        ::Life::ErrorHandling::Try([&]() { return expr; })
+
+    #define LIFE_TRY_VOID(expr) \
+        ::Life::ErrorHandling::Try([&]() { expr; })
+
+    #define LIFE_RETURN_IF_ERROR(result) \
+        do { if ((result).IsFailure()) return std::decay_t<decltype(result)>((result).GetError()); } while (false)
+
+    #define LIFE_RETURN_IF_ERROR_VOID(result) \
+        if ((result).IsFailure()) return;
+}
