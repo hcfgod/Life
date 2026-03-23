@@ -460,10 +460,10 @@ namespace Life
     namespace ErrorHandling
     {
         // Error handler function type
-        using ErrorHandler = std::function<void(const Error&)>;
+        using ErrorHandler = void(*)(const Error&);
         
         // Set global error handler
-        void SetErrorHandler(const ErrorHandler& handler);
+        void SetErrorHandler(ErrorHandler handler);
         
         // Get current error handler
         ErrorHandler GetErrorHandler();
@@ -478,7 +478,7 @@ namespace Life
         class ScopedErrorHandlerOverride final
         {
         public:
-            explicit ScopedErrorHandlerOverride(const ErrorHandler& handler)
+            explicit ScopedErrorHandlerOverride(ErrorHandler handler)
                 : m_Previous(GetErrorHandler())
                 , m_Active(true)
             {

@@ -59,11 +59,18 @@ namespace Life
 
     const char* Error::what() const noexcept
     {
-        if (m_WhatBuffer.empty())
+        try
         {
-            m_WhatBuffer = ToString();
+            if (m_WhatBuffer.empty())
+            {
+                m_WhatBuffer = ToString();
+            }
+            return m_WhatBuffer.c_str();
         }
-        return m_WhatBuffer.c_str();
+        catch (...)
+        {
+            return "Life::Error";
+        }
     }
 
     std::string Error::ToString() const
@@ -249,7 +256,7 @@ namespace Life
     {
         static ErrorHandler s_ErrorHandler = DefaultErrorHandler;
 
-        void SetErrorHandler(const ErrorHandler& handler)
+        void SetErrorHandler(ErrorHandler handler)
         {
             s_ErrorHandler = handler ? handler : DefaultErrorHandler;
         }
