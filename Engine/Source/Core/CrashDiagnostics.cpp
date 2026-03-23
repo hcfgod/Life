@@ -92,6 +92,13 @@ namespace Life
             std::atomic_store(&GetState().Snapshot, std::move(snapshot));
         }
 
+        void StoreLastReportPath(const std::filesystem::path& reportPath)
+        {
+            CrashDiagnosticsState& state = GetState();
+            std::scoped_lock lock(state.Mutex);
+            state.LastReportPath = reportPath;
+        }
+
         std::string SanitizeFileComponent(std::string_view value)
         {
             std::string sanitized;
@@ -601,10 +608,7 @@ namespace Life
                 reportStream.flush();
                 reportStream.close();
 
-                {
-                    std::scoped_lock lock(GetState().Mutex);
-                    GetState().LastReportPath = reportPath;
-                }
+                StoreLastReportPath(reportPath);
 
                 return reportPath;
             }
