@@ -430,7 +430,7 @@ namespace Life
                 }
             }
 
-            void* symbolsBuffer = symbols;
+            auto* symbolsBuffer = reinterpret_cast<unsigned char*>(symbols);
             std::free(symbolsBuffer);
             return frames;
         }
