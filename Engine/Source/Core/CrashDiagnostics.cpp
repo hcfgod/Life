@@ -430,7 +430,8 @@ namespace Life
                 }
             }
 
-            std::free(static_cast<void*>(symbols));
+            void* symbolsBuffer = symbols;
+            std::free(symbolsBuffer);
             return frames;
         }
 #else
