@@ -135,6 +135,11 @@ namespace
                 event.Handled = true;
         }
     };
+
+    struct TestService
+    {
+        int Value = 0;
+    };
 }
 
 TEST_CASE("CreateScope stores values")
@@ -250,6 +255,28 @@ TEST_CASE("EventBus subscriber mutations apply on the next dispatch")
     CHECK(lateCallCount == 1);
 }
 
+TEST_CASE("ServiceRegistry registers and unregisters typed services")
+{
+    Life::ServiceRegistry registry;
+    TestService service{ 42 };
+
+    CHECK_FALSE(registry.Has<TestService>());
+    CHECK(registry.TryGet<TestService>() == nullptr);
+    CHECK_THROWS_AS(registry.Get<TestService>(), std::logic_error);
+
+    registry.Register<TestService>(service);
+
+    CHECK(registry.Has<TestService>());
+    REQUIRE(registry.TryGet<TestService>() != nullptr);
+    CHECK(registry.TryGet<TestService>() == &service);
+    CHECK(registry.Get<TestService>().Value == 42);
+
+    CHECK(registry.Unregister<TestService>());
+    CHECK_FALSE(registry.Has<TestService>());
+    CHECK(registry.TryGet<TestService>() == nullptr);
+    CHECK_FALSE(registry.Unregister<TestService>());
+}
+
 TEST_CASE("WindowResizeEvent stores its dimensions")
 {
     Life::WindowResizeEvent event(1600, 900);
@@ -273,6 +300,8 @@ TEST_CASE("Unbound application context operations throw")
     CHECK_THROWS_AS(context.IsInitialized(), std::logic_error);
     CHECK_THROWS_AS(context.GetRuntime(), std::logic_error);
     CHECK_THROWS_AS(context.GetWindow(), std::logic_error);
+    CHECK_THROWS_AS(context.GetServices(), std::logic_error);
+    CHECK_THROWS_AS(context.GetService<TestService>(), std::logic_error);
 }
 
 TEST_CASE("Unbound application host dependent operations throw")
@@ -289,8 +318,79 @@ TEST_CASE("Unbound application host dependent operations throw")
     CHECK_THROWS_AS(application.Finalize(), std::logic_error);
     CHECK_THROWS_AS(application.GetWindow(), std::logic_error);
     CHECK_THROWS_AS(application.GetContext(), std::logic_error);
+    CHECK_THROWS_AS(application.GetServices(), std::logic_error);
+    CHECK_THROWS_AS(application.GetService<TestService>(), std::logic_error);
     CHECK_THROWS_AS(application.SubscribeEvent<Life::WindowCloseEvent>([](Life::WindowCloseEvent&) { return false; }), std::logic_error);
     CHECK_THROWS_AS(application.UnsubscribeEvent(1), std::logic_error);
+}
+
+TEST_CASE("ApplicationHost registers built-in and custom services")
+{
+    auto application = Life::CreateScope<TestApplication>();
+    auto* applicationInstance = application.get();
+    auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<TestRuntime>());
+
+    CHECK(host->GetServices().Has<Life::ApplicationHost>());
+    CHECK(host->GetServices().Has<Life::Application>());
+    CHECK(host->GetServices().Has<Life::ApplicationContext>());
+    CHECK(host->GetServices().Has<Life::ApplicationEventRouter>());
+    CHECK(host->GetServices().Has<Life::ApplicationRuntime>());
+    CHECK(host->GetServices().Has<Life::Window>());
+
+    CHECK(&host->GetServices().Get<Life::ApplicationHost>() == host.get());
+    CHECK(&host->GetServices().Get<Life::Application>() == applicationInstance);
+    CHECK(&host->GetContext().GetService<Life::ApplicationHost>() == host.get());
+    CHECK(&applicationInstance->GetService<Life::ApplicationHost>() == host.get());
+    CHECK(&applicationInstance->GetService<Life::Window>() == &host->GetWindow());
+    CHECK(&Life::GetServices() == &host->GetServices());
+
+    TestService service{ 7 };
+    host->GetServices().Register<TestService>(service);
+
+    CHECK(host->GetContext().HasService<TestService>());
+    CHECK(applicationInstance->HasService<TestService>());
+    CHECK(applicationInstance->TryGetService<TestService>() == &service);
+    CHECK(applicationInstance->GetService<TestService>().Value == 7);
+    CHECK(Life::GetServices().TryGet<TestService>() == &service);
+}
+
+TEST_CASE("Global service registry falls back after host destruction")
+{
+    {
+        auto host = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+        CHECK(&Life::GetServices() == &host->GetServices());
+    }
+
+    CHECK_FALSE(Life::GetServices().Has<Life::ApplicationHost>());
+}
+
+TEST_CASE("Global service registry restores the previous host after nested destruction")
+{
+    auto outerHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+    CHECK(&Life::GetServices() == &outerHost->GetServices());
+
+    {
+        auto innerHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+        CHECK(&Life::GetServices() == &innerHost->GetServices());
+    }
+
+    CHECK(&Life::GetServices() == &outerHost->GetServices());
+}
+
+TEST_CASE("Global service registry preserves the current host when an older host is destroyed")
+{
+    auto firstHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+    auto secondHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+
+    CHECK(&Life::GetServices() == &secondHost->GetServices());
+
+    firstHost.reset();
+
+    CHECK(&Life::GetServices() == &secondHost->GetServices());
+
+    secondHost.reset();
+
+    CHECK_FALSE(Life::GetServices().Has<Life::ApplicationHost>());
 }
 
 TEST_CASE("TranslateSDLEvent maps SDL window lifecycle events")

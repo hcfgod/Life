@@ -82,6 +82,38 @@ namespace Life
         const Window& GetWindow() const;
         ApplicationContext& GetContext();
         const ApplicationContext& GetContext() const;
+        ServiceRegistry& GetServices();
+        const ServiceRegistry& GetServices() const;
+
+        template<typename TService>
+        TService& GetService()
+        {
+            return RequireContext().GetService<TService>();
+        }
+
+        template<typename TService>
+        const TService& GetService() const
+        {
+            return RequireContext().GetService<TService>();
+        }
+
+        template<typename TService>
+        TService* TryGetService()
+        {
+            return RequireContext().TryGetService<TService>();
+        }
+
+        template<typename TService>
+        const TService* TryGetService() const
+        {
+            return RequireContext().TryGetService<TService>();
+        }
+
+        template<typename TService>
+        bool HasService() const
+        {
+            return RequireContext().HasService<TService>();
+        }
 
     protected:
         virtual void OnInit() {}

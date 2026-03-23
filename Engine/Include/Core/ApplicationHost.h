@@ -4,6 +4,7 @@
 #include "Core/ApplicationEventRouter.h"
 #include "Core/ApplicationRuntime.h"
 #include "Core/Memory.h"
+#include "Core/ServiceRegistry.h"
 #include "Core/Window.h"
 
 namespace Life
@@ -34,6 +35,8 @@ namespace Life
         const ApplicationContext& GetContext() const { return m_Context; }
         ApplicationEventRouter& GetEventRouter() { return m_EventRouter; }
         const ApplicationEventRouter& GetEventRouter() const { return m_EventRouter; }
+        ServiceRegistry& GetServices() { return m_Services; }
+        const ServiceRegistry& GetServices() const { return m_Services; }
 
     private:
         Scope<Application> m_Application;
@@ -41,6 +44,7 @@ namespace Life
         Scope<Window> m_Window;
         ApplicationContext m_Context;
         ApplicationEventRouter m_EventRouter;
+        ServiceRegistry m_Services;
         bool m_Running = false;
         bool m_Initialized = false;
     };

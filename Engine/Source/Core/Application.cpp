@@ -78,6 +78,16 @@ namespace Life
         return RequireContext();
     }
 
+    ServiceRegistry& Application::GetServices()
+    {
+        return RequireContext().GetServices();
+    }
+
+    const ServiceRegistry& Application::GetServices() const
+    {
+        return RequireContext().GetServices();
+    }
+
     void Application::BindHost(ApplicationContext& context, ApplicationEventRouter& eventRouter)
     {
         m_Context = &context;

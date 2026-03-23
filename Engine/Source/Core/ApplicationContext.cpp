@@ -8,6 +8,7 @@ namespace Life
     void ApplicationContext::Bind(
         Window& window,
         ApplicationRuntime& runtime,
+        ServiceRegistry& services,
         ApplicationContext::StateBinding stateBinding,
         std::function<void()> initializeCallback,
         std::function<void(float)> runFrameCallback,
@@ -16,6 +17,7 @@ namespace Life
     {
         m_Window = &window;
         m_Runtime = &runtime;
+        m_Services = &services;
         m_Running = &stateBinding.Running;
         m_Initialized = &stateBinding.Initialized;
         m_InitializeCallback = std::move(initializeCallback);
@@ -26,7 +28,7 @@ namespace Life
 
     bool ApplicationContext::IsBound() const
     {
-        return m_Window != nullptr && m_Runtime != nullptr && m_Running != nullptr && m_Initialized != nullptr;
+        return m_Window != nullptr && m_Runtime != nullptr && m_Services != nullptr && m_Running != nullptr && m_Initialized != nullptr;
     }
 
     void ApplicationContext::Initialize()
@@ -107,5 +109,21 @@ namespace Life
             throw std::logic_error("ApplicationContext is not bound.");
 
         return *m_Window;
+    }
+
+    ServiceRegistry& ApplicationContext::GetServices()
+    {
+        if (!IsBound())
+            throw std::logic_error("ApplicationContext is not bound.");
+
+        return *m_Services;
+    }
+
+    const ServiceRegistry& ApplicationContext::GetServices() const
+    {
+        if (!IsBound())
+            throw std::logic_error("ApplicationContext is not bound.");
+
+        return *m_Services;
     }
 }

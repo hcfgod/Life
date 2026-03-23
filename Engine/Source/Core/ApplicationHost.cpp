@@ -24,6 +24,23 @@ namespace Life
 
             return commandLine;
         }
+
+        void RegisterBuiltInServices(
+            ServiceRegistry& services,
+            ApplicationHost& host,
+            Application& application,
+            ApplicationContext& context,
+            ApplicationEventRouter& eventRouter,
+            ApplicationRuntime& runtime,
+            Window& window)
+        {
+            services.Register<ApplicationHost>(host);
+            services.Register<Application>(application);
+            services.Register<ApplicationContext>(context);
+            services.Register<ApplicationEventRouter>(eventRouter);
+            services.Register<ApplicationRuntime>(runtime);
+            services.Register<Window>(window);
+        }
     }
 
     ApplicationHost::ApplicationHost(Scope<Application> application)
@@ -56,9 +73,13 @@ namespace Life
             specification.VSync
         });
 
+        RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, *m_Runtime, *m_Window);
+        PushGlobalServiceRegistry(m_Services);
+
         m_Context.Bind(
             *m_Window,
             *m_Runtime,
+            m_Services,
             ApplicationContext::StateBinding{ m_Running, m_Initialized },
             [this]() { Initialize(); },
             [this](float timestep) { RunFrame(timestep); },
@@ -71,6 +92,7 @@ namespace Life
     ApplicationHost::~ApplicationHost()
     {
         Finalize();
+        PopGlobalServiceRegistry(m_Services);
         m_Window.reset();
         m_Runtime.reset();
         m_Application.reset();

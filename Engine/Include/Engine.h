@@ -11,5 +11,6 @@
 #include "Core/Events.h"
 #include "Core/Log.h"
 #include "Core/Memory.h"
+#include "Core/ServiceRegistry.h"
 #include "Core/Window.h"
 #include "Platform/Platform.h"

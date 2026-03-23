@@ -1,0 +1,424 @@
+#pragma once
+
+#include <atomic>
+#include <memory>
+#include <array>
+#include <cstddef>
+#include <type_traits>
+#include <optional>
+
+// TSan annotations for lock-free algorithms that use speculative reads validated
+// by CAS. TSan cannot infer the happens-before through these patterns, so we
+// annotate the buffer accesses explicitly.
+#if defined(__SANITIZE_THREAD__)
+#define LT_TSAN_ENABLED 1
+#elif defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+#define LT_TSAN_ENABLED 1
+#endif
+#endif
+
+#ifdef LT_TSAN_ENABLED
+extern "C" void __tsan_acquire(void* addr);
+extern "C" void __tsan_release(void* addr);
+#define LT_TSAN_ACQUIRE(addr) __tsan_acquire(static_cast<void*>(addr))
+#define LT_TSAN_RELEASE(addr) __tsan_release(static_cast<void*>(addr))
+#else
+#define LT_TSAN_ACQUIRE(addr) ((void)0)
+#define LT_TSAN_RELEASE(addr) ((void)0)
+#endif
+
+namespace Life
+{
+    /// Lock-free single-producer single-consumer queue.
+    template<typename T, size_t Size>
+    class LockFreeSPSCQueue
+    {
+        static_assert(Size > 0 && ((Size & (Size - 1)) == 0), "Size must be a power of 2");
+        static_assert(std::is_nothrow_move_constructible_v<T>, "T must be nothrow move constructible");
+        static_assert(std::is_nothrow_move_assignable_v<T>, "T must be nothrow move assignable");
+
+    public:
+        LockFreeSPSCQueue() : m_Head(0), m_Tail(0) {}
+
+        /// Try to push an item to the queue (thread-safe).
+        bool TryPush(T&& item) noexcept
+        {
+            size_t currentTail = m_Tail.load(std::memory_order_relaxed);
+            size_t nextTail = (currentTail + 1) & (Size - 1);
+
+            if (nextTail == m_Head.load(std::memory_order_acquire))
+                return false; // Queue is full
+
+            m_Buffer[currentTail] = std::move(item);
+            m_Tail.store(nextTail, std::memory_order_release);
+            return true;
+        }
+
+        /// Try to pop an item from the queue (thread-safe).
+        std::optional<T> TryPop() noexcept
+        {
+            size_t currentHead = m_Head.load(std::memory_order_relaxed);
+
+            if (currentHead == m_Tail.load(std::memory_order_acquire))
+                return std::nullopt; // Queue is empty
+
+            T item = std::move(m_Buffer[currentHead]);
+            m_Head.store((currentHead + 1) & (Size - 1), std::memory_order_release);
+            return std::move(item);
+        }
+
+        /// Check if queue is empty.
+        bool IsEmpty() const noexcept
+        {
+            return m_Head.load(std::memory_order_acquire) == m_Tail.load(std::memory_order_acquire);
+        }
+
+        /// Check if queue is full.
+        bool IsFull() const noexcept
+        {
+            size_t nextTail = (m_Tail.load(std::memory_order_acquire) + 1) & (Size - 1);
+            return nextTail == m_Head.load(std::memory_order_acquire);
+        }
+
+        /// Get approximate size (not exact due to concurrent access).
+        size_t GetSize() const noexcept
+        {
+            size_t head = m_Head.load(std::memory_order_acquire);
+            size_t tail = m_Tail.load(std::memory_order_acquire);
+            return (tail - head) & (Size - 1);
+        }
+
+        /// Clear the queue (not thread-safe, use with caution).
+        void Clear() noexcept
+        {
+            m_Head.store(0, std::memory_order_relaxed);
+            m_Tail.store(0, std::memory_order_relaxed);
+        }
+
+    private:
+        std::array<T, Size> m_Buffer;
+        std::atomic<size_t> m_Head;
+        std::atomic<size_t> m_Tail;
+    };
+
+    /// Lock-free multi-producer multi-consumer queue using CAS operations.
+    template<typename T, size_t Size>
+    class LockFreeMPMCQueue
+    {
+        static_assert(Size > 0 && ((Size & (Size - 1)) == 0), "Size must be a power of 2");
+        static_assert(std::is_default_constructible_v<T>, "T must be default constructible (queue uses a fixed ring buffer)");
+        static_assert(std::is_nothrow_move_constructible_v<T>, "T must be nothrow move constructible");
+        static_assert(std::is_nothrow_move_assignable_v<T>, "T must be nothrow move assignable");
+
+    public:
+        LockFreeMPMCQueue()
+        {
+            for (size_t i = 0; i < Size; ++i)
+            {
+                m_Buffer[i].sequence.store(i, std::memory_order_relaxed);
+            }
+        }
+
+        /// Try to push an item to the queue (thread-safe, multiple producers).
+        bool TryPush(T&& item) noexcept
+        {
+            // Bounded MPMC ring buffer based on Dmitry Vyukov's algorithm:
+            // - Per-slot sequence numbers prevent consumers from reading slots before producers publish.
+            // - This avoids the "reservation before publish" race present in naive CAS-on-tail designs.
+            Cell* cell = nullptr;
+            size_t pos = m_EnqueuePos.load(std::memory_order_relaxed);
+            for (;;)
+            {
+                cell = &m_Buffer[pos & (Size - 1)];
+                const size_t seq = cell->sequence.load(std::memory_order_acquire);
+                const intptr_t dif = static_cast<intptr_t>(seq) - static_cast<intptr_t>(pos);
+
+                if (dif == 0)
+                {
+                    if (m_EnqueuePos.compare_exchange_weak(
+                        pos, pos + 1,
+                        std::memory_order_relaxed,
+                        std::memory_order_relaxed))
+                    {
+                        break; // reserved slot at pos
+                    }
+                }
+                else if (dif < 0)
+                {
+                    return false; // full
+                }
+                else
+                {
+                    pos = m_EnqueuePos.load(std::memory_order_relaxed);
+                }
+            }
+
+            cell->data = std::move(item);
+            cell->sequence.store(pos + 1, std::memory_order_release);
+            return true;
+        }
+
+        /// Try to pop an item from the queue (thread-safe, multiple consumers).
+        std::optional<T> TryPop() noexcept
+        {
+            Cell* cell = nullptr;
+            size_t pos = m_DequeuePos.load(std::memory_order_relaxed);
+            for (;;)
+            {
+                cell = &m_Buffer[pos & (Size - 1)];
+                const size_t seq = cell->sequence.load(std::memory_order_acquire);
+                const intptr_t dif = static_cast<intptr_t>(seq) - static_cast<intptr_t>(pos + 1);
+
+                if (dif == 0)
+                {
+                    if (m_DequeuePos.compare_exchange_weak(
+                        pos, pos + 1,
+                        std::memory_order_relaxed,
+                        std::memory_order_relaxed))
+                    {
+                        break; // reserved slot at pos
+                    }
+                }
+                else if (dif < 0)
+                {
+                    return std::nullopt; // empty
+                }
+                else
+                {
+                    pos = m_DequeuePos.load(std::memory_order_relaxed);
+                }
+            }
+
+            T item = std::move(cell->data);
+            cell->sequence.store(pos + Size, std::memory_order_release);
+            return std::move(item);
+        }
+
+        /// Check if queue is empty.
+        bool IsEmpty() const noexcept
+        {
+            // Conservative check: if dequeue pos has caught up to enqueue pos, the queue is empty.
+            // This may transiently return false under contention, but will not incorrectly return true
+            // when items are available.
+            return m_DequeuePos.load(std::memory_order_acquire) == m_EnqueuePos.load(std::memory_order_acquire);
+        }
+
+        /// Check if queue is full.
+        bool IsFull() const noexcept
+        {
+            // Conservative check: queue is full if we have Size elements outstanding.
+            const size_t enq = m_EnqueuePos.load(std::memory_order_acquire);
+            const size_t deq = m_DequeuePos.load(std::memory_order_acquire);
+            return (enq - deq) >= Size;
+        }
+
+        /// Get approximate size (not exact due to concurrent access).
+        size_t GetSize() const noexcept
+        {
+            const size_t enq = m_EnqueuePos.load(std::memory_order_acquire);
+            const size_t deq = m_DequeuePos.load(std::memory_order_acquire);
+            return (enq >= deq) ? (enq - deq) : 0;
+        }
+
+        /// Clear the queue (not thread-safe, use with caution).
+        void Clear() noexcept
+        {
+            // Not thread-safe: intended for single-threaded reset paths.
+            m_EnqueuePos.store(0, std::memory_order_relaxed);
+            m_DequeuePos.store(0, std::memory_order_relaxed);
+            for (size_t i = 0; i < Size; ++i)
+            {
+                m_Buffer[i].data = T{};
+                m_Buffer[i].sequence.store(i, std::memory_order_relaxed);
+            }
+        }
+
+    private:
+        struct Cell
+        {
+            std::atomic<size_t> sequence{ 0 };
+            T data{};
+        };
+
+        alignas(64) std::array<Cell, Size> m_Buffer{};
+        alignas(64) std::atomic<size_t> m_EnqueuePos{ 0 };
+        alignas(64) std::atomic<size_t> m_DequeuePos{ 0 };
+    };
+
+    /// Thread-safe object pool for frequently allocated objects.
+    /// Backed by a bounded MPMC queue so multiple threads may acquire/release concurrently.
+    template<typename T, size_t PoolSize = 64>
+    class ObjectPool
+    {
+    public:
+        ObjectPool() = default;
+        ~ObjectPool() = default;
+
+        /// Get an object from the pool or create a new one.
+        std::unique_ptr<T> Acquire() noexcept
+        {
+            std::unique_ptr<T> obj = TryPopFromPool();
+            if (!obj)
+            {
+                obj = std::make_unique<T>();
+            }
+            return obj;
+        }
+
+        /// Return an object to the pool.
+        /// If the bounded pool is full, the object is dropped and destroyed.
+        void Release(std::unique_ptr<T> obj) noexcept
+        {
+            if (obj && TryPushToPool(std::move(obj)))
+            {
+                // Successfully returned to pool
+            }
+            // If pool is full, object will be automatically destroyed
+        }
+
+        /// Clear the pool.
+        void Clear() noexcept
+        {
+            m_Pool.Clear();
+        }
+
+    private:
+        bool TryPushToPool(std::unique_ptr<T> obj) noexcept
+        {
+            return m_Pool.TryPush(std::move(obj));
+        }
+
+        std::unique_ptr<T> TryPopFromPool() noexcept
+        {
+            auto result = m_Pool.TryPop();
+            return result ? std::move(*result) : nullptr;
+        }
+
+        // Inline ring-buffer storage for pooled handles; avoids per-slot heap nodes.
+        LockFreeMPMCQueue<std::unique_ptr<T>, PoolSize> m_Pool;
+    };
+
+    /// Thread-safe work stealing queue for task scheduling.
+    template<typename T, size_t Size = 1024>
+    class WorkStealingQueue
+    {
+        static_assert(Size > 0 && ((Size & (Size - 1)) == 0), "Size must be a power of 2");
+        static_assert(std::is_default_constructible_v<T>, "T must be default constructible (queue uses a fixed ring buffer)");
+        static_assert(std::is_nothrow_move_constructible_v<T>, "T must be nothrow move constructible");
+        static_assert(std::is_nothrow_move_assignable_v<T>, "T must be nothrow move assignable");
+
+    public:
+        WorkStealingQueue() : m_Bottom(0), m_Top(0) {}
+
+        /// Push item to the bottom (owner thread only).
+        [[nodiscard]] bool TryPush(T&& item) noexcept
+        {
+            const size_t bottom = m_Bottom.load(std::memory_order_relaxed);
+            const size_t top = m_Top.load(std::memory_order_acquire);
+            if ((bottom - top) >= Size)
+                return false;
+
+            const size_t index = bottom & (Size - 1);
+            LT_TSAN_ACQUIRE(&m_Buffer[index]);
+            m_Buffer[index] = std::move(item);
+            LT_TSAN_RELEASE(&m_Buffer[index]);
+            m_Bottom.store(bottom + 1, std::memory_order_release);
+            return true;
+        }
+
+        // Backward-compatible alias for legacy call sites.
+        [[nodiscard]] bool Push(T&& item) noexcept
+        {
+            return TryPush(std::move(item));
+        }
+
+        /// Pop item from the bottom (owner thread only).
+        std::optional<T> Pop() noexcept
+        {
+            size_t bottom = m_Bottom.load(std::memory_order_relaxed);
+            if (bottom == 0)
+                return std::nullopt;
+
+            bottom -= 1;
+            m_Bottom.store(bottom, std::memory_order_relaxed);
+            // Full fence per the Chase-Lev algorithm: ensures the bottom
+            // decrement is visible to stealers before we inspect m_Top.
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+
+            size_t top = m_Top.load(std::memory_order_relaxed);
+            if (top > bottom)
+            {
+                m_Bottom.store(bottom + 1, std::memory_order_relaxed);
+                return std::nullopt;
+            }
+
+            const size_t index = bottom & (Size - 1);
+            LT_TSAN_ACQUIRE(&m_Buffer[index]);
+            T item = std::move(m_Buffer[index]);
+            LT_TSAN_RELEASE(&m_Buffer[index]);
+
+            if (top == bottom)
+            {
+                if (!m_Top.compare_exchange_strong(top, top + 1,
+                    std::memory_order_seq_cst,
+                    std::memory_order_relaxed))
+                {
+                    m_Bottom.store(bottom + 1, std::memory_order_relaxed);
+                    return std::nullopt;
+                }
+                m_Bottom.store(bottom + 1, std::memory_order_relaxed);
+            }
+
+            return std::move(item);
+        }
+
+        /// Steal item from the top (other threads).
+        std::optional<T> Steal() noexcept
+        {
+            size_t top = m_Top.load(std::memory_order_acquire);
+            // Full fence per the Chase-Lev algorithm: ensures the top load
+            // completes before we sample m_Bottom for a consistent snapshot.
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+            size_t bottom = m_Bottom.load(std::memory_order_acquire);
+
+            if (top >= bottom)
+                return std::nullopt;
+
+            const size_t index = top & (Size - 1);
+            LT_TSAN_ACQUIRE(&m_Buffer[index]);
+            T item = std::move(m_Buffer[index]);
+            LT_TSAN_RELEASE(&m_Buffer[index]);
+
+            if (!m_Top.compare_exchange_strong(top, top + 1,
+                std::memory_order_seq_cst,
+                std::memory_order_relaxed))
+            {
+                return std::nullopt;
+            }
+
+            return std::move(item);
+        }
+
+        /// Check if queue is empty.
+        bool IsEmpty() const noexcept
+        {
+            size_t top = m_Top.load(std::memory_order_acquire);
+            size_t bottom = m_Bottom.load(std::memory_order_acquire);
+            return top >= bottom;
+        }
+
+        /// Get approximate size.
+        size_t GetSize() const noexcept
+        {
+            size_t top = m_Top.load(std::memory_order_acquire);
+            size_t bottom = m_Bottom.load(std::memory_order_acquire);
+            return bottom > top ? bottom - top : 0;
+        }
+
+    private:
+        alignas(64) std::array<T, Size> m_Buffer;
+        alignas(64) std::atomic<size_t> m_Bottom;
+        alignas(64) std::atomic<size_t> m_Top;
+    };
+}
