@@ -161,8 +161,4 @@ $MAKE_ARGUMENTS
 EOF
 fi
 
-echo "[build_make] Dumping Engine/Makefile header for diagnostics..."
-head -n 40 Engine/Makefile || true
-echo "[build_make] ---end diagnostic---"
-
 make config="$MAKE_CONFIG" "$@"

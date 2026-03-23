@@ -37,3 +37,5 @@ jobs:
       artifact_path: |
         Build/macosx-*/Debug/Runtime/**
         Build/macosx-*/Debug/Test/**
+      cc: clang
+      cxx: clang++
