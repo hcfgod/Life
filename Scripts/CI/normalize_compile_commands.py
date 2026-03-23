@@ -1,5 +1,6 @@
 import argparse
 import json
+import shlex
 from pathlib import Path
 
 
@@ -62,6 +63,85 @@ def rewrite_arguments(arguments: list[object], original_file: str, resolved_file
     return rewritten
 
 
+def is_pch_path(value: str) -> bool:
+    normalized_value = value.replace("\\", "/")
+    return normalized_value.endswith("PCH.h") or normalized_value.endswith(".gch") or normalized_value.endswith(".pch")
+
+
+def sanitize_arguments(arguments: list[object]) -> list[object]:
+    sanitized: list[object] = []
+    index = 0
+
+    while index < len(arguments):
+        argument = arguments[index]
+
+        if not isinstance(argument, str):
+            sanitized.append(argument)
+            index += 1
+            continue
+
+        next_argument = arguments[index + 1] if index + 1 < len(arguments) else None
+
+        if argument in {"-Winvalid-pch", "-fpch-preprocess"}:
+            index += 1
+            continue
+
+        if argument in {"-include-pch", "/Yu", "/Fp"}:
+            index += 2 if next_argument is not None else 1
+            continue
+
+        if argument in {"-include", "/FI"}:
+            if isinstance(next_argument, str) and is_pch_path(next_argument):
+                index += 2
+                continue
+
+            sanitized.append(argument)
+            index += 1
+            continue
+
+        if argument.startswith("-include-pch") and argument != "-include-pch":
+            index += 1
+            continue
+
+        if argument.startswith("-include") and argument != "-include":
+            include_target = argument[len("-include"):]
+            if include_target.startswith("="):
+                include_target = include_target[1:]
+            if is_pch_path(include_target):
+                index += 1
+                continue
+
+        if argument.startswith("/FI") and argument != "/FI":
+            include_target = argument[len("/FI"):]
+            if is_pch_path(include_target):
+                index += 1
+                continue
+
+        if argument.startswith("/Yu") and argument != "/Yu":
+            index += 1
+            continue
+
+        if argument.startswith("/Fp") and argument != "/Fp":
+            index += 1
+            continue
+
+        if is_pch_path(argument):
+            index += 1
+            continue
+
+        sanitized.append(argument)
+        index += 1
+
+    return sanitized
+
+
+def rewrite_command(command: str, original_file: str, resolved_file: str) -> str:
+    command_arguments = shlex.split(command)
+    rewritten_arguments = rewrite_arguments(command_arguments, original_file, resolved_file)
+    sanitized_arguments = sanitize_arguments(rewritten_arguments)
+    return shlex.join(str(argument) for argument in sanitized_arguments)
+
+
 def main() -> int:
     arguments = parse_arguments()
     repo_root = Path(arguments.repo_root).resolve()
@@ -89,7 +169,11 @@ def main() -> int:
         entry["file"] = str(resolved_file)
 
         if isinstance(entry.get("arguments"), list):
-            entry["arguments"] = rewrite_arguments(entry["arguments"], raw_file, str(resolved_file))
+            rewritten_arguments = rewrite_arguments(entry["arguments"], raw_file, str(resolved_file))
+            entry["arguments"] = sanitize_arguments(rewritten_arguments)
+
+        if isinstance(entry.get("command"), str):
+            entry["command"] = rewrite_command(entry["command"], raw_file, str(resolved_file))
 
     with compile_commands_path.open("w", encoding="utf-8") as file:
         json.dump(compile_commands, file, indent=2)
