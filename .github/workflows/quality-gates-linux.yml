@@ -28,6 +28,7 @@ jobs:
                 --base-sha "${{ github.event.before }}" \
                 --head-sha "${{ github.sha }}" \
                 --pattern '^(Engine|Runtime)/.*\.(c|cc|cpp|cxx)$' \
+                --exclude-pattern '(^|/)[^/]*PCH\.(c|cc|cpp|cxx)$' \
                 --compile-commands Build/compile_commands/linux/compile_commands.json \
                 --fallback-compile-db-pattern '^(Engine|Runtime)/.*\.(c|cc|cpp|cxx)$' \
                 --output Build/Logs/linux-clang-tidy-files.txt

@@ -13,6 +13,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--base-sha", default="")
     parser.add_argument("--head-sha", default="")
     parser.add_argument("--pattern", required=True)
+    parser.add_argument("--exclude-pattern", default="")
     parser.add_argument("--compile-commands", default="")
     parser.add_argument("--fallback-compile-db-pattern", default="")
     parser.add_argument("--output", required=True)
@@ -166,6 +167,10 @@ def main() -> int:
                 changed_files = collect_compile_db_files(compile_commands_path, repo_root, arguments.fallback_compile_db_pattern)
         else:
             changed_files = []
+
+    if arguments.exclude_pattern:
+        exclude_pattern = re.compile(arguments.exclude_pattern)
+        changed_files = [path for path in changed_files if not exclude_pattern.search(path)]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(changed_files) + ("\n" if changed_files else ""), encoding="utf-8")
