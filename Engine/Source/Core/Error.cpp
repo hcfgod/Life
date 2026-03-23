@@ -17,8 +17,8 @@
 
 namespace Life
 {
-    Error::Error(ErrorCode code, const std::string& message, const std::source_location& location, ErrorSeverity severity)
-        : m_Code(code), m_Message(message), m_Severity(severity), m_SystemErrorCode(0)
+    Error::Error(ErrorCode code, std::string message, const std::source_location& location, ErrorSeverity severity)
+        : m_Code(code), m_Message(std::move(message)), m_Severity(severity), m_SystemErrorCode(0)
     {
         // Helper function to clean up function names
         auto CleanFunctionName = [](const std::string& funcName) -> std::string {
@@ -80,57 +80,57 @@ namespace Life
     std::string Error::ToDetailedString() const
     {
         std::ostringstream oss;
-        oss << "=== Error Details ===" << std::endl;
-        oss << "Severity: " << GetSeverityString() << std::endl;
-        oss << "Code: " << GetErrorCodeString() << " (" << static_cast<int>(m_Code) << ")" << std::endl;
-        oss << "Message: " << m_Message << std::endl;
-        oss << "Location: " << m_Location << std::endl;
+        oss << "=== Error Details ===\n";
+        oss << "Severity: " << GetSeverityString() << '\n';
+        oss << "Code: " << GetErrorCodeString() << " (" << static_cast<int>(m_Code) << ")\n";
+        oss << "Message: " << m_Message << '\n';
+        oss << "Location: " << m_Location << '\n';
         
         if (m_SystemErrorCode != 0)
         {
-            oss << "System Error: " << m_SystemErrorCode << " (" << ErrorHandling::GetSystemErrorString(m_SystemErrorCode) << ")" << std::endl;
+            oss << "System Error: " << m_SystemErrorCode << " (" << ErrorHandling::GetSystemErrorString(m_SystemErrorCode) << ")\n";
         }
         
         if (!m_Context.functionName.empty())
         {
-            oss << "Function: " << m_Context.functionName << std::endl;
+            oss << "Function: " << m_Context.functionName << '\n';
         }
         
         if (!m_Context.className.empty())
         {
-            oss << "Class: " << m_Context.className << std::endl;
+            oss << "Class: " << m_Context.className << '\n';
         }
         
         if (!m_Context.moduleName.empty())
         {
-            oss << "Module: " << m_Context.moduleName << std::endl;
+            oss << "Module: " << m_Context.moduleName << '\n';
         }
         
         if (!m_Context.threadId.empty())
         {
-            oss << "Thread: " << m_Context.threadId << std::endl;
+            oss << "Thread: " << m_Context.threadId << '\n';
         }
         
         if (!m_Context.platformInfo.empty())
         {
-            oss << "Platform: " << m_Context.platformInfo << std::endl;
+            oss << "Platform: " << m_Context.platformInfo << '\n';
         }
         
         if (!m_Context.systemInfo.empty())
         {
-            oss << "System: " << m_Context.systemInfo << std::endl;
+            oss << "System: " << m_Context.systemInfo << '\n';
         }
         
         if (!m_Context.additionalData.empty())
         {
-            oss << "Additional Data:" << std::endl;
+            oss << "Additional Data:\n";
             for (const auto& [key, value] : m_Context.additionalData)
             {
-                oss << "  " << key << ": " << value << std::endl;
+                oss << "  " << key << ": " << value << '\n';
             }
         }
         
-        oss << "Timestamp: " << m_Context.timestamp << std::endl;
+        oss << "Timestamp: " << m_Context.timestamp << '\n';
         oss << "===================";
         
         return oss.str();
@@ -222,7 +222,7 @@ namespace Life
 
             std::ostringstream sysInfo;
             sysInfo << "CPU Cores: " << platformInfo.capabilities.cpuCount
-                    << ", Memory: " << (platformInfo.capabilities.totalMemory / (1024 * 1024)) << " MB";
+                    << ", Memory: " << (platformInfo.capabilities.totalMemory / (static_cast<uint64_t>(1024) * static_cast<uint64_t>(1024))) << " MB";
             m_Context.systemInfo = sysInfo.str();
         }
     }
@@ -249,7 +249,7 @@ namespace Life
     {
         static ErrorHandler s_ErrorHandler = DefaultErrorHandler;
 
-        void SetErrorHandler(ErrorHandler handler)
+        void SetErrorHandler(const ErrorHandler& handler)
         {
             s_ErrorHandler = handler ? handler : DefaultErrorHandler;
         }
@@ -291,7 +291,7 @@ namespace Life
             }
         }
 
-        Result<void> TryVoid(std::function<void()> func)
+        Result<void> TryVoid(const std::function<void()>& func)
         {
             try
             {

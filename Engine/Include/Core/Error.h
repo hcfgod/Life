@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <type_traits>
 #include <variant>
+#include <utility>
 
 // For MSVC, we need to check _MSVC_LANG instead of __cplusplus
 #if (defined(_MSC_VER) && _MSVC_LANG >= 202002L) || (!defined(_MSC_VER) && __cplusplus >= 202002L)
@@ -217,7 +218,7 @@ namespace Life
     class Error : public std::exception
     {
     public:
-        Error(ErrorCode code, const std::string& message, 
+        Error(ErrorCode code, std::string message, 
               const std::source_location& location,
               ErrorSeverity severity = ErrorSeverity::Error);
         Error(const Error&) = default;
@@ -462,7 +463,7 @@ namespace Life
         using ErrorHandler = std::function<void(const Error&)>;
         
         // Set global error handler
-        void SetErrorHandler(ErrorHandler handler);
+        void SetErrorHandler(const ErrorHandler& handler);
         
         // Get current error handler
         ErrorHandler GetErrorHandler();
@@ -477,11 +478,11 @@ namespace Life
         class ScopedErrorHandlerOverride final
         {
         public:
-            explicit ScopedErrorHandlerOverride(ErrorHandler handler)
+            explicit ScopedErrorHandlerOverride(const ErrorHandler& handler)
                 : m_Previous(GetErrorHandler())
                 , m_Active(true)
             {
-                SetErrorHandler(std::move(handler));
+                SetErrorHandler(handler);
             }
 
             ~ScopedErrorHandlerOverride()
@@ -580,7 +581,7 @@ namespace Life
         }
 
         // Explicit void function wrapper
-        Result<void> TryVoid(std::function<void()> func);
+        Result<void> TryVoid(const std::function<void()>& func);
         
 
         
