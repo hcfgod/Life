@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/CrashDiagnostics.h"
 #include "Core/Error.h"
 #include "Core/ApplicationHost.h"
 #include "Core/Log.h"
@@ -12,6 +13,20 @@
 
 namespace Life
 {
+    inline std::vector<std::string> BuildCommandLineVector(ApplicationCommandLineArgs args)
+    {
+        std::vector<std::string> commandLine;
+        commandLine.reserve(static_cast<std::size_t>(args.Count > 0 ? args.Count : 0));
+
+        for (int index = 0; index < args.Count; ++index)
+        {
+            if (args[index] != nullptr)
+                commandLine.emplace_back(args[index]);
+        }
+
+        return commandLine;
+    }
+
     struct ApplicationRunnerState
     {
         Scope<ApplicationHost> Host;
@@ -95,6 +110,9 @@ namespace Life
 
     inline ApplicationRunnerState* CreateApplicationRunner(ApplicationCommandLineArgs args, bool useExternalEventPump)
     {
+        CrashDiagnostics::Install();
+        CrashDiagnostics::SetApplicationInfo("Life Application", BuildCommandLineVector(args));
+
         Scope<ApplicationRunnerState> state = CreateScope<ApplicationRunnerState>();
         state->Host = CreateApplicationHost(args);
         state->UseExternalEventPump = useExternalEventPump;
@@ -143,6 +161,8 @@ namespace Life
 
     inline int HandleApplicationBootstrapException(const std::exception& exception)
     {
+        CrashDiagnostics::ReportHandledException(exception, "RunApplicationMain");
+
         if (const auto* error = dynamic_cast<const Error*>(&exception))
         {
             Error::LogError(*error);

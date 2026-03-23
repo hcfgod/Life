@@ -12,6 +12,8 @@ namespace Life
 {
     inline SDL_AppResult HandleSDLApplicationBootstrapException(const std::exception& exception)
     {
+        CrashDiagnostics::ReportHandledException(exception, "SDLApplication");
+
         if (const auto* error = dynamic_cast<const Error*>(&exception))
         {
             Error::LogError(*error);

@@ -7,6 +7,8 @@
 #include "Platform/SDL/SDLEvent.h"
 
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -466,6 +468,67 @@ TEST_CASE("Log configuration failure preserves the current logger state")
     CHECK(activeSpecification.EnableFile == validSpecification.EnableFile);
 
     Life::Log::Configure(originalSpecification);
+}
+
+TEST_CASE("Crash diagnostics writes handled exception reports")
+{
+    const Life::CrashReportingSpecification originalSpecification = Life::CrashDiagnostics::GetSpecification();
+    const bool wasInstalled = Life::CrashDiagnostics::IsInstalled();
+    const std::filesystem::path reportDirectory = std::filesystem::temp_directory_path() / "LifeTests" / "CrashReports";
+
+    std::error_code initialCleanupError;
+    std::filesystem::remove_all(reportDirectory, initialCleanupError);
+    REQUIRE(initialCleanupError.value() == 0);
+    Life::CrashDiagnostics::Shutdown();
+
+    Life::CrashReportingSpecification specification = originalSpecification;
+    specification.Enabled = true;
+    specification.InstallHandlers = false;
+    specification.WriteReport = true;
+    specification.WriteMiniDump = false;
+    specification.ReportDirectory = reportDirectory.string();
+    specification.MaxStackFrames = 16;
+
+    Life::CrashDiagnostics::Configure(specification);
+    Life::CrashDiagnostics::SetApplicationInfo("CrashTestApp", { "CrashTestApp", "--synthetic" });
+
+    std::filesystem::path reportPath;
+    try
+    {
+        throw std::runtime_error("synthetic crash for crash report test");
+    }
+    catch (const std::exception& exception)
+    {
+        reportPath = Life::CrashDiagnostics::ReportHandledException(exception, "EngineTests");
+    }
+
+    REQUIRE_FALSE(reportPath.empty());
+    CHECK(std::filesystem::exists(reportPath));
+
+    std::string reportText;
+    {
+        std::ifstream reportStream(reportPath);
+        REQUIRE(reportStream.is_open());
+        std::ostringstream reportContents;
+        reportContents << reportStream.rdbuf();
+        reportText = reportContents.str();
+    }
+
+    CHECK(reportPath.parent_path() == std::filesystem::absolute(reportDirectory));
+    CHECK(reportText.find("CrashTestApp") != std::string::npos);
+    CHECK(reportText.find("synthetic crash for crash report test") != std::string::npos);
+    CHECK(reportText.find("EngineTests") != std::string::npos);
+    CHECK(reportText.find("handled-exception") != std::string::npos);
+
+    Life::CrashDiagnostics::Configure(originalSpecification);
+    if (wasInstalled)
+        Life::CrashDiagnostics::Install();
+    else
+        Life::CrashDiagnostics::Shutdown();
+
+    std::error_code finalCleanupError;
+    std::filesystem::remove_all(reportDirectory, finalCleanupError);
+    CHECK(finalCleanupError.value() == 0);
 }
 
 TEST_CASE("Application startup preserves init close shutdown ordering")

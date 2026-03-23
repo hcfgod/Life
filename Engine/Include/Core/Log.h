@@ -18,7 +18,7 @@ namespace Life
         spdlog::level::level_enum ClientLevel = spdlog::level::trace;
         spdlog::level::level_enum FlushLevel = spdlog::level::warn;
         bool EnableConsole = true;
-        bool EnableFile = false;
+        bool EnableFile = true;
         std::string FilePath = "logs/life.log";
         std::size_t MaxFileSize = 5 * 1024 * 1024;
         std::size_t MaxFileCount = 3;

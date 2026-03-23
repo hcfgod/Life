@@ -176,6 +176,7 @@ end
 function ConfigureCommonProject()
     filter "system:windows"
         systemversion "latest"
+        links { "Dbghelp" }
 
     filter { "system:windows", "action:vs*" }
         buildoptions { "/analyze:external-" }

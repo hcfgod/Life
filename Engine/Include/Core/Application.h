@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/ApplicationContext.h"
+#include "Core/CrashDiagnostics.h"
 #include "Core/ApplicationEventRouter.h"
 #include "Core/Events/Event.h"
 #include "Core/Log.h"
@@ -30,6 +31,7 @@ namespace Life
         uint32_t Height = 720;
         bool VSync = true;
         LogSpecification Logging;
+        CrashReportingSpecification CrashReporting;
         ApplicationCommandLineArgs CommandLineArgs;
     };
 
