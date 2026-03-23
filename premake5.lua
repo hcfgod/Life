@@ -186,15 +186,15 @@ function ConfigureCommonProject()
 
     filter {}
 
-    filter { "system:windows", "configurations:Debug" }
+    filter { "action:vs*", "configurations:Debug" }
         staticruntime "off"
         runtime "Debug"
 
-    filter { "system:windows", "configurations:Release" }
+    filter { "action:vs*", "configurations:Release" }
         staticruntime "off"
         runtime "Release"
 
-    filter { "system:windows", "configurations:Dist" }
+    filter { "action:vs*", "configurations:Dist" }
         staticruntime "off"
         runtime "Release"
 
