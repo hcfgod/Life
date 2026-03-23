@@ -22,6 +22,13 @@ namespace Life
         std::size_t MaxStackFrames = 64;
     };
 
+    struct CrashMessageReportSpecification
+    {
+        std::string_view Category{};
+        std::string_view Message{};
+        std::string_view Phase{};
+    };
+
     class CrashDiagnostics
     {
     public:
@@ -35,7 +42,7 @@ namespace Life
         static void SetApplicationInfo(std::string applicationName, std::vector<std::string> commandLine);
 
         static std::filesystem::path ReportHandledException(const std::exception& exception, std::string_view phase = {});
-        static std::filesystem::path ReportMessage(std::string_view category, std::string_view message, std::string_view phase = {});
+        static std::filesystem::path ReportMessage(CrashMessageReportSpecification specification);
         static std::filesystem::path GetLastReportPath();
     };
 }

@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cctype>
 #include <csignal>
+#include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
@@ -188,6 +189,32 @@ namespace Life
             return stream.str();
         }
 
+        void ReportSuppressedException(std::string_view operation) noexcept
+        {
+            constexpr std::string_view prefix = "Life::CrashDiagnostics suppressed an exception while ";
+            constexpr std::string_view suffix = ".\n";
+            (void)std::fwrite(prefix.data(), sizeof(char), prefix.size(), stderr);
+            (void)std::fwrite(operation.data(), sizeof(char), operation.size(), stderr);
+            (void)std::fwrite(suffix.data(), sizeof(char), suffix.size(), stderr);
+            std::fflush(stderr);
+        }
+
+        void ReportSuppressedException(std::string_view operation, std::string_view details) noexcept
+        {
+            constexpr std::string_view prefix = "Life::CrashDiagnostics suppressed an exception while ";
+            constexpr std::string_view separator = ": ";
+            constexpr std::string_view suffix = ".\n";
+            (void)std::fwrite(prefix.data(), sizeof(char), prefix.size(), stderr);
+            (void)std::fwrite(operation.data(), sizeof(char), operation.size(), stderr);
+            if (!details.empty())
+            {
+                (void)std::fwrite(separator.data(), sizeof(char), separator.size(), stderr);
+                (void)std::fwrite(details.data(), sizeof(char), details.size(), stderr);
+            }
+            (void)std::fwrite(suffix.data(), sizeof(char), suffix.size(), stderr);
+            std::fflush(stderr);
+        }
+
         void FlushLogs()
         {
             try
@@ -195,8 +222,13 @@ namespace Life
                 if (const std::shared_ptr<spdlog::logger> coreLogger = Log::GetCoreLogger())
                     coreLogger->flush();
             }
+            catch (const std::exception& exception)
+            {
+                ReportSuppressedException("flushing the core logger", exception.what());
+            }
             catch (...)
             {
+                ReportSuppressedException("flushing the core logger");
             }
 
             try
@@ -204,8 +236,13 @@ namespace Life
                 if (const std::shared_ptr<spdlog::logger> clientLogger = Log::GetClientLogger())
                     clientLogger->flush();
             }
+            catch (const std::exception& exception)
+            {
+                ReportSuppressedException("flushing the client logger", exception.what());
+            }
             catch (...)
             {
+                ReportSuppressedException("flushing the client logger");
             }
         }
 
@@ -298,8 +335,13 @@ namespace Life
             {
                 PlatformDetection::Initialize();
             }
+            catch (const std::exception& exception)
+            {
+                ReportSuppressedException("initializing platform metadata", exception.what());
+            }
             catch (...)
             {
+                ReportSuppressedException("initializing platform metadata");
             }
         }
 
@@ -388,7 +430,7 @@ namespace Life
                 }
             }
 
-            std::free(symbols);
+            std::free(static_cast<void*>(symbols));
             return frames;
         }
 #else
@@ -400,7 +442,7 @@ namespace Life
 
         std::filesystem::path ResolveReportDirectory(const CrashReportingSpecification& specification)
         {
-            const std::filesystem::path reportDirectory = specification.ReportDirectory.empty()
+            std::filesystem::path reportDirectory = specification.ReportDirectory.empty()
                 ? std::filesystem::path("crashes")
                 : std::filesystem::path(specification.ReportDirectory);
 
@@ -826,13 +868,13 @@ namespace Life
         );
     }
 
-    std::filesystem::path CrashDiagnostics::ReportMessage(std::string_view category, std::string_view message, std::string_view phase)
+    std::filesystem::path CrashDiagnostics::ReportMessage(CrashMessageReportSpecification specification)
     {
         CrashEvent event;
-        event.Category = std::string(category.empty() ? std::string_view("report") : category);
-        event.Phase = std::string(phase.empty() ? std::string_view("message") : phase);
-        event.Reason = std::string(message);
-        event.Details = std::string(message);
+        event.Category = std::string(specification.Category.empty() ? std::string_view("report") : specification.Category);
+        event.Phase = std::string(specification.Phase.empty() ? std::string_view("message") : specification.Phase);
+        event.Reason = std::string(specification.Message);
+        event.Details = std::string(specification.Message);
         event.StackTrace = CaptureStackTrace(LoadSnapshot()->Specification.MaxStackFrames);
         return WriteCrashReport(
             event
