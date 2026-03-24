@@ -1,6 +1,7 @@
 #include "Core/Error.h"
 
 #include <unordered_map>
+#include <system_error>
 
 // Platform-specific includes for system error codes
 #ifdef LIFE_PLATFORM_WINDOWS
@@ -474,7 +475,7 @@ namespace Life
                 }
             #else
                 if (errorCode == 0) return "No error";
-                return std::strerror(errorCode);
+                return std::error_code(errorCode, std::generic_category()).message();
             #endif
         }
 
