@@ -10,6 +10,37 @@ namespace Life
 {
     namespace Async
     {
+        namespace
+        {
+            struct DequeuedAsyncTask final
+            {
+                std::function<void()> Task;
+                bool ShouldExit = false;
+            };
+
+            DequeuedAsyncTask WaitForNextTask(
+                std::mutex& taskMutex,
+                std::condition_variable& taskCv,
+                std::deque<std::function<void()>>& taskQueue,
+                const std::atomic<bool>& shutdown)
+            {
+                std::unique_lock<std::mutex> lock(taskMutex);
+                taskCv.wait(lock, [&shutdown, &taskQueue]() {
+                    return shutdown.load() || !taskQueue.empty();
+                });
+
+                DequeuedAsyncTask dequeuedTask;
+                dequeuedTask.ShouldExit = shutdown.load() && taskQueue.empty();
+                if (!dequeuedTask.ShouldExit)
+                {
+                    dequeuedTask.Task = std::move(taskQueue.front());
+                    taskQueue.pop_front();
+                }
+
+                return dequeuedTask;
+            }
+        }
+
         AsyncIO& AsyncIO::GetInstance()
         {
             static AsyncIO instance;
@@ -102,29 +133,14 @@ namespace Life
         {
             for (;;)
             {
-                std::function<void()> task;
-                bool shouldExit = false;
-                {
-                    std::unique_lock<std::mutex> lock(m_TaskMutex);
-                    m_TaskCv.wait(lock, [this]() {
-                        return m_Shutdown.load() || !m_TaskQueue.empty();
-                    });
-
-                    shouldExit = m_Shutdown.load() && m_TaskQueue.empty();
-                    if (!shouldExit)
-                    {
-                        task = std::move(m_TaskQueue.front());
-                        m_TaskQueue.pop_front();
-                    }
-                }
-
-                if (shouldExit)
+                DequeuedAsyncTask dequeuedTask = WaitForNextTask(m_TaskMutex, m_TaskCv, m_TaskQueue, m_Shutdown);
+                if (dequeuedTask.ShouldExit)
                     break;
 
                 try
                 {
-                    if (task)
-                        task();
+                    if (dequeuedTask.Task)
+                        dequeuedTask.Task();
                 }
                 catch (const std::exception& e)
                 {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <memory>
 #include <mutex>
@@ -41,8 +42,8 @@ namespace Life
 
         static std::mutex s_Mutex;
         static bool s_Initialized;
-        static std::shared_ptr<spdlog::logger> s_CoreLogger;
-        static std::shared_ptr<spdlog::logger> s_ClientLogger;
+        static std::atomic<std::shared_ptr<spdlog::logger>> s_CoreLogger;
+        static std::atomic<std::shared_ptr<spdlog::logger>> s_ClientLogger;
     };
 }
 

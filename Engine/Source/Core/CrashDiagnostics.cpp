@@ -58,7 +58,7 @@ namespace Life
         struct CrashDiagnosticsState
         {
             std::mutex Mutex;
-            std::shared_ptr<CrashConfigurationSnapshot> Snapshot = std::make_shared<CrashConfigurationSnapshot>();
+            std::atomic<std::shared_ptr<CrashConfigurationSnapshot>> Snapshot{ std::make_shared<CrashConfigurationSnapshot>() };
             std::filesystem::path LastReportPath;
             bool Installed = false;
             std::terminate_handler PreviousTerminateHandler = nullptr;
@@ -84,12 +84,12 @@ namespace Life
 
         std::shared_ptr<CrashConfigurationSnapshot> LoadSnapshot()
         {
-            return std::atomic_load(&GetState().Snapshot);
+            return GetState().Snapshot.load(std::memory_order_acquire);
         }
 
         void StoreSnapshot(std::shared_ptr<CrashConfigurationSnapshot> snapshot)
         {
-            std::atomic_store(&GetState().Snapshot, std::move(snapshot));
+            GetState().Snapshot.store(std::move(snapshot), std::memory_order_release);
         }
 
         void StoreLastReportPath(const std::filesystem::path& reportPath)
