@@ -8,7 +8,7 @@
     #include <errno.h>
 #elif defined(LIFE_PLATFORM_MACOS) || defined(LIFE_PLATFORM_LINUX)
     #include <errno.h>
-    #include <string.h>
+    #include <cstring>
 #endif
 
 namespace Life
@@ -474,7 +474,7 @@ namespace Life
                 }
             #else
                 if (errorCode == 0) return "No error";
-                return strerror(errorCode);
+                return std::strerror(errorCode);
             #endif
         }
 
