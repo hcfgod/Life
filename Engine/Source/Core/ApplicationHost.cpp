@@ -1,8 +1,11 @@
 #include "Core/ApplicationHost.h"
+#include "Core/Concurrency/AsyncIO.h"
+#include "Core/Concurrency/JobSystem.h"
 #include "Core/CrashDiagnostics.h"
 #include "Platform/Platform.h"
 
 #include <algorithm>
+#include <mutex>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -11,6 +14,46 @@ namespace Life
 {
     namespace
     {
+        struct SharedEngineSystemsState final
+        {
+            std::mutex Mutex;
+            std::size_t ActiveHostCount = 0;
+        };
+
+        SharedEngineSystemsState& GetSharedEngineSystemsState()
+        {
+            static SharedEngineSystemsState state;
+            return state;
+        }
+
+        void AcquireSharedEngineSystems(const ConcurrencySpecification& specification)
+        {
+            SharedEngineSystemsState& state = GetSharedEngineSystemsState();
+            std::scoped_lock lock(state.Mutex);
+            if (state.ActiveHostCount == 0)
+            {
+                GetJobSystem().Initialize(specification.JobWorkerCount);
+                Async::GetAsyncIO().Initialize(specification.AsyncWorkerCount);
+            }
+
+            ++state.ActiveHostCount;
+        }
+
+        void ReleaseSharedEngineSystems()
+        {
+            SharedEngineSystemsState& state = GetSharedEngineSystemsState();
+            std::scoped_lock lock(state.Mutex);
+            if (state.ActiveHostCount == 0)
+                return;
+
+            --state.ActiveHostCount;
+            if (state.ActiveHostCount == 0)
+            {
+                Async::GetAsyncIO().Shutdown();
+                GetJobSystem().Shutdown();
+            }
+        }
+
         std::vector<std::string> ToCommandLineVector(const ApplicationCommandLineArgs& args)
         {
             std::vector<std::string> commandLine;
@@ -31,6 +74,8 @@ namespace Life
             Application& application,
             ApplicationContext& context,
             ApplicationEventRouter& eventRouter,
+            JobSystem& jobSystem,
+            Async::AsyncIO& asyncIO,
             ApplicationRuntime& runtime,
             Window& window)
         {
@@ -38,6 +83,8 @@ namespace Life
             services.Register<Application>(application);
             services.Register<ApplicationContext>(context);
             services.Register<ApplicationEventRouter>(eventRouter);
+            services.Register<JobSystem>(jobSystem);
+            services.Register<Async::AsyncIO>(asyncIO);
             services.Register<ApplicationRuntime>(runtime);
             services.Register<Window>(window);
         }
@@ -73,25 +120,39 @@ namespace Life
             specification.VSync
         });
 
-        RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, *m_Runtime, *m_Window);
-        PushGlobalServiceRegistry(m_Services);
+        AcquireSharedEngineSystems(specification.Concurrency);
+        bool pushedGlobalServices = false;
+        try
+        {
+            RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, GetJobSystem(), Async::GetAsyncIO(), *m_Runtime, *m_Window);
+            PushGlobalServiceRegistry(m_Services);
+            pushedGlobalServices = true;
 
-        m_Context.Bind(
-            *m_Window,
-            *m_Runtime,
-            m_Services,
-            ApplicationContext::StateBinding{ m_Running, m_Initialized },
-            [this]() { Initialize(); },
-            [this](float timestep) { RunFrame(timestep); },
-            [this]() { Shutdown(); },
-            [this]() { Finalize(); });
+            m_Context.Bind(
+                *m_Window,
+                *m_Runtime,
+                m_Services,
+                ApplicationContext::StateBinding{ m_Running, m_Initialized },
+                [this]() { Initialize(); },
+                [this](float timestep) { RunFrame(timestep); },
+                [this]() { Shutdown(); },
+                [this]() { Finalize(); });
 
-        m_Application->BindHost(m_Context, m_EventRouter);
+            m_Application->BindHost(m_Context, m_EventRouter);
+        }
+        catch (...)
+        {
+            if (pushedGlobalServices)
+                PopGlobalServiceRegistry(m_Services);
+            ReleaseSharedEngineSystems();
+            throw;
+        }
     }
 
     ApplicationHost::~ApplicationHost()
     {
         Finalize();
+        ReleaseSharedEngineSystems();
         PopGlobalServiceRegistry(m_Services);
         m_Window.reset();
         m_Runtime.reset();

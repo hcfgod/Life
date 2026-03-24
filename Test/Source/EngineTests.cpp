@@ -84,6 +84,8 @@ namespace
             specification.Width = 640;
             specification.Height = 480;
             specification.VSync = false;
+            specification.Concurrency.JobWorkerCount = 1;
+            specification.Concurrency.AsyncWorkerCount = 1;
             return specification;
         }
 
@@ -334,12 +336,18 @@ TEST_CASE("ApplicationHost registers built-in and custom services")
     CHECK(host->GetServices().Has<Life::Application>());
     CHECK(host->GetServices().Has<Life::ApplicationContext>());
     CHECK(host->GetServices().Has<Life::ApplicationEventRouter>());
+    CHECK(host->GetServices().Has<Life::JobSystem>());
+    CHECK(host->GetServices().Has<Life::Async::AsyncIO>());
     CHECK(host->GetServices().Has<Life::ApplicationRuntime>());
     CHECK(host->GetServices().Has<Life::Window>());
 
     CHECK(&host->GetServices().Get<Life::ApplicationHost>() == host.get());
     CHECK(&host->GetServices().Get<Life::Application>() == applicationInstance);
+    CHECK(&host->GetServices().Get<Life::JobSystem>() == &Life::GetJobSystem());
+    CHECK(&host->GetServices().Get<Life::Async::AsyncIO>() == &Life::Async::GetAsyncIO());
     CHECK(&host->GetContext().GetService<Life::ApplicationHost>() == host.get());
+    CHECK(&host->GetContext().GetService<Life::JobSystem>() == &Life::GetJobSystem());
+    CHECK(&applicationInstance->GetService<Life::Async::AsyncIO>() == &Life::Async::GetAsyncIO());
     CHECK(&applicationInstance->GetService<Life::ApplicationHost>() == host.get());
     CHECK(&applicationInstance->GetService<Life::Window>() == &host->GetWindow());
     CHECK(&Life::GetServices() == &host->GetServices());
@@ -352,6 +360,44 @@ TEST_CASE("ApplicationHost registers built-in and custom services")
     CHECK(applicationInstance->TryGetService<TestService>() == &service);
     CHECK(applicationInstance->GetService<TestService>().Value == 7);
     CHECK(Life::GetServices().TryGet<TestService>() == &service);
+}
+
+TEST_CASE("ApplicationHost initializes shared JobSystem and AsyncIO services")
+{
+    CHECK_FALSE(Life::GetJobSystem().IsInitialized());
+    CHECK_FALSE(Life::Async::GetAsyncIO().IsInitialized());
+
+    {
+        auto host = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+        CHECK(Life::GetJobSystem().IsInitialized());
+        CHECK(Life::Async::GetAsyncIO().IsInitialized());
+        CHECK(&host->GetServices().Get<Life::JobSystem>() == &Life::GetJobSystem());
+        CHECK(&host->GetServices().Get<Life::Async::AsyncIO>() == &Life::Async::GetAsyncIO());
+    }
+
+    CHECK_FALSE(Life::GetJobSystem().IsInitialized());
+    CHECK_FALSE(Life::Async::GetAsyncIO().IsInitialized());
+}
+
+TEST_CASE("Nested ApplicationHost instances share JobSystem and AsyncIO lifetime")
+{
+    auto outerHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+    REQUIRE(Life::GetJobSystem().IsInitialized());
+    REQUIRE(Life::Async::GetAsyncIO().IsInitialized());
+
+    {
+        auto innerHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+        CHECK(&outerHost->GetServices().Get<Life::JobSystem>() == &innerHost->GetServices().Get<Life::JobSystem>());
+        CHECK(&outerHost->GetServices().Get<Life::Async::AsyncIO>() == &innerHost->GetServices().Get<Life::Async::AsyncIO>());
+    }
+
+    CHECK(Life::GetJobSystem().IsInitialized());
+    CHECK(Life::Async::GetAsyncIO().IsInitialized());
+
+    outerHost.reset();
+
+    CHECK_FALSE(Life::GetJobSystem().IsInitialized());
+    CHECK_FALSE(Life::Async::GetAsyncIO().IsInitialized());
 }
 
 TEST_CASE("Global service registry falls back after host destruction")

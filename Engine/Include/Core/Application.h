@@ -7,6 +7,7 @@
 #include "Core/Log.h"
 #include "Core/Memory.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -24,12 +25,19 @@ namespace Life
         }
     };
 
+    struct ConcurrencySpecification
+    {
+        std::size_t JobWorkerCount = 0;
+        std::size_t AsyncWorkerCount = 0;
+    };
+
     struct ApplicationSpecification
     {
         std::string Name = "Life Application";
         uint32_t Width = 1280;
         uint32_t Height = 720;
         bool VSync = true;
+        ConcurrencySpecification Concurrency;
         LogSpecification Logging;
         CrashReportingSpecification CrashReporting;
         ApplicationCommandLineArgs CommandLineArgs;
