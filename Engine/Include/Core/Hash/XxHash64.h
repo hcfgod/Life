@@ -15,13 +15,17 @@ namespace Life
     public:
         struct Seed final
         {
-            constexpr Seed() = default;
-            explicit constexpr Seed(uint64_t value)
+            constexpr Seed() noexcept
+                : Value(0)
+            {
+            }
+
+            explicit constexpr Seed(uint64_t value) noexcept
                 : Value(value)
             {
             }
 
-            uint64_t Value = 0;
+            uint64_t Value;
         };
 
         class State final
