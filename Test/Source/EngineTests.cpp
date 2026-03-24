@@ -6,10 +6,13 @@
 #include "Engine.h"
 #include "Platform/SDL/SDLEvent.h"
 
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -142,6 +145,101 @@ namespace
     {
         int Value = 0;
     };
+
+    class ConfigurableTestApplication final : public Life::Application
+    {
+    public:
+        explicit ConfigurableTestApplication(Life::ApplicationSpecification specification)
+            : Life::Application(std::move(specification))
+        {
+        }
+    };
+
+    class ThrowingRuntime final : public Life::ApplicationRuntime
+    {
+    public:
+        explicit ThrowingRuntime(std::string message)
+            : m_Message(std::move(message))
+        {
+        }
+
+        Life::Scope<Life::Window> CreatePlatformWindow(const Life::WindowSpecification& specification) override
+        {
+            (void)specification;
+            throw std::runtime_error(m_Message);
+        }
+
+        Life::Scope<Life::Event> PollEvent() override
+        {
+            return nullptr;
+        }
+
+    private:
+        std::string m_Message;
+    };
+
+    struct CrashDiagnosticsTestScope final
+    {
+        explicit CrashDiagnosticsTestScope(std::filesystem::path reportDirectory)
+            : WasInstalled(Life::CrashDiagnostics::IsInstalled())
+            , OriginalSpecification(Life::CrashDiagnostics::GetSpecification())
+            , ReportDirectory(std::move(reportDirectory))
+        {
+            std::error_code cleanupError;
+            std::filesystem::remove_all(ReportDirectory, cleanupError);
+            Life::CrashDiagnostics::Shutdown();
+
+            Life::CrashReportingSpecification specification = OriginalSpecification;
+            specification.Enabled = true;
+            specification.InstallHandlers = false;
+            specification.WriteReport = true;
+            specification.WriteMiniDump = false;
+            specification.ReportDirectory = ReportDirectory.string();
+            specification.MaxStackFrames = 16;
+            Life::CrashDiagnostics::Configure(specification);
+        }
+
+        ~CrashDiagnosticsTestScope()
+        {
+            Life::CrashDiagnostics::Configure(OriginalSpecification);
+            if (WasInstalled)
+                Life::CrashDiagnostics::Install();
+            else
+                Life::CrashDiagnostics::Shutdown();
+
+            std::error_code cleanupError;
+            std::filesystem::remove_all(ReportDirectory, cleanupError);
+        }
+
+        bool WasInstalled = false;
+        Life::CrashReportingSpecification OriginalSpecification;
+        std::filesystem::path ReportDirectory;
+    };
+
+    std::string ReadTextFile(const std::filesystem::path& path)
+    {
+        std::ifstream stream(path);
+        if (!stream.is_open())
+            throw std::runtime_error("Failed to open file: " + path.string());
+
+        std::ostringstream contents;
+        contents << stream.rdbuf();
+        return contents.str();
+    }
+
+    template<typename TPredicate>
+    bool WaitForCondition(TPredicate&& predicate, std::chrono::milliseconds timeout)
+    {
+        const auto deadline = std::chrono::steady_clock::now() + timeout;
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            if (predicate())
+                return true;
+            std::this_thread::yield();
+        }
+
+        return predicate();
+    }
 }
 
 TEST_CASE("CreateScope stores values")
@@ -400,6 +498,138 @@ TEST_CASE("Nested ApplicationHost instances share JobSystem and AsyncIO lifetime
     CHECK_FALSE(Life::Async::GetAsyncIO().IsInitialized());
 }
 
+TEST_CASE("AsyncIO result-returning file reads preserve missing-path failures")
+{
+    auto host = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+    const std::filesystem::path missingPath = std::filesystem::temp_directory_path() / "LifeTests" / "MissingAsyncRead" / "does-not-exist.txt";
+
+    const Life::Result<std::string> result = Life::Async::GetAsyncIO().ReadFileAsyncResult(missingPath.string()).Get();
+
+    REQUIRE(result.IsFailure());
+    CHECK(result.GetError().GetCode() == Life::ErrorCode::FileNotFound);
+    CHECK(result.GetError().GetErrorMessage().find(missingPath.string()) != std::string::npos);
+}
+
+TEST_CASE("JobSystem shutdown rejects racing submissions and drains in-flight jobs")
+{
+    auto host = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+    auto& jobSystem = Life::GetJobSystem();
+
+    std::atomic<bool> blockerStarted = false;
+    std::atomic<bool> releaseBlocker = false;
+    std::atomic<bool> blockerFinished = false;
+
+    REQUIRE(jobSystem.Submit([&]() {
+        blockerStarted.store(true, std::memory_order_release);
+        while (!releaseBlocker.load(std::memory_order_acquire))
+            std::this_thread::yield();
+        blockerFinished.store(true, std::memory_order_release);
+    }));
+    REQUIRE(WaitForCondition([&]() { return blockerStarted.load(std::memory_order_acquire); }, std::chrono::milliseconds(1000)));
+
+    std::thread destroyer([&]() {
+        host.reset();
+    });
+
+    const bool sawRejectedSubmission = WaitForCondition([&]() {
+        return !jobSystem.TrySubmit([]() {});
+    }, std::chrono::milliseconds(2000));
+
+    releaseBlocker.store(true, std::memory_order_release);
+    destroyer.join();
+
+    CHECK(sawRejectedSubmission);
+    CHECK(blockerFinished.load(std::memory_order_acquire));
+    CHECK_FALSE(jobSystem.IsInitialized());
+    CHECK_FALSE(jobSystem.TrySubmit([]() {}));
+}
+
+TEST_CASE("AsyncIO queue saturation executes overflow work inline")
+{
+    auto host = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+    auto& asyncIO = Life::Async::GetAsyncIO();
+
+    std::atomic<bool> blockerStarted = false;
+    std::atomic<bool> releaseBlocker = false;
+    Life::Async::Task<void> blockerTask = asyncIO.RunAsync([&]() {
+        blockerStarted.store(true, std::memory_order_release);
+        while (!releaseBlocker.load(std::memory_order_acquire))
+            std::this_thread::yield();
+    });
+    REQUIRE(WaitForCondition([&]() { return blockerStarted.load(std::memory_order_acquire); }, std::chrono::milliseconds(1000)));
+
+    constexpr std::size_t taskCount = 8704;
+    std::atomic<int> completedTasks = 0;
+    std::vector<Life::Async::Task<void>> tasks;
+    tasks.reserve(taskCount);
+    for (std::size_t index = 0; index < taskCount; ++index)
+    {
+        tasks.emplace_back(asyncIO.RunAsync([&]() {
+            completedTasks.fetch_add(1, std::memory_order_acq_rel);
+        }));
+    }
+
+    const int completedBeforeRelease = completedTasks.load(std::memory_order_acquire);
+    releaseBlocker.store(true, std::memory_order_release);
+    blockerTask.Wait();
+    for (Life::Async::Task<void>& task : tasks)
+        task.Wait();
+
+    CHECK(completedBeforeRelease > 0);
+    CHECK(completedTasks.load(std::memory_order_acquire) == static_cast<int>(taskCount));
+}
+
+TEST_CASE("AsyncIO submissions racing shutdown complete inline without reinitializing")
+{
+    auto host = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+    auto& asyncIO = Life::Async::GetAsyncIO();
+
+    std::atomic<bool> blockerStarted = false;
+    std::atomic<bool> releaseBlocker = false;
+    Life::Async::Task<void> blockerTask = asyncIO.RunAsync([&]() {
+        blockerStarted.store(true, std::memory_order_release);
+        while (!releaseBlocker.load(std::memory_order_acquire))
+            std::this_thread::yield();
+    });
+    REQUIRE(WaitForCondition([&]() { return blockerStarted.load(std::memory_order_acquire); }, std::chrono::milliseconds(1000)));
+
+    std::thread destroyer([&]() {
+        host.reset();
+    });
+
+    bool sawInlineCompletion = false;
+    int inlineResult = 0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        Life::Async::Task<int> task = asyncIO.RunAsync([]() {
+            return 77;
+        });
+        if (task.IsDone())
+        {
+            sawInlineCompletion = true;
+            inlineResult = task.Get();
+            break;
+        }
+        std::this_thread::yield();
+    }
+
+    releaseBlocker.store(true, std::memory_order_release);
+    blockerTask.Wait();
+    destroyer.join();
+
+    CHECK(sawInlineCompletion);
+    CHECK(inlineResult == 77);
+    CHECK_FALSE(asyncIO.IsInitialized());
+
+    Life::Async::Task<int> postShutdownTask = asyncIO.RunAsync([]() {
+        return 91;
+    });
+    CHECK(postShutdownTask.IsDone());
+    CHECK(postShutdownTask.Get() == 91);
+    CHECK_FALSE(asyncIO.IsInitialized());
+}
+
 TEST_CASE("Global service registry falls back after host destruction")
 {
     {
@@ -508,6 +738,30 @@ TEST_CASE("Platform detection initializes and exposes basic metadata")
     CHECK_FALSE(platformInfo.buildDate.empty());
     CHECK_FALSE(platformInfo.buildTime.empty());
     CHECK_FALSE(platformInfo.buildType.empty());
+}
+
+TEST_CASE("Platform utilities surface missing environment variables and dynamic library failures")
+{
+    const std::string missingEnvironmentVariable = "LIFE_TEST_MISSING_ENVIRONMENT_VARIABLE_4A91F4E4";
+    CHECK_FALSE(Life::PlatformUtils::GetEnvironmentVariable(missingEnvironmentVariable).has_value());
+
+#if defined(LIFE_PLATFORM_WINDOWS)
+    const std::string validLibraryPath = "kernel32.dll";
+    const std::string invalidLibraryPath = "LifeDefinitelyMissingLibrary_123456.dll";
+#elif defined(LIFE_PLATFORM_MACOS)
+    const std::string validLibraryPath = "/usr/lib/libSystem.B.dylib";
+    const std::string invalidLibraryPath = "/usr/lib/libLifeDefinitelyMissingLibrary_123456.dylib";
+#else
+    const std::string validLibraryPath = "libc.so.6";
+    const std::string invalidLibraryPath = "libLifeDefinitelyMissingLibrary_123456.so";
+#endif
+
+    void* library = Life::PlatformUtils::LoadLibrary(validLibraryPath);
+    REQUIRE(library != nullptr);
+    CHECK(Life::PlatformUtils::GetProcAddress(library, "LifeDefinitelyMissingSymbol_123456") == nullptr);
+    Life::PlatformUtils::FreeLibrary(library);
+
+    CHECK(Life::PlatformUtils::LoadLibrary(invalidLibraryPath) == nullptr);
 }
 
 TEST_CASE("Error handling captures engine error details in Result")
@@ -675,6 +929,73 @@ TEST_CASE("Crash diagnostics writes handled exception reports")
     std::error_code finalCleanupError;
     std::filesystem::remove_all(reportDirectory, finalCleanupError);
     CHECK(finalCleanupError.value() == 0);
+}
+
+TEST_CASE("Bootstrap exception reports preserve pre-host application info")
+{
+    Life::Log::Init();
+
+    CrashDiagnosticsTestScope crashScope(std::filesystem::temp_directory_path() / "LifeTests" / "BootstrapFailureOrdering" / "PreHost");
+    Life::CrashDiagnostics::SetApplicationInfo("Bootstrap Placeholder", { "bootstrap.exe", "--before-host" });
+
+    try
+    {
+        throw std::runtime_error("synthetic bootstrap failure before host construction");
+    }
+    catch (const std::exception& exception)
+    {
+        CHECK(Life::HandleApplicationBootstrapException(exception) == 1);
+    }
+
+    const std::filesystem::path reportPath = Life::CrashDiagnostics::GetLastReportPath();
+    REQUIRE_FALSE(reportPath.empty());
+    const std::string reportText = ReadTextFile(reportPath);
+
+    CHECK(reportPath.parent_path() == std::filesystem::absolute(crashScope.ReportDirectory));
+    CHECK(reportText.find("Bootstrap Placeholder") != std::string::npos);
+    CHECK(reportText.find("bootstrap.exe --before-host") != std::string::npos);
+    CHECK(reportText.find("synthetic bootstrap failure before host construction") != std::string::npos);
+    CHECK(reportText.find("RunApplicationMain") != std::string::npos);
+}
+
+TEST_CASE("ApplicationHost startup failures update crash report application info before bootstrap handling")
+{
+    Life::Log::Init();
+
+    CrashDiagnosticsTestScope crashScope(std::filesystem::temp_directory_path() / "LifeTests" / "BootstrapFailureOrdering" / "HostStartupFailure");
+    Life::CrashDiagnostics::SetApplicationInfo("Bootstrap Placeholder", { "bootstrap.exe", "--before-host" });
+
+    char executable[] = "HostFailureApp.exe";
+    char option[] = "--from-host";
+    char* commandLineArgs[] = { executable, option };
+
+    Life::ApplicationSpecification specification;
+    specification.Name = "Host Failure App";
+    specification.Width = 800;
+    specification.Height = 600;
+    specification.CommandLineArgs = { 2, commandLineArgs };
+
+    try
+    {
+        auto host = Life::CreateScope<Life::ApplicationHost>(
+            Life::CreateScope<ConfigurableTestApplication>(specification),
+            Life::CreateScope<ThrowingRuntime>("synthetic window creation failure"));
+        FAIL("Expected ApplicationHost construction to throw");
+    }
+    catch (const std::exception& exception)
+    {
+        CHECK(Life::HandleApplicationBootstrapException(exception) == 1);
+    }
+
+    const std::filesystem::path reportPath = Life::CrashDiagnostics::GetLastReportPath();
+    REQUIRE_FALSE(reportPath.empty());
+    const std::string reportText = ReadTextFile(reportPath);
+
+    CHECK(reportPath.parent_path() == std::filesystem::absolute(crashScope.ReportDirectory));
+    CHECK(reportText.find("Host Failure App") != std::string::npos);
+    CHECK(reportText.find("HostFailureApp.exe --from-host") != std::string::npos);
+    CHECK(reportText.find("synthetic window creation failure") != std::string::npos);
+    CHECK(reportText.find("Bootstrap Placeholder") == std::string::npos);
 }
 
 TEST_CASE("Application startup preserves init close shutdown ordering")
