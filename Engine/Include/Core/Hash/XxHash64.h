@@ -13,6 +13,17 @@ namespace Life
     class XxHash64 final
     {
     public:
+        struct Seed final
+        {
+            constexpr Seed() = default;
+            explicit constexpr Seed(uint64_t value)
+                : Value(value)
+            {
+            }
+
+            uint64_t Value = 0;
+        };
+
         class State final
         {
         public:
@@ -38,7 +49,7 @@ namespace Life
             uint32_t m_BufferSize = 0;
         };
 
-        static uint64_t Compute(const void* data, size_t size, uint64_t seed = 0);
+        static uint64_t Compute(const void* data, size_t size, Seed seed = {});
     };
 }
 

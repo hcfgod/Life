@@ -122,37 +122,37 @@ namespace Life
 
             /// Initialize the async I/O system.
             void Initialize(size_t threadCount = 0);
-            void Shutdown();
+            void Shutdown() noexcept;
 
             /// File operations.
-            Task<std::string> ReadFileAsync(const std::string& path);
-            Task<void> WriteFileAsync(const std::string& path, const std::string& content);
-            Task<bool> FileExistsAsync(const std::string& path);
-            Task<std::vector<std::string>> ReadLinesAsync(const std::string& path);
-            Task<void> AppendFileAsync(const std::string& path, const std::string& content);
+            Task<std::string> ReadFileAsync(std::string path);
+            Task<void> WriteFileAsync(std::string path, std::string content);
+            Task<bool> FileExistsAsync(std::string path);
+            Task<std::vector<std::string>> ReadLinesAsync(std::string path);
+            Task<void> AppendFileAsync(std::string path, std::string content);
 
             /// Result-returning variants (preferred for engine code).
             /// These never throw across the async boundary; failures are returned as Result<T>.
-            Task<Result<std::string>> ReadFileAsyncResult(const std::string& path);
-            Task<Result<void>> WriteFileAsyncResult(const std::string& path, const std::string& content);
-            Task<Result<void>> AppendFileAsyncResult(const std::string& path, const std::string& content);
+            Task<Result<std::string>> ReadFileAsyncResult(std::string path);
+            Task<Result<void>> WriteFileAsyncResult(std::string path, std::string content);
+            Task<Result<void>> AppendFileAsyncResult(std::string path, std::string content);
 
             /// Directory operations.
-            Task<std::vector<std::string>> ListDirectoryAsync(const std::string& path);
-            Task<bool> CreateDirectoryAsync(const std::string& path);
-            Task<bool> DeleteFileAsync(const std::string& path);
-            Task<bool> DeleteDirectoryAsync(const std::string& path);
+            Task<std::vector<std::string>> ListDirectoryAsync(std::string path);
+            Task<bool> CreateDirectoryAsync(std::string path);
+            Task<bool> DeleteFileAsync(std::string path);
+            Task<bool> DeleteDirectoryAsync(std::string path);
 
             /// Configuration operations.
-            Task<void> SaveConfigAsync(const std::string& path, const nlohmann::json& config);
-            Task<nlohmann::json> LoadConfigAsync(const std::string& path);
+            Task<void> SaveConfigAsync(std::string path, nlohmann::json config);
+            Task<nlohmann::json> LoadConfigAsync(std::string path);
 
-            Task<Result<void>> SaveConfigAsyncResult(const std::string& path, const nlohmann::json& config);
-            Task<Result<nlohmann::json>> LoadConfigAsyncResult(const std::string& path);
+            Task<Result<void>> SaveConfigAsyncResult(std::string path, nlohmann::json config);
+            Task<Result<nlohmann::json>> LoadConfigAsyncResult(std::string path);
 
             /// Utility operations.
-            Task<size_t> GetFileSizeAsync(const std::string& path);
-            Task<std::filesystem::file_time_type> GetFileModifiedTimeAsync(const std::string& path);
+            Task<size_t> GetFileSizeAsync(std::string path);
+            Task<std::filesystem::file_time_type> GetFileModifiedTimeAsync(std::string path);
 
             /// General-purpose async execution on the AsyncIO worker pool.
             /// This is useful for CPU-side asset processing (decode, parsing) where you want
@@ -169,7 +169,7 @@ namespace Life
 
         private:
             AsyncIO() = default;
-            ~AsyncIO()
+            ~AsyncIO() noexcept
             {
                 // Ensure we never hit std::terminate due to joinable threads during
                 // static deinitialization / process exit.

@@ -3,6 +3,7 @@
 #include "Core/Log.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <exception>
 #include <limits>
 
@@ -49,7 +50,7 @@ namespace Life
         return instance;
     }
 
-    JobSystem::~JobSystem()
+    JobSystem::~JobSystem() noexcept
     {
         Shutdown();
     }
@@ -86,7 +87,7 @@ namespace Life
         LOG_CORE_INFO("JobSystem initialized with {} simulation workers", threadCount);
     }
 
-    void JobSystem::Shutdown()
+    void JobSystem::Shutdown() noexcept
     {
         if (!m_Initialized.load(std::memory_order_acquire))
             return;
@@ -107,7 +108,18 @@ namespace Life
         while (m_InjectorQueue.TryPop().has_value()) {}
 
         m_Initialized.store(false, std::memory_order_release);
-        LOG_CORE_INFO("JobSystem shutdown complete");
+        try
+        {
+            LOG_CORE_INFO("JobSystem shutdown complete");
+        }
+        catch (const std::exception& exception)
+        {
+            std::fprintf(stderr, "JobSystem shutdown complete (logging failed: %s)\n", exception.what());
+        }
+        catch (...)
+        {
+            std::fprintf(stderr, "JobSystem shutdown complete\n");
+        }
     }
 
     bool JobSystem::TrySubmit(std::function<void()> job)
@@ -291,11 +303,25 @@ namespace Life
             }
             catch (const std::exception& exception)
             {
-                LOG_CORE_ERROR("JobSystem worker exception: {}", exception.what());
+                try
+                {
+                    LOG_CORE_ERROR("JobSystem worker exception: {}", exception.what());
+                }
+                catch (...)
+                {
+                    std::fprintf(stderr, "JobSystem worker exception: %s\n", exception.what());
+                }
             }
             catch (...)
             {
-                LOG_CORE_ERROR("JobSystem worker exception: unknown error");
+                try
+                {
+                    LOG_CORE_ERROR("JobSystem worker exception: unknown error");
+                }
+                catch (...)
+                {
+                    std::fprintf(stderr, "JobSystem worker exception: unknown error\n");
+                }
             }
 
             CompleteOneJob();

@@ -1,4 +1,5 @@
 #include "Core/Concurrency/AsyncIO.h"
+#include <cstdio>
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -26,7 +27,18 @@ namespace Life
             if (threadCount == 0)
                 threadCount = 4;
 
-            LOG_CORE_INFO("Initializing AsyncIO with {} threads", threadCount);
+            try
+            {
+                LOG_CORE_INFO("Initializing AsyncIO with {} threads", threadCount);
+            }
+            catch (const std::exception& exception)
+            {
+                std::fprintf(stderr, "Initializing AsyncIO with %zu threads (logging failed: %s)\n", threadCount, exception.what());
+            }
+            catch (...)
+            {
+                std::fprintf(stderr, "Initializing AsyncIO with %zu threads\n", threadCount);
+            }
 
             m_Shutdown.store(false);
             m_Threads.reserve(threadCount);
@@ -37,15 +49,29 @@ namespace Life
             }
 
             m_AcceptingTasks.store(true);
-            LOG_CORE_INFO("AsyncIO initialized successfully");
+            try
+            {
+                LOG_CORE_INFO("AsyncIO initialized successfully");
+            }
+            catch (...)
+            {
+                std::fprintf(stderr, "AsyncIO initialized successfully\n");
+            }
         }
 
-        void AsyncIO::Shutdown()
+        void AsyncIO::Shutdown() noexcept
         {
             if (!m_Initialized.load())
                 return;
 
-            LOG_CORE_INFO("Shutting down AsyncIO...");
+            try
+            {
+                LOG_CORE_INFO("Shutting down AsyncIO...");
+            }
+            catch (...)
+            {
+                std::fprintf(stderr, "Shutting down AsyncIO...\n");
+            }
 
             // Stop accepting new tasks, then request worker shutdown. Workers drain the queue before exiting.
             m_AcceptingTasks.store(false);
@@ -62,7 +88,14 @@ namespace Life
             m_Threads.clear();
             m_Initialized.store(false);
 
-            LOG_CORE_INFO("AsyncIO shutdown complete");
+            try
+            {
+                LOG_CORE_INFO("AsyncIO shutdown complete");
+            }
+            catch (...)
+            {
+                std::fprintf(stderr, "AsyncIO shutdown complete\n");
+            }
         }
 
         void AsyncIO::WorkerThread()
@@ -95,7 +128,25 @@ namespace Life
                 }
                 catch (const std::exception& e)
                 {
-                    LOG_CORE_ERROR("Exception in async worker thread: {}", e.what());
+                    try
+                    {
+                        LOG_CORE_ERROR("Exception in async worker thread: {}", e.what());
+                    }
+                    catch (...)
+                    {
+                        std::fprintf(stderr, "Exception in async worker thread: %s\n", e.what());
+                    }
+                }
+                catch (...)
+                {
+                    try
+                    {
+                        LOG_CORE_ERROR("Exception in async worker thread: unknown error");
+                    }
+                    catch (...)
+                    {
+                        std::fprintf(stderr, "Exception in async worker thread: unknown error\n");
+                    }
                 }
             }
         }
@@ -124,14 +175,21 @@ namespace Life
                 return;
             }
 
-            LOG_CORE_WARN("Async task queue is full; executing task inline");
+            try
+            {
+                LOG_CORE_WARN("Async task queue is full; executing task inline");
+            }
+            catch (...)
+            {
+                std::fprintf(stderr, "Async task queue is full; executing task inline\n");
+            }
             task();
         }
 
         // File operations implementation
-        Task<std::string> AsyncIO::ReadFileAsync(const std::string& path)
+        Task<std::string> AsyncIO::ReadFileAsync(std::string path)
         {
-            return Submit([path]() -> std::string {
+            return Submit([path = std::move(path)]() -> std::string {
                 std::ifstream file(path, std::ios::binary);
                 if (!file.is_open())
                 {
@@ -144,9 +202,9 @@ namespace Life
             });
         }
 
-        Task<Result<std::string>> AsyncIO::ReadFileAsyncResult(const std::string& path)
+        Task<Result<std::string>> AsyncIO::ReadFileAsyncResult(std::string path)
         {
-            return Submit([path]() -> Result<std::string> {
+            return Submit([path = std::move(path)]() -> Result<std::string> {
                 std::ifstream file(path, std::ios::binary);
                 if (!file.is_open())
                 {
@@ -159,9 +217,9 @@ namespace Life
             });
         }
 
-        Task<void> AsyncIO::WriteFileAsync(const std::string& path, const std::string& content)
+        Task<void> AsyncIO::WriteFileAsync(std::string path, std::string content)
         {
-            return Submit([path, content]() -> void {
+            return Submit([path = std::move(path), content = std::move(content)]() -> void {
                 std::ofstream file(path, std::ios::binary);
                 if (!file.is_open())
                 {
@@ -176,9 +234,9 @@ namespace Life
             });
         }
 
-        Task<Result<void>> AsyncIO::WriteFileAsyncResult(const std::string& path, const std::string& content)
+        Task<Result<void>> AsyncIO::WriteFileAsyncResult(std::string path, std::string content)
         {
-            return Submit([path, content]() -> Result<void> {
+            return Submit([path = std::move(path), content = std::move(content)]() -> Result<void> {
                 std::ofstream file(path, std::ios::binary);
                 if (!file.is_open())
                 {
@@ -195,16 +253,16 @@ namespace Life
             });
         }
 
-        Task<bool> AsyncIO::FileExistsAsync(const std::string& path)
+        Task<bool> AsyncIO::FileExistsAsync(std::string path)
         {
-            return Submit([path]() -> bool {
+            return Submit([path = std::move(path)]() -> bool {
                 return std::filesystem::exists(path);
             });
         }
 
-        Task<std::vector<std::string>> AsyncIO::ReadLinesAsync(const std::string& path)
+        Task<std::vector<std::string>> AsyncIO::ReadLinesAsync(std::string path)
         {
-            return Submit([path]() -> std::vector<std::string> {
+            return Submit([path = std::move(path)]() -> std::vector<std::string> {
                 std::ifstream file(path);
                 if (!file.is_open())
                 {
@@ -222,9 +280,9 @@ namespace Life
             });
         }
 
-        Task<void> AsyncIO::AppendFileAsync(const std::string& path, const std::string& content)
+        Task<void> AsyncIO::AppendFileAsync(std::string path, std::string content)
         {
-            return Submit([path, content]() -> void {
+            return Submit([path = std::move(path), content = std::move(content)]() -> void {
                 std::ofstream file(path, std::ios::app | std::ios::binary);
                 if (!file.is_open())
                 {
@@ -239,9 +297,9 @@ namespace Life
             });
         }
 
-        Task<Result<void>> AsyncIO::AppendFileAsyncResult(const std::string& path, const std::string& content)
+        Task<Result<void>> AsyncIO::AppendFileAsyncResult(std::string path, std::string content)
         {
-            return Submit([path, content]() -> Result<void> {
+            return Submit([path = std::move(path), content = std::move(content)]() -> Result<void> {
                 std::ofstream file(path, std::ios::app | std::ios::binary);
                 if (!file.is_open())
                 {
@@ -258,9 +316,9 @@ namespace Life
             });
         }
 
-        Task<std::vector<std::string>> AsyncIO::ListDirectoryAsync(const std::string& path)
+        Task<std::vector<std::string>> AsyncIO::ListDirectoryAsync(std::string path)
         {
-            return Submit([path]() -> std::vector<std::string> {
+            return Submit([path = std::move(path)]() -> std::vector<std::string> {
                 std::vector<std::string> entries;
                 
                 try
@@ -279,9 +337,9 @@ namespace Life
             });
         }
 
-        Task<bool> AsyncIO::CreateDirectoryAsync(const std::string& path)
+        Task<bool> AsyncIO::CreateDirectoryAsync(std::string path)
         {
-            return Submit([path]() -> bool {
+            return Submit([path = std::move(path)]() -> bool {
                 try
                 {
                     return std::filesystem::create_directories(path);
@@ -293,9 +351,9 @@ namespace Life
             });
         }
 
-        Task<bool> AsyncIO::DeleteFileAsync(const std::string& path)
+        Task<bool> AsyncIO::DeleteFileAsync(std::string path)
         {
-            return Submit([path]() -> bool {
+            return Submit([path = std::move(path)]() -> bool {
                 try
                 {
                     return std::filesystem::remove(path);
@@ -307,9 +365,9 @@ namespace Life
             });
         }
 
-        Task<bool> AsyncIO::DeleteDirectoryAsync(const std::string& path)
+        Task<bool> AsyncIO::DeleteDirectoryAsync(std::string path)
         {
-            return Submit([path]() -> bool {
+            return Submit([path = std::move(path)]() -> bool {
                 try
                 {
                     return std::filesystem::remove_all(path) > 0;
@@ -321,9 +379,9 @@ namespace Life
             });
         }
 
-        Task<void> AsyncIO::SaveConfigAsync(const std::string& path, const nlohmann::json& config)
+        Task<void> AsyncIO::SaveConfigAsync(std::string path, nlohmann::json config)
         {
-            return Submit([path, config]() -> void {
+            return Submit([path = std::move(path), config = std::move(config)]() -> void {
                 std::ofstream file(path);
                 if (!file.is_open())
                 {
@@ -338,9 +396,9 @@ namespace Life
             });
         }
 
-        Task<Result<void>> AsyncIO::SaveConfigAsyncResult(const std::string& path, const nlohmann::json& config)
+        Task<Result<void>> AsyncIO::SaveConfigAsyncResult(std::string path, nlohmann::json config)
         {
-            return Submit([path, config]() -> Result<void> {
+            return Submit([path = std::move(path), config = std::move(config)]() -> Result<void> {
                 std::ofstream file(path);
                 if (!file.is_open())
                 {
@@ -357,9 +415,9 @@ namespace Life
             });
         }
 
-        Task<nlohmann::json> AsyncIO::LoadConfigAsync(const std::string& path)
+        Task<nlohmann::json> AsyncIO::LoadConfigAsync(std::string path)
         {
-            return Submit([path]() -> nlohmann::json {
+            return Submit([path = std::move(path)]() -> nlohmann::json {
                 std::ifstream file(path);
                 if (!file.is_open())
                 {
@@ -372,9 +430,9 @@ namespace Life
             });
         }
 
-        Task<Result<nlohmann::json>> AsyncIO::LoadConfigAsyncResult(const std::string& path)
+        Task<Result<nlohmann::json>> AsyncIO::LoadConfigAsyncResult(std::string path)
         {
-            return Submit([path]() -> Result<nlohmann::json> {
+            return Submit([path = std::move(path)]() -> Result<nlohmann::json> {
                 std::ifstream file(path);
                 if (!file.is_open())
                 {
@@ -394,9 +452,9 @@ namespace Life
             });
         }
 
-        Task<size_t> AsyncIO::GetFileSizeAsync(const std::string& path)
+        Task<size_t> AsyncIO::GetFileSizeAsync(std::string path)
         {
-            return Submit([path]() -> size_t {
+            return Submit([path = std::move(path)]() -> size_t {
                 try
                 {
                     return std::filesystem::file_size(path);
@@ -408,9 +466,9 @@ namespace Life
             });
         }
 
-        Task<std::filesystem::file_time_type> AsyncIO::GetFileModifiedTimeAsync(const std::string& path)
+        Task<std::filesystem::file_time_type> AsyncIO::GetFileModifiedTimeAsync(std::string path)
         {
-            return Submit([path]() -> std::filesystem::file_time_type {
+            return Submit([path = std::move(path)]() -> std::filesystem::file_time_type {
                 try
                 {
                     return std::filesystem::last_write_time(path);

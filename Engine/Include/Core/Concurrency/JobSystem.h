@@ -38,7 +38,7 @@ namespace Life
         static JobSystem& GetInstance();
 
         void Initialize(size_t threadCount = 0);
-        void Shutdown();
+        void Shutdown() noexcept;
 
         bool IsInitialized() const { return m_Initialized.load(std::memory_order_acquire); }
         size_t GetWorkerCount() const { return m_Workers.size(); }
@@ -100,7 +100,7 @@ namespace Life
 
     private:
         JobSystem() = default;
-        ~JobSystem();
+        ~JobSystem() noexcept;
         JobSystem(const JobSystem&) = delete;
         JobSystem& operator=(const JobSystem&) = delete;
 

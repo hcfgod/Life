@@ -177,9 +177,9 @@ namespace Life
         return Avalanche(h64);
     }
 
-    uint64_t XxHash64::Compute(const void* data, const size_t size, const uint64_t seed)
+    uint64_t XxHash64::Compute(const void* data, const size_t size, const Seed seed)
     {
-        State state(seed);
+        State state(seed.Value);
         state.Update(data, size);
         return state.Digest();
     }
