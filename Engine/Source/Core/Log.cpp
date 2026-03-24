@@ -57,8 +57,8 @@ namespace Life
 
     std::mutex Log::s_Mutex;
     bool Log::s_Initialized = false;
-    std::atomic<std::shared_ptr<spdlog::logger>> Log::s_CoreLogger;
-    std::atomic<std::shared_ptr<spdlog::logger>> Log::s_ClientLogger;
+    Log::SharedPtrStorage<spdlog::logger> Log::s_CoreLogger;
+    Log::SharedPtrStorage<spdlog::logger> Log::s_ClientLogger;
 
     LogSpecification& Log::GetMutableSpecification()
     {
@@ -91,29 +91,29 @@ namespace Life
 
     std::shared_ptr<spdlog::logger> Log::GetCoreLogger()
     {
-        std::shared_ptr<spdlog::logger> logger = s_CoreLogger.load(std::memory_order_acquire);
+        std::shared_ptr<spdlog::logger> logger = s_CoreLogger.Load();
         if (logger != nullptr)
             return logger;
 
         std::scoped_lock lock(s_Mutex);
         EnsureInitializedLocked();
-        return s_CoreLogger.load(std::memory_order_acquire);
+        return s_CoreLogger.Load();
     }
 
     std::shared_ptr<spdlog::logger> Log::GetClientLogger()
     {
-        std::shared_ptr<spdlog::logger> logger = s_ClientLogger.load(std::memory_order_acquire);
+        std::shared_ptr<spdlog::logger> logger = s_ClientLogger.Load();
         if (logger != nullptr)
             return logger;
 
         std::scoped_lock lock(s_Mutex);
         EnsureInitializedLocked();
-        return s_ClientLogger.load(std::memory_order_acquire);
+        return s_ClientLogger.Load();
     }
 
     void Log::EnsureInitializedLocked()
     {
-        if (s_Initialized && s_CoreLogger.load(std::memory_order_acquire) && s_ClientLogger.load(std::memory_order_acquire))
+        if (s_Initialized && s_CoreLogger.Load() && s_ClientLogger.Load())
             return;
 
         ReinitializeLocked(GetMutableSpecification());
@@ -123,8 +123,8 @@ namespace Life
     {
         auto [coreLogger, clientLogger] = CreateLoggers(specification);
 
-        s_CoreLogger.store(std::move(coreLogger), std::memory_order_release);
-        s_ClientLogger.store(std::move(clientLogger), std::memory_order_release);
+        s_CoreLogger.Store(std::move(coreLogger));
+        s_ClientLogger.Store(std::move(clientLogger));
         GetMutableSpecification() = specification;
         s_Initialized = true;
     }

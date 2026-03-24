@@ -36,14 +36,55 @@ namespace Life
         static std::shared_ptr<spdlog::logger> GetClientLogger();
 
     private:
+        template<typename T>
+        class SharedPtrStorage final
+        {
+        public:
+            SharedPtrStorage() = default;
+
+            explicit SharedPtrStorage(std::shared_ptr<T> value)
+#if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
+                : m_Value(std::move(value))
+#else
+                : m_Value(std::move(value))
+#endif
+            {
+            }
+
+            std::shared_ptr<T> Load() const
+            {
+#if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
+                return m_Value.load(std::memory_order_acquire);
+#else
+                return std::atomic_load_explicit(&m_Value, std::memory_order_acquire);
+#endif
+            }
+
+            void Store(std::shared_ptr<T> value)
+            {
+#if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
+                m_Value.store(std::move(value), std::memory_order_release);
+#else
+                std::atomic_store_explicit(&m_Value, std::move(value), std::memory_order_release);
+#endif
+            }
+
+        private:
+#if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
+            std::atomic<std::shared_ptr<T>> m_Value;
+#else
+            std::shared_ptr<T> m_Value;
+#endif
+        };
+
         static void EnsureInitializedLocked();
         static void ReinitializeLocked(const LogSpecification& specification);
         static LogSpecification& GetMutableSpecification();
 
         static std::mutex s_Mutex;
         static bool s_Initialized;
-        static std::atomic<std::shared_ptr<spdlog::logger>> s_CoreLogger;
-        static std::atomic<std::shared_ptr<spdlog::logger>> s_ClientLogger;
+        static SharedPtrStorage<spdlog::logger> s_CoreLogger;
+        static SharedPtrStorage<spdlog::logger> s_ClientLogger;
     };
 }
 

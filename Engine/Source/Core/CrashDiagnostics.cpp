@@ -36,6 +36,47 @@ namespace Life
 {
     namespace
     {
+        template<typename T>
+        class SharedPtrStorage final
+        {
+        public:
+            SharedPtrStorage() = default;
+
+            explicit SharedPtrStorage(std::shared_ptr<T> value)
+#if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
+                : m_Value(std::move(value))
+#else
+                : m_Value(std::move(value))
+#endif
+            {
+            }
+
+            std::shared_ptr<T> Load() const
+            {
+#if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
+                return m_Value.load(std::memory_order_acquire);
+#else
+                return std::atomic_load_explicit(&m_Value, std::memory_order_acquire);
+#endif
+            }
+
+            void Store(std::shared_ptr<T> value)
+            {
+#if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
+                m_Value.store(std::move(value), std::memory_order_release);
+#else
+                std::atomic_store_explicit(&m_Value, std::move(value), std::memory_order_release);
+#endif
+            }
+
+        private:
+#if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
+            std::atomic<std::shared_ptr<T>> m_Value;
+#else
+            std::shared_ptr<T> m_Value;
+#endif
+        };
+
         struct CrashConfigurationSnapshot
         {
             CrashReportingSpecification Specification;
@@ -58,7 +99,7 @@ namespace Life
         struct CrashDiagnosticsState
         {
             std::mutex Mutex;
-            std::atomic<std::shared_ptr<CrashConfigurationSnapshot>> Snapshot{ std::make_shared<CrashConfigurationSnapshot>() };
+            SharedPtrStorage<CrashConfigurationSnapshot> Snapshot{ std::make_shared<CrashConfigurationSnapshot>() };
             std::filesystem::path LastReportPath;
             bool Installed = false;
             std::terminate_handler PreviousTerminateHandler = nullptr;
@@ -84,12 +125,12 @@ namespace Life
 
         std::shared_ptr<CrashConfigurationSnapshot> LoadSnapshot()
         {
-            return GetState().Snapshot.load(std::memory_order_acquire);
+            return GetState().Snapshot.Load();
         }
 
         void StoreSnapshot(std::shared_ptr<CrashConfigurationSnapshot> snapshot)
         {
-            GetState().Snapshot.store(std::move(snapshot), std::memory_order_release);
+            GetState().Snapshot.Store(std::move(snapshot));
         }
 
         void StoreLastReportPath(const std::filesystem::path& reportPath)
