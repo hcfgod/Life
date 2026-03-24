@@ -1,19 +1,38 @@
 # Logging
 
-## Overview
+## Purpose
 
-Life exposes engine-owned logging through `Life::Log` and `Life::LogSpecification`.
+Life exposes engine-owned logging through `Life::Log` and `LogSpecification`.
 
-The goal is to keep logging:
+The intent is to provide a single logging surface that is:
 
-- configurable through the engine API
-- safe for concurrent use
-- available early in application bootstrap
-- independent from application code reaching directly into `spdlog` internals
+- configurable through engine-facing APIs
+- safe to initialize and reconfigure from concurrent code paths
+- available early in application startup
+- independent from consumers mutating `spdlog` globals directly
 
-## Configuration Surface
+## Main API Surface
 
-`ApplicationSpecification` now owns a `Logging` field of type `LogSpecification`.
+The logging API is intentionally small.
+
+The main entry points are:
+
+- `Log::Init()`
+- `Log::Configure(...)`
+- `Log::GetSpecification()`
+- `Log::GetCoreLogger()`
+- `Log::GetClientLogger()`
+
+Most application code should not need to interact with raw logger instances directly. In normal use, the convenience macros are the primary surface:
+
+- `LOG_CORE_TRACE`, `LOG_CORE_INFO`, `LOG_CORE_WARN`, `LOG_CORE_ERROR`, `LOG_CORE_CRITICAL`
+- `LOG_TRACE`, `LOG_INFO`, `LOG_WARN`, `LOG_ERROR`, `LOG_CRITICAL`
+
+## Configuration Model
+
+`ApplicationSpecification` owns a `Logging` field of type `LogSpecification`.
+
+That makes logging part of the normal application configuration path rather than a separate global setup phase.
 
 Important fields include:
 
@@ -29,7 +48,7 @@ Important fields include:
 - `MaxFileSize`
 - `MaxFileCount`
 
-This lets an application configure logging before the first engine lifecycle logs are emitted.
+`ApplicationHost` applies this specification during construction, before window creation and before most lifecycle logging begins. That is the authoritative configuration point for a running application.
 
 ## Example
 
@@ -43,30 +62,105 @@ specification.Logging.EnableFile = true;
 specification.Logging.FilePath = "logs/runtime.log";
 ```
 
-## Threading Characteristics
+## Logger Construction Model
 
-The logging layer is protected by an engine-owned mutex during configuration and lazy initialization.
+The logging layer builds two logger instances:
+
+- a core logger for engine messages
+- a client logger for application-facing messages
+
+Both logger instances are constructed from the same sink set derived from the active `LogSpecification`.
+
+In the current implementation:
+
+- console logging uses `spdlog::sinks::stdout_color_sink_mt`
+- file logging uses `spdlog::sinks::rotating_file_sink_mt`
+- each sink receives the configured pattern
+- each logger receives its own level and flush threshold
+
+This means the engine and client loggers can differ in name and severity level while still writing to the same destinations.
+
+## Lazy Initialization
+
+The logging system supports explicit initialization through `Log::Init()`, but it is also lazy-safe.
+
+If code requests `GetCoreLogger()` or `GetClientLogger()` before explicit initialization, the logging layer initializes itself using the current stored specification.
+
+That behavior is important because it allows early code paths, assertions, and bootstrap diagnostics to obtain a logger without requiring every caller to coordinate a separate setup step.
+
+## Thread-Safety Characteristics
+
+The current implementation protects configuration and first-time initialization with an engine-owned mutex and stores active logger instances through shared-pointer storage.
 
 This gives the following guarantees:
 
 - concurrent calls to `Log::Init()` are safe
-- concurrent first access through `GetCoreLogger()` / `GetClientLogger()` is safe
+- concurrent first access through `GetCoreLogger()` and `GetClientLogger()` is safe
 - reconfiguration through `Log::Configure(...)` is serialized
-- the active logger instances use `spdlog` multi-threaded sink types
+- active sink types are the multi-threaded `spdlog` variants
 
-## Operational Notes
+This is a boundary guarantee, not a promise of globally ordered logging across threads.
 
-- Logger construction is lazy-safe; requesting a logger initializes the backend if necessary.
-- If file logging is enabled, parent directories are created automatically.
-- If both console and file sinks are disabled, the engine falls back to a console sink rather than leaving logging inert.
-- Reconfiguration replaces the registered engine loggers with new logger instances built from the current specification.
+## Sink and File Behavior
 
-## Usage Guidance
+Several runtime behaviors are worth calling out because they affect operations and debugging.
+
+### Console Output
+
+If `EnableConsole` is true, the logger set includes a color console sink.
+
+### File Output
+
+If `EnableFile` is true, the logger set includes a rotating file sink.
+
+Current behavior:
+
+- `FilePath` must be non-empty when file logging is enabled
+- parent directories are created automatically when needed
+- file rotation uses `MaxFileSize` and `MaxFileCount`
+
+If file logging is enabled and no file path is provided, logger construction throws.
+
+### No-Sink Fallback
+
+If both console and file output are disabled, the engine falls back to a console sink instead of creating inert loggers.
+
+That keeps the logging system operational even under a misconfigured specification.
+
+## Reconfiguration Behavior
+
+`Log::Configure(...)` rebuilds the logger pair from the supplied specification and replaces the active logger instances.
+
+This is not an in-place mutation of existing logger objects. Reconfiguration creates a fresh sink/logger set and then publishes the new loggers as the active instances.
+
+In practice, that means:
+
+- the current specification becomes the new authoritative configuration
+- future logger retrievals observe the new logger pair
+- crash diagnostics and other systems that query the current specification see the updated values
+
+## Relationship to Crash Diagnostics
+
+Crash diagnostics use the logging layer in two ways:
+
+- they attempt to flush both core and client loggers before writing a crash report
+- they include selected logging configuration details in the generated report
+
+That coupling is intentional. It improves the odds that the final log messages around a failure are preserved and makes the crash artifact more useful during investigation.
+
+## Recommended Usage
 
 Use `ApplicationSpecification.Logging` as the main integration point.
 
-Prefer this over ad hoc calls into `spdlog::set_pattern`, `spdlog::set_level`, or direct global registry mutation from random engine/application code.
+Recommended practice:
 
-## Caveat
+- configure logging through the application specification rather than ad hoc runtime mutation
+- use the logging macros for normal call sites
+- treat raw logger access as an escape hatch for advanced formatting or sink-aware behavior
+- avoid relying on direct `spdlog` global registry manipulation from random engine or application code
 
-The engine logging layer is thread-safe for logging and reconfiguration boundaries, but message ordering between threads is still naturally interleaved by concurrency. Thread-safe does not mean globally serialized semantic ordering.
+## Caveat on Ordering
+
+The logging layer is thread-safe for initialization, retrieval, and reconfiguration boundaries, but message order between threads remains naturally interleaved under concurrency.
+
+Thread-safe logging should not be interpreted as semantically serialized logging.

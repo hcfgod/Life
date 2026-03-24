@@ -30,8 +30,8 @@ The workspace currently has first-class build support for:
 - Windows arm64 via Visual Studio 2022 / MSBuild
 - Linux x64 via Clang and GNU Make (`gmake2` generation)
 - Linux arm64 via Clang and GNU Make (`gmake2` generation) on arm64 hosts
-- macOS x64 via Clang and GNU Make (`gmake2` generation)
-- macOS arm64 / Apple Silicon via Clang and GNU Make (`gmake2` generation)
+- macOS x64 via Clang, with setup paths supporting both `gmake2` and `xcode4`
+- macOS arm64 / Apple Silicon via Clang, with setup paths supporting both `gmake2` and `xcode4`
 
 SDL3, `spdlog`, `nlohmann/json`, and `doctest` are brought in through Git submodules. Premake is used to generate project files, and the setup scripts can bootstrap local copies of Premake and CMake when they are not already installed.
 
@@ -138,6 +138,8 @@ Cross-compiling does not imply same-host execution of the produced target binary
    ./Setup.sh gmake2
    ```
 
+   If no action is supplied on macOS, `Setup.sh` currently defaults to `xcode4`. The documented examples here use `gmake2` because that is the path exercised by the build and test helper scripts.
+
 3. Build the workspace:
 
    ```bash
@@ -181,9 +183,12 @@ To target Intel explicitly:
 
 ## Documents
 
-- `Documents/PlatformSupport.md` - target platforms, Windows/Linux/macOS architecture notes, and build/CI expectations.
-- `Documents/Logging.md` - logging configuration, threading behavior, and integration guidance.
+- `Documents/ApplicationArchitecture.md` - the canonical startup path, ownership model, service registry boundaries, and authoritative loop structure.
 - `Documents/EventThreadingInvariants.md` - runtime ownership, event ordering, and thread-safety boundaries.
+- `Documents/Logging.md` - logging configuration, sink behavior, reconfiguration, and integration guidance.
+- `Documents/CrashDiagnostics.md` - crash-reporting lifecycle, report contents, handled-exception reporting, and platform-specific behavior.
+- `Documents/ErrorHandling.md` - the structured error model, `Result<T>` conventions, assertions, verification, and system-error translation.
+- `Documents/PlatformSupport.md` - target platforms, Windows/Linux/macOS architecture notes, and build/CI expectations.
 
 ## Repository Layout
 
