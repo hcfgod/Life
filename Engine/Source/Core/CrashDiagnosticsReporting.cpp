@@ -457,24 +457,39 @@ namespace Life::CrashDiagnosticsDetail
     }
 #endif
 
-    std::filesystem::path WriteCrashDiagnosticsReport(
+    std::filesystem::path WriteCrashDiagnosticsReportImpl(
         const CrashDiagnosticsEvent& event
 #if defined(LIFE_PLATFORM_WINDOWS)
         , EXCEPTION_POINTERS* exceptionPointers
 #endif
     );
 
+#if defined(LIFE_PLATFORM_WINDOWS)
     std::filesystem::path WriteCrashDiagnosticsReport(const CrashDiagnosticsEvent& event)
     {
-        return WriteCrashDiagnosticsReport(
+        return WriteCrashDiagnosticsReportImpl(
             event
-#if defined(LIFE_PLATFORM_WINDOWS)
             , nullptr
-#endif
         );
     }
 
     std::filesystem::path WriteCrashDiagnosticsReport(
+        const CrashDiagnosticsEvent& event
+        , EXCEPTION_POINTERS* exceptionPointers
+    )
+#else
+    std::filesystem::path WriteCrashDiagnosticsReport(const CrashDiagnosticsEvent& event)
+#endif
+    {
+        return WriteCrashDiagnosticsReportImpl(
+            event
+#if defined(LIFE_PLATFORM_WINDOWS)
+            , exceptionPointers
+#endif
+        );
+    }
+
+    std::filesystem::path WriteCrashDiagnosticsReportImpl(
         const CrashDiagnosticsEvent& event
 #if defined(LIFE_PLATFORM_WINDOWS)
         , EXCEPTION_POINTERS* exceptionPointers

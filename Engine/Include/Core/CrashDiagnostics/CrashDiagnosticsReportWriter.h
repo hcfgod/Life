@@ -15,12 +15,12 @@ namespace Life::CrashDiagnosticsDetail
     std::string DescribeCrashSignal(int signalNumber);
 #if defined(LIFE_PLATFORM_WINDOWS)
     std::string DescribeWindowsExceptionCode(std::uint32_t exceptionCode);
-#endif
     std::filesystem::path WriteCrashDiagnosticsReport(const CrashDiagnosticsEvent& event);
     std::filesystem::path WriteCrashDiagnosticsReport(
         const CrashDiagnosticsEvent& event
-#if defined(LIFE_PLATFORM_WINDOWS)
         , EXCEPTION_POINTERS* exceptionPointers
-#endif
     );
+#else
+    std::filesystem::path WriteCrashDiagnosticsReport(const CrashDiagnosticsEvent& event);
+#endif
 }
