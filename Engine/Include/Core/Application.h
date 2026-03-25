@@ -54,9 +54,9 @@ namespace Life
         void HandleEvent(Event& event);
 
         template<typename TEvent, typename TFunction>
-        EventSubscriptionId SubscribeEvent(TFunction&& function)
+        EventSubscriptionId SubscribeEvent(TFunction&& function, EventSubscriptionOptions<TEvent> options = {})
         {
-            return RequireEventRouter().Subscribe<TEvent>(std::forward<TFunction>(function));
+            return RequireEventRouter().Subscribe<TEvent>(std::forward<TFunction>(function), std::move(options));
         }
 
         bool UnsubscribeEvent(EventSubscriptionId subscriptionId)
@@ -76,7 +76,7 @@ namespace Life
 
             TEvent event(std::forward<TArguments>(arguments)...);
             HandleEvent(event);
-            return event.Handled;
+            return event.IsHandled();
         }
 
         void Shutdown();

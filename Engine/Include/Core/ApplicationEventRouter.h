@@ -13,9 +13,9 @@ namespace Life
     {
     public:
         template<typename TEvent, typename TFunction>
-        EventSubscriptionId Subscribe(TFunction&& function)
+        EventSubscriptionId Subscribe(TFunction&& function, EventSubscriptionOptions<TEvent> options = {})
         {
-            return m_EventBus.Subscribe<TEvent>(std::forward<TFunction>(function));
+            return m_EventBus.Subscribe<TEvent>(std::forward<TFunction>(function), std::move(options));
         }
 
         bool Unsubscribe(EventSubscriptionId subscriptionId)

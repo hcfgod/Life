@@ -90,6 +90,71 @@ That means:
 
 This model avoids ambiguous lifetime questions such as whether a global subsystem belongs to the application object, the window, or the entrypoint.
 
+## Authoritative API Surface Rules
+
+The following rules define the intended public-facing architecture and should be treated as the default design contract for future changes.
+
+### Lifecycle authority
+
+`ApplicationHost` is the lifecycle authority for one running application instance.
+
+In practice, that means:
+
+- `ApplicationHost` owns the running and initialized state
+- `ApplicationHost` is the object that performs `Initialize()`, `RunFrame(float)`, `Shutdown()`, and `Finalize()` sequencing for the bound application instance
+- `ApplicationRunner` may drive the host from the canonical entry path, but it does not replace host ownership of lifecycle state
+- `Application` remains callback-oriented and must not become a second lifecycle controller
+- `ApplicationContext` may forward lifecycle requests to host-bound callbacks, but it is not itself an authority boundary
+
+The intended mental model is simple: the runner drives the loop, the host owns the lifecycle, and the application implements the callbacks.
+
+### Preferred service access path
+
+Prefer owner-bound service access over registry-shaped access.
+
+Concretely:
+
+- application-facing code should prefer `Application::GetService<T>()`, `TryGetService<T>()`, and `HasService<T>()`
+- engine infrastructure that already owns an `ApplicationHost` may use `ApplicationHost::GetServices()` because the host owns the authoritative registry
+- `ApplicationContext::GetService<T>()` is a secondary access path for code that is explicitly written around bound context plumbing
+- global lookup should never be the first choice when an application, host, context, or explicit registry reference is already available
+
+This keeps normal code expressed in terms of the object that already owns the relevant lifetime.
+
+### Global `GetServices()`
+
+Global `GetServices()` is allowed only as a narrow convenience for code that cannot reasonably depend on an owner-bound object.
+
+Acceptable cases include:
+
+- entry, runner, or bootstrap glue where the active host registry is intentionally ambient
+- platform callback bridges, static hooks, or foreign-function boundaries that cannot naturally receive an `Application` or `ApplicationHost`
+- low-level infrastructure or diagnostics paths where threading a typed owner through the stack would be artificial
+
+It should not be used:
+
+- from normal application code that already has access to `Application`
+- from host or engine code that already has `ApplicationHost`, `ApplicationContext`, or `ServiceRegistry&`
+- as a justification to make ownership unclear or to hide missing dependencies
+
+The fallback global registry must be treated as an empty compatibility surface. Code must not assume meaningful services exist when no host is active.
+
+### `ApplicationContext`
+
+`ApplicationContext` should be treated as mostly infrastructure, not as the primary public-facing application API.
+
+Its role is to:
+
+- hold the host-bound references to `Window`, `ApplicationRuntime`, and `ServiceRegistry`
+- expose lifecycle forwarding hooks that route back into the host
+- serve integration, testing, and narrow engine seams that need bound runtime state as a bundle
+
+New application-facing capabilities should generally land on `Application`.
+
+New engine-control or ownership-facing capabilities should generally land on `ApplicationHost`.
+
+`ApplicationContext` should only grow when the added surface is specifically about context binding, integration plumbing, or forwarding host-owned state.
+
 ## Service Registry Model
 
 The authoritative service container is `ServiceRegistry`.
@@ -109,8 +174,10 @@ Built-in registrations currently include:
 
 Practical guidance:
 
-- prefer `Application::GetService<T>()` or `ApplicationContext::GetService<T>()` when you already have an application/context reference
-- use global `GetServices()` as a convenience layer, not as a substitute for clear ownership
+- prefer `Application::GetService<T>()` for normal application-facing code
+- prefer `ApplicationHost::GetServices()` for infrastructure that already owns the host
+- treat `ApplicationContext::GetService<T>()` as infrastructure-oriented rather than the default public API
+- use global `GetServices()` only at ambient integration boundaries where owner-bound access is not practical
 - avoid assuming the fallback global registry contains meaningful services when no host is active
 
 ## Lifecycle Sequence

@@ -7,16 +7,21 @@ namespace Life
     void ApplicationEventRouter::Route(Application& application, Event& event)
     {
         application.OnEvent(event);
+        if (event.IsPropagationStopped())
+            return;
+
         m_EventBus.Dispatch(event);
+        if (event.IsPropagationStopped())
+            return;
 
         EventDispatcher dispatcher(event);
         dispatcher.Dispatch<WindowCloseEvent>([&application](WindowCloseEvent& closeEvent)
         {
-            if (closeEvent.Handled)
-                return false;
+            if (closeEvent.IsHandled())
+                return EventDispatchResult::Unhandled;
 
             application.Shutdown();
-            return true;
+            return EventDispatchResult::HandledAndStopPropagation;
         });
     }
 }
