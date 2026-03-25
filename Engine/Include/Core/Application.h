@@ -49,8 +49,6 @@ namespace Life
         explicit Application(ApplicationSpecification specification);
         virtual ~Application();
 
-        void Initialize();
-        void RunFrame(float timestep);
         void HandleEvent(Event& event);
 
         template<typename TEvent, typename TFunction>
@@ -79,8 +77,7 @@ namespace Life
             return event.IsHandled();
         }
 
-        void Shutdown();
-        void Finalize();
+        void RequestShutdown();
 
         bool IsRunning() const;
         bool IsInitialized() const;

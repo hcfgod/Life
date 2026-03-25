@@ -65,6 +65,8 @@ The important boundary is that `Application` does not own the loop. It is driven
 - `OnShutdown()`
 - `OnHostInitialize()` / `OnHostRunFrame()` / `OnHostFinalize()` as host-facing internal sequencing points
 
+`Application` may expose app-facing convenience such as `RequestShutdown()` for code that needs to ask the host to stop running, but it should not expose the host's broader lifecycle control surface.
+
 ### `ApplicationRuntime`
 
 `ApplicationRuntime` owns platform runtime behavior. In the current SDL-backed implementation, this includes process-wide runtime initialization and platform event polling.
@@ -104,6 +106,7 @@ In practice, that means:
 - `ApplicationHost` is the object that performs `Initialize()`, `RunFrame(float)`, `Shutdown()`, and `Finalize()` sequencing for the bound application instance
 - `ApplicationRunner` may drive the host from the canonical entry path, but it does not replace host ownership of lifecycle state
 - `Application` remains callback-oriented and must not become a second lifecycle controller
+- `Application` may request shutdown, but shutdown requests are still carried out through host-owned lifecycle state
 - `ApplicationContext` may forward lifecycle requests to host-bound callbacks, but it is not itself an authority boundary
 
 The intended mental model is simple: the runner drives the loop, the host owns the lifecycle, and the application implements the callbacks.

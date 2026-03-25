@@ -20,7 +20,7 @@ namespace Life
             if (closeEvent.IsHandled())
                 return EventDispatchResult::Unhandled;
 
-            application.Shutdown();
+            application.RequestShutdown();
             return EventDispatchResult::HandledAndStopPropagation;
         });
     }

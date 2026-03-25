@@ -132,7 +132,7 @@ namespace Life::Tests
             Trace.emplace_back("update");
 
             if (ShutdownOnUpdate)
-                Shutdown();
+                RequestShutdown();
         }
 
         void OnEvent(Life::Event& event) override

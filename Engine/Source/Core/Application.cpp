@@ -23,29 +23,14 @@ namespace Life
         }
     }
 
-    void Application::Initialize()
-    {
-        RequireContext().Initialize();
-    }
-
-    void Application::RunFrame(float timestep)
-    {
-        RequireContext().RunFrame(timestep);
-    }
-
     void Application::HandleEvent(Event& event)
     {
         RequireEventRouter().Route(*this, event);
     }
 
-    void Application::Shutdown()
+    void Application::RequestShutdown()
     {
         RequireContext().RequestShutdown();
-    }
-
-    void Application::Finalize()
-    {
-        RequireContext().Finalize();
     }
 
     bool Application::IsRunning() const
