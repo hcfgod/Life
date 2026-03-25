@@ -97,7 +97,7 @@ namespace Life::Tests
 
         TestRuntime& GetTestRuntime()
         {
-            return static_cast<TestRuntime&>(GetContext().GetRuntime());
+            return static_cast<TestRuntime&>(GetService<Life::ApplicationRuntime>());
         }
 
         const std::vector<std::string>& GetTrace() const

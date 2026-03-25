@@ -41,23 +41,21 @@ TEST_CASE("ApplicationHost registers built-in and custom services")
 
     CHECK(&host->GetServices().Get<Life::ApplicationHost>() == host.get());
     CHECK(&host->GetServices().Get<Life::Application>() == applicationInstance);
+    CHECK(&host->GetServices().Get<Life::ApplicationContext>() == &host->GetContext());
     CHECK(&host->GetServices().Get<Life::JobSystem>() == &Life::GetJobSystem());
     CHECK(&host->GetServices().Get<Life::Async::AsyncIO>() == &Life::Async::GetAsyncIO());
-    CHECK(&host->GetContext().GetService<Life::ApplicationHost>() == host.get());
-    CHECK(&host->GetContext().GetService<Life::JobSystem>() == &Life::GetJobSystem());
+    CHECK(&host->GetServices().Get<Life::ApplicationRuntime>() == &host->GetRuntime());
     CHECK(&applicationInstance->GetService<Life::Async::AsyncIO>() == &Life::Async::GetAsyncIO());
     CHECK(&applicationInstance->GetService<Life::ApplicationHost>() == host.get());
     CHECK(&applicationInstance->GetService<Life::Window>() == &host->GetWindow());
-    CHECK(&Life::GetServices() == &host->GetServices());
 
     TestService service{ 7 };
     host->GetServices().Register<TestService>(service);
 
-    CHECK(host->GetContext().HasService<TestService>());
+    CHECK(host->GetServices().Has<TestService>());
     CHECK(applicationInstance->HasService<TestService>());
     CHECK(applicationInstance->TryGetService<TestService>() == &service);
     CHECK(applicationInstance->GetService<TestService>().Value == 7);
-    CHECK(Life::GetServices().TryGet<TestService>() == &service);
 }
 
 TEST_CASE("Global service registry falls back after host destruction")

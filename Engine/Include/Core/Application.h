@@ -88,10 +88,6 @@ namespace Life
         const ApplicationSpecification& GetSpecification() const { return m_Specification; }
         Window& GetWindow();
         const Window& GetWindow() const;
-        ApplicationContext& GetContext();
-        const ApplicationContext& GetContext() const;
-        ServiceRegistry& GetServices();
-        const ServiceRegistry& GetServices() const;
 
         template<typename TService>
         TService& GetService()

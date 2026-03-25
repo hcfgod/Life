@@ -1,6 +1,23 @@
 #include "TestSupport.h"
 
+#include <type_traits>
+
 using namespace Life::Tests;
+
+namespace
+{
+    template<typename T, typename = void>
+    inline constexpr bool HasGetContextMember = false;
+
+    template<typename T>
+    inline constexpr bool HasGetContextMember<T, std::void_t<decltype(std::declval<T&>().GetContext())>> = true;
+
+    template<typename T, typename = void>
+    inline constexpr bool HasGetServicesMember = false;
+
+    template<typename T>
+    inline constexpr bool HasGetServicesMember<T, std::void_t<decltype(std::declval<T&>().GetServices())>> = true;
+}
 
 TEST_CASE("CreateScope stores values")
 {
@@ -39,11 +56,17 @@ TEST_CASE("Unbound application host dependent operations throw")
     CHECK_THROWS_AS(application.Shutdown(), std::logic_error);
     CHECK_THROWS_AS(application.Finalize(), std::logic_error);
     CHECK_THROWS_AS(application.GetWindow(), std::logic_error);
-    CHECK_THROWS_AS(application.GetContext(), std::logic_error);
-    CHECK_THROWS_AS(application.GetServices(), std::logic_error);
     CHECK_THROWS_AS(application.GetService<TestService>(), std::logic_error);
     CHECK_THROWS_AS(application.SubscribeEvent<Life::WindowCloseEvent>([](Life::WindowCloseEvent&) { return false; }), std::logic_error);
     CHECK_THROWS_AS(application.UnsubscribeEvent(1), std::logic_error);
+}
+
+TEST_CASE("Application public surface excludes raw context and registry access")
+{
+    static_assert(!HasGetContextMember<Life::Application>);
+    static_assert(!HasGetServicesMember<Life::Application>);
+
+    CHECK(true);
 }
 
 TEST_CASE("Application startup preserves init close shutdown ordering")
