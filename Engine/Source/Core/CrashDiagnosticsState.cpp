@@ -1,4 +1,4 @@
-#include "Core/CrashDiagnostics/CrashDiagnosticsState.h"
+#include "CrashDiagnostics/CrashDiagnosticsState.h"
 
 namespace Life::CrashDiagnosticsDetail
 {

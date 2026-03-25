@@ -1,5 +1,5 @@
-#include "Core/CrashDiagnostics/CrashDiagnosticsHandlers.h"
-#include "Core/CrashDiagnostics/CrashDiagnosticsState.h"
+#include "CrashDiagnostics/CrashDiagnosticsHandlers.h"
+#include "CrashDiagnostics/CrashDiagnosticsState.h"
 
 namespace Life
 {

@@ -1,5 +1,5 @@
-#include "Core/CrashDiagnostics/CrashDiagnosticsHandlers.h"
-#include "Core/CrashDiagnostics/CrashDiagnosticsReportWriter.h"
+#include "CrashDiagnostics/CrashDiagnosticsHandlers.h"
+#include "CrashDiagnostics/CrashDiagnosticsReportWriter.h"
 
 #include <cstdlib>
 

@@ -1,4 +1,4 @@
-#include "Core/CrashDiagnostics/CrashDiagnosticsReportWriter.h"
+#include "CrashDiagnostics/CrashDiagnosticsReportWriter.h"
 
 #include "Core/Error.h"
 #include "Core/Log.h"

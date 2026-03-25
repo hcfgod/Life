@@ -178,6 +178,42 @@ namespace
         std::string m_Message;
     };
 
+    struct CrashDiagnosticsConfigurationRestorer final
+    {
+        CrashDiagnosticsConfigurationRestorer()
+            : WasInstalled(Life::CrashDiagnostics::IsInstalled())
+            , OriginalSpecification(Life::CrashDiagnostics::GetSpecification())
+        {
+        }
+
+        ~CrashDiagnosticsConfigurationRestorer()
+        {
+            Life::CrashDiagnostics::Configure(OriginalSpecification);
+            if (WasInstalled)
+                Life::CrashDiagnostics::Install();
+            else
+                Life::CrashDiagnostics::Shutdown();
+        }
+
+        bool WasInstalled = false;
+        Life::CrashReportingSpecification OriginalSpecification;
+    };
+
+    bool CrashReportingSpecificationsEqual(
+        const Life::CrashReportingSpecification& left,
+        const Life::CrashReportingSpecification& right)
+    {
+        return left.Enabled == right.Enabled
+            && left.InstallHandlers == right.InstallHandlers
+            && left.CaptureSignals == right.CaptureSignals
+            && left.CaptureTerminate == right.CaptureTerminate
+            && left.CaptureUnhandledExceptions == right.CaptureUnhandledExceptions
+            && left.WriteReport == right.WriteReport
+            && left.WriteMiniDump == right.WriteMiniDump
+            && left.ReportDirectory == right.ReportDirectory
+            && left.MaxStackFrames == right.MaxStackFrames;
+    }
+
     struct CrashDiagnosticsTestScope final
     {
         explicit CrashDiagnosticsTestScope(std::filesystem::path reportDirectory)
@@ -496,6 +532,44 @@ TEST_CASE("Nested ApplicationHost instances share JobSystem and AsyncIO lifetime
 
     CHECK_FALSE(Life::GetJobSystem().IsInitialized());
     CHECK_FALSE(Life::Async::GetAsyncIO().IsInitialized());
+}
+
+TEST_CASE("Repeated ApplicationHost churn cleanly reinitializes shared JobSystem and AsyncIO services")
+{
+    for (int iteration = 0; iteration < 3; ++iteration)
+    {
+        CHECK_FALSE(Life::GetJobSystem().IsInitialized());
+        CHECK_FALSE(Life::Async::GetAsyncIO().IsInitialized());
+
+        {
+            auto host = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+            REQUIRE(Life::GetJobSystem().IsInitialized());
+            REQUIRE(Life::Async::GetAsyncIO().IsInitialized());
+
+            std::atomic<int> completedJobs = 0;
+            REQUIRE(Life::GetJobSystem().Submit([&completedJobs]() {
+                completedJobs.fetch_add(1, std::memory_order_acq_rel);
+            }));
+            Life::GetJobSystem().Wait();
+            CHECK(completedJobs.load(std::memory_order_acquire) == 1);
+
+            Life::Async::Task<int> task = Life::Async::GetAsyncIO().RunAsync([iteration]() {
+                return iteration + 10;
+            });
+            CHECK(task.Get() == iteration + 10);
+        }
+
+        CHECK_FALSE(Life::GetJobSystem().IsInitialized());
+        CHECK_FALSE(Life::Async::GetAsyncIO().IsInitialized());
+        CHECK_FALSE(Life::GetJobSystem().TrySubmit([]() {}));
+
+        Life::Async::Task<int> inlineTask = Life::Async::GetAsyncIO().RunAsync([iteration]() {
+            return iteration + 100;
+        });
+        CHECK(inlineTask.IsDone());
+        CHECK(inlineTask.Get() == iteration + 100);
+        CHECK_FALSE(Life::Async::GetAsyncIO().IsInitialized());
+    }
 }
 
 TEST_CASE("AsyncIO result-returning file reads preserve missing-path failures")
@@ -974,6 +1048,7 @@ TEST_CASE("ApplicationHost startup failures update crash report application info
     specification.Width = 800;
     specification.Height = 600;
     specification.CommandLineArgs = { 2, commandLineArgs };
+    specification.CrashReporting.ReportDirectory = crashScope.ReportDirectory.string();
 
     try
     {
@@ -996,6 +1071,52 @@ TEST_CASE("ApplicationHost startup failures update crash report application info
     CHECK(reportText.find("HostFailureApp.exe --from-host") != std::string::npos);
     CHECK(reportText.find("synthetic window creation failure") != std::string::npos);
     CHECK(reportText.find("Bootstrap Placeholder") == std::string::npos);
+}
+
+TEST_CASE("ApplicationHost reapplies the application crash reporting specification even when it matches defaults")
+{
+    Life::Log::Init();
+
+    CrashDiagnosticsConfigurationRestorer restoreCrashDiagnostics;
+    Life::CrashDiagnostics::Shutdown();
+
+    const std::filesystem::path overriddenReportDirectory = std::filesystem::temp_directory_path() / "LifeTests" / "BootstrapFailureOrdering" / "HostDefaultReset";
+    Life::CrashReportingSpecification bootstrapOverride;
+    bootstrapOverride.Enabled = false;
+    bootstrapOverride.InstallHandlers = false;
+    bootstrapOverride.CaptureSignals = false;
+    bootstrapOverride.CaptureTerminate = false;
+    bootstrapOverride.CaptureUnhandledExceptions = false;
+    bootstrapOverride.WriteReport = false;
+    bootstrapOverride.WriteMiniDump = false;
+    bootstrapOverride.ReportDirectory = overriddenReportDirectory.string();
+    bootstrapOverride.MaxStackFrames = 8;
+    Life::CrashDiagnostics::Configure(bootstrapOverride);
+    CHECK(CrashReportingSpecificationsEqual(Life::CrashDiagnostics::GetSpecification(), bootstrapOverride));
+
+    char executable[] = "DefaultCrashPolicyApp.exe";
+    char option[] = "--host-default";
+    char* commandLineArgs[] = { executable, option };
+
+    Life::ApplicationSpecification specification;
+    specification.Name = "Default Crash Policy App";
+    specification.Width = 800;
+    specification.Height = 600;
+    specification.Concurrency.JobWorkerCount = 1;
+    specification.Concurrency.AsyncWorkerCount = 1;
+    specification.CommandLineArgs = { 2, commandLineArgs };
+    specification.CrashReporting = Life::CrashReportingSpecification{};
+
+    auto host = Life::CreateScope<Life::ApplicationHost>(
+        Life::CreateScope<ConfigurableTestApplication>(specification),
+        Life::CreateScope<TestRuntime>());
+
+    const Life::CrashReportingSpecification activeSpecification = Life::CrashDiagnostics::GetSpecification();
+    CHECK(CrashReportingSpecificationsEqual(activeSpecification, specification.CrashReporting));
+    CHECK_FALSE(CrashReportingSpecificationsEqual(activeSpecification, bootstrapOverride));
+
+    host.reset();
+    CHECK(CrashReportingSpecificationsEqual(Life::CrashDiagnostics::GetSpecification(), specification.CrashReporting));
 }
 
 TEST_CASE("Application startup preserves init close shutdown ordering")

@@ -68,20 +68,6 @@ namespace Life
             return commandLine;
         }
 
-        bool IsDefaultCrashReportingSpecification(const CrashReportingSpecification& specification)
-        {
-            const CrashReportingSpecification defaultSpecification{};
-            return specification.Enabled == defaultSpecification.Enabled
-                && specification.InstallHandlers == defaultSpecification.InstallHandlers
-                && specification.CaptureSignals == defaultSpecification.CaptureSignals
-                && specification.CaptureTerminate == defaultSpecification.CaptureTerminate
-                && specification.CaptureUnhandledExceptions == defaultSpecification.CaptureUnhandledExceptions
-                && specification.WriteReport == defaultSpecification.WriteReport
-                && specification.WriteMiniDump == defaultSpecification.WriteMiniDump
-                && specification.ReportDirectory == defaultSpecification.ReportDirectory
-                && specification.MaxStackFrames == defaultSpecification.MaxStackFrames;
-        }
-
         void RegisterBuiltInServices(
             ServiceRegistry& services,
             ApplicationHost& host,
@@ -123,8 +109,7 @@ namespace Life
         Log::Configure(specification.Logging);
         CrashDiagnostics::Install();
         CrashDiagnostics::SetApplicationInfo(specification.Name, ToCommandLineVector(specification.CommandLineArgs));
-        if (!IsDefaultCrashReportingSpecification(specification.CrashReporting))
-            CrashDiagnostics::Configure(specification.CrashReporting);
+        CrashDiagnostics::Configure(specification.CrashReporting);
         PlatformDetection::Initialize();
         LOG_CORE_INFO("Constructed application '{}'", specification.Name);
         m_Window = m_Runtime->CreatePlatformWindow(WindowSpecification
