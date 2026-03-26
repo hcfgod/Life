@@ -27,6 +27,46 @@ namespace Life
         return commandLine;
     }
 
+    inline void PrepareApplicationBootstrapDiagnostics(
+        ApplicationCommandLineArgs args,
+        std::string applicationName = "Life Application")
+    {
+        CrashDiagnostics::Install();
+        CrashDiagnostics::SetApplicationInfo(
+            applicationName.empty() ? "Life Application" : std::move(applicationName),
+            BuildCommandLineVector(args));
+    }
+
+    inline void ReportApplicationRunnerTeardownException(const std::exception& exception) noexcept
+    {
+        try
+        {
+            CrashDiagnostics::ReportHandledException(exception, "ApplicationRunnerTeardown");
+        }
+        catch (...)
+        {
+        }
+
+        try
+        {
+            LOG_CORE_ERROR("Application runner teardown suppressed an exception: {}", exception.what());
+        }
+        catch (...)
+        {
+        }
+    }
+
+    inline void ReportApplicationRunnerTeardownException() noexcept
+    {
+        try
+        {
+            LOG_CORE_ERROR("Application runner teardown suppressed a non-standard exception.");
+        }
+        catch (...)
+        {
+        }
+    }
+
     struct ApplicationRunnerState
     {
         Scope<ApplicationHost> Host;
@@ -96,7 +136,18 @@ namespace Life
 
             ~ApplicationFinalizer()
             {
-                Instance.Finalize();
+                try
+                {
+                    Instance.Finalize();
+                }
+                catch (const std::exception& exception)
+                {
+                    ReportApplicationRunnerTeardownException(exception);
+                }
+                catch (...)
+                {
+                    ReportApplicationRunnerTeardownException();
+                }
             }
         } finalizer{ host };
 
@@ -110,9 +161,6 @@ namespace Life
 
     inline ApplicationRunnerState* CreateApplicationRunner(ApplicationCommandLineArgs args, bool useExternalEventPump)
     {
-        CrashDiagnostics::Install();
-        CrashDiagnostics::SetApplicationInfo("Life Application", BuildCommandLineVector(args));
-
         Scope<ApplicationRunnerState> state = CreateScope<ApplicationRunnerState>();
         state->Host = CreateApplicationHost(args);
         state->UseExternalEventPump = useExternalEventPump;
@@ -153,7 +201,19 @@ namespace Life
         if (state == nullptr)
             return;
 
-        state->Host->Finalize();
+        try
+        {
+            state->Host->Finalize();
+        }
+        catch (const std::exception& exception)
+        {
+            ReportApplicationRunnerTeardownException(exception);
+        }
+        catch (...)
+        {
+            ReportApplicationRunnerTeardownException();
+        }
+
         state->Host.reset();
         delete state;
         state = nullptr;
@@ -173,10 +233,25 @@ namespace Life
         return 1;
     }
 
+    inline int HandleApplicationRuntimeException(const std::exception& exception, std::string_view phase = "RunApplicationLoop")
+    {
+        CrashDiagnostics::ReportHandledException(exception, phase);
+
+        if (const auto* error = dynamic_cast<const Error*>(&exception))
+        {
+            Error::LogError(*error);
+            return 1;
+        }
+
+        LOG_CORE_ERROR("Application runtime terminated with an exception during {}: {}", phase, exception.what());
+        return 1;
+    }
+
     inline int RunApplicationMain(ApplicationCommandLineArgs args)
     {
         try
         {
+            PrepareApplicationBootstrapDiagnostics(args);
             ApplicationRunnerState* state = CreateApplicationRunner(args, false);
 
             struct ApplicationRunnerDestroyer
@@ -189,8 +264,15 @@ namespace Life
                 }
             } destroyer{ state };
 
-            while (RunApplicationRunnerIteration(state))
+            try
             {
+                while (RunApplicationRunnerIteration(state))
+                {
+                }
+            }
+            catch (const std::exception& exception)
+            {
+                return HandleApplicationRuntimeException(exception);
             }
 
             return 0;

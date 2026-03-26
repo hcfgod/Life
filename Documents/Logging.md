@@ -34,6 +34,8 @@ Most application code should not need to interact with raw logger instances dire
 
 That makes logging part of the normal application configuration path rather than a separate global setup phase.
 
+Life currently supports one live `ApplicationHost` per process. The logger set is therefore treated as a process-level facility whose authoritative configuration is applied by the active host.
+
 Important fields include:
 
 - `CoreLoggerName`
@@ -138,6 +140,12 @@ In practice, that means:
 - the current specification becomes the new authoritative configuration
 - future logger retrievals observe the new logger pair
 - crash diagnostics and other systems that query the current specification see the updated values
+
+Reconfiguration is effectively transactional at the publication boundary. If construction of the replacement logger set throws, the previously active loggers and stored specification remain in place.
+
+This matters most for file-output failures. For example, enabling file logging with an empty `FilePath` fails during replacement logger construction rather than partially mutating the active logging state.
+
+Under the single-host runtime model, the active host is the normal authority for this configuration. Code should not assume logger configuration stacks or automatically restores across nested hosts.
 
 ## Relationship to Crash Diagnostics
 

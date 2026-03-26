@@ -14,7 +14,7 @@ namespace Life
     public:
         explicit ApplicationHost(Scope<Application> application);
         ApplicationHost(Scope<Application> application, Scope<ApplicationRuntime> runtime);
-        ~ApplicationHost();
+        ~ApplicationHost() noexcept;
 
         void Initialize();
         void RunFrame(float timestep);
@@ -47,6 +47,10 @@ namespace Life
         ServiceRegistry m_Services;
         bool m_Running = false;
         bool m_Initialized = false;
+        bool m_Finalizing = false;
+        bool m_SharedSystemsAcquired = false;
+        bool m_GlobalServicesRegistered = false;
+        bool m_RegisteredAsActiveHost = false;
     };
 
     Scope<ApplicationHost> CreateApplicationHost(ApplicationCommandLineArgs args);

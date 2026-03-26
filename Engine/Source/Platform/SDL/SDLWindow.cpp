@@ -6,10 +6,51 @@
 #include <SDL3/SDL.h>
 
 #include <cstdio>
+#include <mutex>
 #include <utility>
 
 namespace Life
 {
+    namespace
+    {
+        struct SDLRuntimeState final
+        {
+            std::mutex Mutex;
+            std::size_t ReferenceCount = 0;
+        };
+
+        SDLRuntimeState& GetSDLRuntimeState()
+        {
+            static SDLRuntimeState state;
+            return state;
+        }
+
+        void AcquireSDLVideoRuntime()
+        {
+            SDLRuntimeState& state = GetSDLRuntimeState();
+            std::scoped_lock lock(state.Mutex);
+            if (state.ReferenceCount == 0)
+            {
+                if (!SDL_Init(SDL_INIT_VIDEO))
+                    throw Error(ErrorCode::PlatformInitializationFailed, SDL_GetError(), std::source_location::current(), ErrorSeverity::Critical);
+            }
+
+            ++state.ReferenceCount;
+        }
+
+        void ReleaseSDLVideoRuntime() noexcept
+        {
+            SDLRuntimeState& state = GetSDLRuntimeState();
+            std::scoped_lock lock(state.Mutex);
+            if (state.ReferenceCount == 0)
+                return;
+
+            --state.ReferenceCount;
+            if (state.ReferenceCount == 0)
+                SDL_Quit();
+        }
+    }
+
     struct SDLWindowDeleter
     {
         void operator()(SDL_Window* window) const
@@ -74,13 +115,12 @@ namespace Life
     public:
         SDLApplicationRuntime()
         {
-            if (!SDL_Init(SDL_INIT_VIDEO))
-                throw Error(ErrorCode::PlatformInitializationFailed, SDL_GetError(), std::source_location::current(), ErrorSeverity::Critical);
+            AcquireSDLVideoRuntime();
         }
 
         ~SDLApplicationRuntime() override
         {
-            SDL_Quit();
+            ReleaseSDLVideoRuntime();
         }
 
         Scope<Window> CreatePlatformWindow(const WindowSpecification& specification) override

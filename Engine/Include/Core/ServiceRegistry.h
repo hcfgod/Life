@@ -89,7 +89,5 @@ namespace Life
     };
 
     ServiceRegistry& GetServices();
-    void PushGlobalServiceRegistry(ServiceRegistry& registry);
-    bool PopGlobalServiceRegistry(ServiceRegistry& registry);
     void SetGlobalServiceRegistry(ServiceRegistry* registry);
 }

@@ -158,6 +158,45 @@ namespace Life::Tests
         }
     };
 
+    class ThrowingLifecycleApplication final : public Life::Application
+    {
+    public:
+        ThrowingLifecycleApplication()
+            : Life::Application(TestApplication::CreateSpecification())
+        {
+        }
+
+        int InitCount = 0;
+        int ShutdownCount = 0;
+        int UpdateCount = 0;
+        bool ThrowOnInit = false;
+        bool ThrowOnShutdown = false;
+        bool ThrowOnUpdate = false;
+
+    protected:
+        void OnInit() override
+        {
+            ++InitCount;
+            if (ThrowOnInit)
+                throw std::runtime_error("synthetic init failure");
+        }
+
+        void OnShutdown() override
+        {
+            ++ShutdownCount;
+            if (ThrowOnShutdown)
+                throw std::runtime_error("synthetic shutdown failure");
+        }
+
+        void OnUpdate(float timestep) override
+        {
+            (void)timestep;
+            ++UpdateCount;
+            if (ThrowOnUpdate)
+                throw std::runtime_error("synthetic update failure");
+        }
+    };
+
     class ThrowingRuntime final : public Life::ApplicationRuntime
     {
     public:

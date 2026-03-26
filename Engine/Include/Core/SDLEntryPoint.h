@@ -12,7 +12,7 @@ namespace Life
 {
     inline SDL_AppResult HandleSDLApplicationBootstrapException(const std::exception& exception)
     {
-        CrashDiagnostics::ReportHandledException(exception, "SDLApplication");
+        CrashDiagnostics::ReportHandledException(exception, "SDL_AppInit");
 
         if (const auto* error = dynamic_cast<const Error*>(&exception))
         {
@@ -20,7 +20,21 @@ namespace Life
             return SDL_APP_FAILURE;
         }
 
-        LOG_CORE_ERROR("Application terminated with an exception: {}", exception.what());
+        LOG_CORE_ERROR("SDL application bootstrap terminated with an exception: {}", exception.what());
+        return SDL_APP_FAILURE;
+    }
+
+    inline SDL_AppResult HandleSDLApplicationRuntimeException(const std::exception& exception, std::string_view phase)
+    {
+        CrashDiagnostics::ReportHandledException(exception, phase);
+
+        if (const auto* error = dynamic_cast<const Error*>(&exception))
+        {
+            Error::LogError(*error);
+            return SDL_APP_FAILURE;
+        }
+
+        LOG_CORE_ERROR("SDL application runtime terminated with an exception during {}: {}", phase, exception.what());
         return SDL_APP_FAILURE;
     }
 }
@@ -29,6 +43,7 @@ inline SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
 {
     try
     {
+        Life::PrepareApplicationBootstrapDiagnostics({ argc, argv });
         Life::ApplicationRunnerState* state = Life::CreateApplicationRunner({ argc, argv }, true);
         state->LastFrameTime = std::chrono::steady_clock::now();
         *appstate = state;
@@ -54,7 +69,7 @@ inline SDL_AppResult SDL_AppIterate(void* appstate)
     }
     catch (const std::exception& exception)
     {
-        return Life::HandleSDLApplicationBootstrapException(exception);
+        return Life::HandleSDLApplicationRuntimeException(exception, "SDL_AppIterate");
     }
 }
 
@@ -72,7 +87,7 @@ inline SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
     }
     catch (const std::exception& exception)
     {
-        return Life::HandleSDLApplicationBootstrapException(exception);
+        return Life::HandleSDLApplicationRuntimeException(exception, "SDL_AppEvent");
     }
 }
 

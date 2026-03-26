@@ -208,14 +208,15 @@ TEST_CASE("Crash diagnostics writes handled exception reports")
     std::filesystem::remove_all(reportDirectory, finalCleanupError);
     CHECK(finalCleanupError.value() == 0);
 }
- 
+
 TEST_CASE("Bootstrap exception reports preserve pre-host application info")
 {
     Life::Log::Init();
- 
+
     CrashDiagnosticsTestScope crashScope(std::filesystem::temp_directory_path() / "LifeTests" / "BootstrapFailureOrdering" / "PreHost");
+
     Life::CrashDiagnostics::SetApplicationInfo("Bootstrap Placeholder", { "bootstrap.exe", "--before-host" });
- 
+
     try
     {
         throw std::runtime_error("synthetic bootstrap failure before host construction");
@@ -224,25 +225,53 @@ TEST_CASE("Bootstrap exception reports preserve pre-host application info")
     {
         CHECK(Life::HandleApplicationBootstrapException(exception) == 1);
     }
- 
+
     const std::filesystem::path reportPath = Life::CrashDiagnostics::GetLastReportPath();
     REQUIRE_FALSE(reportPath.empty());
     const std::string reportText = ReadTextFile(reportPath);
- 
+
     CHECK(reportPath.parent_path() == std::filesystem::absolute(crashScope.ReportDirectory));
     CHECK(reportText.find("Bootstrap Placeholder") != std::string::npos);
     CHECK(reportText.find("bootstrap.exe --before-host") != std::string::npos);
     CHECK(reportText.find("synthetic bootstrap failure before host construction") != std::string::npos);
     CHECK(reportText.find("RunApplicationMain") != std::string::npos);
 }
- 
+
+TEST_CASE("Runtime exception reports use the runtime loop phase")
+{
+    Life::Log::Init();
+
+    CrashDiagnosticsTestScope crashScope(std::filesystem::temp_directory_path() / "LifeTests" / "BootstrapFailureOrdering" / "RuntimeLoopFailure");
+    Life::CrashDiagnostics::SetApplicationInfo("Runtime Loop App", { "runtime.exe", "--loop" });
+
+    try
+    {
+        throw std::runtime_error("synthetic runtime loop failure");
+    }
+    catch (const std::exception& exception)
+    {
+        CHECK(Life::HandleApplicationRuntimeException(exception, "RunApplicationLoop") == 1);
+    }
+
+    const std::filesystem::path reportPath = Life::CrashDiagnostics::GetLastReportPath();
+    REQUIRE_FALSE(reportPath.empty());
+    const std::string reportText = ReadTextFile(reportPath);
+
+    CHECK(reportPath.parent_path() == std::filesystem::absolute(crashScope.ReportDirectory));
+    CHECK(reportText.find("Runtime Loop App") != std::string::npos);
+    CHECK(reportText.find("runtime.exe --loop") != std::string::npos);
+    CHECK(reportText.find("synthetic runtime loop failure") != std::string::npos);
+    CHECK(reportText.find("RunApplicationLoop") != std::string::npos);
+    CHECK(reportText.find("RunApplicationMain") == std::string::npos);
+}
+
 TEST_CASE("ApplicationHost startup failures update crash report application info before bootstrap handling")
 {
     Life::Log::Init();
- 
+
     CrashDiagnosticsTestScope crashScope(std::filesystem::temp_directory_path() / "LifeTests" / "BootstrapFailureOrdering" / "HostStartupFailure");
     Life::CrashDiagnostics::SetApplicationInfo("Bootstrap Placeholder", { "bootstrap.exe", "--before-host" });
- 
+
     char executable[] = "HostFailureApp.exe";
     char option[] = "--from-host";
     char* commandLineArgs[] = { executable, option };

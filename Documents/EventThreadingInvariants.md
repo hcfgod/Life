@@ -37,7 +37,7 @@ Any future changes to frame timing, queued events, or shutdown semantics should 
 In the current SDL-backed model:
 
 - the runtime owns platform event polling
-- the runtime owns process-level platform runtime behavior
+- the runtime participates in process-level platform runtime behavior while `Window` remains focused on window state and handles
 - `Window` owns native window state and handle lifetime
 - `Window` does not own global SDL lifetime
 
@@ -55,6 +55,17 @@ At runtime:
 
 That makes `ApplicationEventRouter` the authoritative ordering point for application event delivery.
 
+## Event State Model
+
+`Event` carries two independent pieces of dispatch state:
+
+- handled state via `IsHandled()` and `MarkHandled()`
+- propagation state via `IsPropagationStopped()` and `StopPropagation()`
+
+`Accept()` marks an event handled and stops propagation in one step.
+
+This distinction is important. An event may be marked handled without stopping later observers, and propagation may be stopped without additionally changing handled state unless the caller explicitly chooses that behavior.
+
 ## Event Ordering
 
 `ApplicationEventRouter::Route(...)` currently processes an event in this order:
@@ -63,7 +74,9 @@ That makes `ApplicationEventRouter` the authoritative ordering point for applica
 2. `EventBus` subscriber dispatch
 3. built-in engine handlers such as `WindowCloseEvent` shutdown
 
-The built-in window-close handler only requests shutdown if the event has not already been marked handled.
+If propagation is stopped after application callbacks or event-bus subscribers, routing returns immediately and built-in handlers do not run.
+
+The built-in window-close handler is therefore a true fallback. It only requests shutdown if earlier stages neither stopped propagation nor already marked the close event handled.
 
 This ordering is intentional.
 
@@ -73,19 +86,64 @@ Practical implications:
 - subscribed systems observe the event after application-level inspection
 - built-in shutdown remains available as a fallback rather than pre-empting application logic
 
+## EventBus Semantics
+
+The current `EventBus` is deliberately narrow and explicit.
+
+### Threading model
+
+`EventBus` defaults to `EventBusThreadingModel::OwnerThreadOnly` and enforces that model at runtime.
+
+Practical implications:
+
+- subscribe, unsubscribe, and dispatch operations must occur on the thread that created the event bus
+- cross-thread event delivery should use the runner queue path rather than direct access to an application-owned event bus
+- misuse is treated as a logic error rather than silently accepted
+
+### Subscription options
+
+`EventSubscriptionOptions<TEvent>` currently supports:
+
+- `Priority`
+- `Filter`
+
+Higher-priority subscriptions run first. Within the same priority, subscription order remains stable by creation order.
+
+Filters are evaluated before the callback body. If a filter rejects the typed event, that subscription behaves as if it did not handle the event.
+
+### Callback result normalization
+
+The engine supports two callback result styles:
+
+- `bool`
+- `EventDispatchResult`
+
+For `EventBus` subscribers, `true` preserves the historical meaning of handled plus stop propagation.
+
+For `EventDispatcher`, `true` means handled only.
+
+Use `EventDispatchResult` when the callback needs to express one of the intermediate cases explicitly:
+
+- `Handled`
+- `StopPropagation`
+- `HandledAndStopPropagation`
+
+### Mutation during dispatch
+
+The current implementation does not copy subscriber lists on every dispatch.
+
+Instead, if code subscribes or unsubscribes while dispatch is already in progress on the owner thread, the mutation is deferred until the outermost dispatch scope completes.
+
+That gives the engine two useful properties at the same time:
+
+- stable iteration over the active subscriber list during dispatch
+- deterministic application of queued subscription changes after nested dispatch completes
+
 ## Application Lifecycle Boundary
 
 `Application` is not the loop owner.
 
-The public methods:
-
-- `Initialize()`
-- `RunFrame(float timestep)`
-- `HandleEvent(Event&)`
-- `Shutdown()`
-- `Finalize()`
-
-are context- or host-routed surfaces. The actual lifecycle state is host-owned and context-bound.
+Its public application-facing surface is intentionally narrower than the host surface. In normal use, application code implements callbacks and may request shutdown, while the actual lifecycle state is host-owned and context-bound.
 
 In practice:
 
@@ -128,10 +186,11 @@ The current engine should be treated as main-thread-oriented for lifecycle and e
 
 Practical rules:
 
+- support exactly one live `ApplicationHost` per process at a time
 - create and run the application on the main thread
 - treat runtime polling and event dispatch as main-thread work
 - treat host initialization and finalization as main-thread operations
-- do not call `Application::HandleEvent(...)` concurrently from arbitrary worker threads
+- do not inject application-directed events concurrently from arbitrary worker threads; use the runner queue path instead
 - if an external source needs to inject events, queue them through the runner path rather than mutating application state directly
 
 These rules align with SDL's platform expectations, especially on macOS.
@@ -154,8 +213,8 @@ This is useful, but it should not be mistaken for broad application-wide concurr
 The engine does not currently promise that the following are safe for arbitrary concurrent access:
 
 - `Application` lifecycle methods
-- direct event dispatch into `Application::HandleEvent(...)`
-- event subscriber registration or unregistration while another thread is dispatching through the same application-owned event bus
+- application-directed event dispatch helpers or event-router access from arbitrary worker threads
+- event-bus subscribe, unsubscribe, or dispatch calls from threads other than the event bus owner thread
 - window or runtime manipulation from worker threads
 - assuming shutdown/finalization can race freely with event delivery
 

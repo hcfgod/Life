@@ -19,16 +19,20 @@ TEST_CASE("ApplicationHost initializes shared JobSystem and AsyncIO services")
     CHECK_FALSE(Life::Async::GetAsyncIO().IsInitialized());
 }
 
-TEST_CASE("Nested ApplicationHost instances share JobSystem and AsyncIO lifetime")
+TEST_CASE("Rejecting a second ApplicationHost preserves shared JobSystem and AsyncIO lifetime")
 {
     auto outerHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
     REQUIRE(Life::GetJobSystem().IsInitialized());
     REQUIRE(Life::Async::GetAsyncIO().IsInitialized());
 
+    try
     {
-        auto innerHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
-        CHECK(&outerHost->GetServices().Get<Life::JobSystem>() == &innerHost->GetServices().Get<Life::JobSystem>());
-        CHECK(&outerHost->GetServices().Get<Life::Async::AsyncIO>() == &innerHost->GetServices().Get<Life::Async::AsyncIO>());
+        [[maybe_unused]] auto innerHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+        FAIL("Expected second host creation to throw");
+    }
+    catch (const Life::Error& error)
+    {
+        CHECK(error.GetCode() == Life::ErrorCode::InvalidState);
     }
 
     CHECK(Life::GetJobSystem().IsInitialized());

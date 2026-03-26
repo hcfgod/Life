@@ -41,6 +41,12 @@ namespace
 
     template<typename T>
     inline constexpr bool HasRequestShutdownMember<T, std::void_t<decltype(std::declval<T&>().RequestShutdown())>> = true;
+
+    template<typename T, typename = void>
+    inline constexpr bool HasHandleEventMember = false;
+
+    template<typename T>
+    inline constexpr bool HasHandleEventMember<T, std::void_t<decltype(std::declval<T&>().HandleEvent(std::declval<Life::Event&>()))>> = true;
 }
 
 TEST_CASE("CreateScope stores values")
@@ -70,11 +76,9 @@ TEST_CASE("Unbound application context operations throw")
 TEST_CASE("Unbound application host dependent operations throw")
 {
     TestApplication application;
-    Life::WindowCloseEvent event;
 
     CHECK_FALSE(application.IsRunning());
     CHECK_FALSE(application.IsInitialized());
-    CHECK_THROWS_AS(application.HandleEvent(event), std::logic_error);
     CHECK_THROWS_AS(application.RequestShutdown(), std::logic_error);
     CHECK_THROWS_AS(application.GetWindow(), std::logic_error);
     CHECK_THROWS_AS(application.GetService<TestService>(), std::logic_error);
@@ -89,6 +93,7 @@ TEST_CASE("Application public surface excludes raw context, registry, and lifecy
     static_assert(!HasInitializeMember<Life::Application>);
     static_assert(!HasRunFrameMember<Life::Application>);
     static_assert(!HasFinalizeMember<Life::Application>);
+    static_assert(!HasHandleEventMember<Life::Application>);
     static_assert(HasRequestShutdownMember<Life::Application>);
 
     CHECK(true);
@@ -163,4 +168,62 @@ TEST_CASE("ApplicationHost lifecycle operations are idempotent when host bound")
     CHECK_FALSE(host->IsInitialized());
     CHECK(applicationInstance.ShutdownCount == 1);
     CHECK(applicationInstance.GetTrace() == std::vector<std::string>{ "init", "shutdown" });
+}
+
+TEST_CASE("ApplicationHost initialization failure leaves the host uninitialized and recoverable")
+{
+    Life::Log::Init();
+
+    auto application = Life::CreateScope<ThrowingLifecycleApplication>();
+    auto* applicationInstance = application.get();
+    applicationInstance->ThrowOnInit = true;
+    auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<TestRuntime>());
+
+    CHECK_THROWS_AS(host->Initialize(), std::runtime_error);
+    CHECK_FALSE(host->IsInitialized());
+    CHECK_FALSE(host->IsRunning());
+    CHECK(applicationInstance->InitCount == 1);
+    CHECK(applicationInstance->ShutdownCount == 0);
+
+    applicationInstance->ThrowOnInit = false;
+
+    CHECK_NOTHROW(host->Initialize());
+    CHECK(host->IsInitialized());
+    CHECK(host->IsRunning());
+
+    host->Finalize();
+    CHECK(applicationInstance->ShutdownCount == 1);
+}
+
+TEST_CASE("ApplicationHost finalization failure still clears lifecycle state")
+{
+    Life::Log::Init();
+
+    auto application = Life::CreateScope<ThrowingLifecycleApplication>();
+    auto* applicationInstance = application.get();
+    auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<TestRuntime>());
+
+    host->Initialize();
+    applicationInstance->ThrowOnShutdown = true;
+
+    CHECK_THROWS_AS(host->Finalize(), std::runtime_error);
+    CHECK_FALSE(host->IsInitialized());
+    CHECK_FALSE(host->IsRunning());
+    CHECK(applicationInstance->ShutdownCount == 1);
+
+    applicationInstance->ThrowOnShutdown = false;
+    CHECK_NOTHROW(host.reset());
+}
+
+TEST_CASE("ApplicationHost destructor suppresses shutdown exceptions")
+{
+    Life::Log::Init();
+
+    auto application = Life::CreateScope<ThrowingLifecycleApplication>();
+    auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<TestRuntime>());
+
+    host->Initialize();
+    static_cast<ThrowingLifecycleApplication&>(host->GetApplication()).ThrowOnShutdown = true;
+
+    CHECK_NOTHROW(host.reset());
 }

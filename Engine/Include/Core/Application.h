@@ -49,8 +49,6 @@ namespace Life
         explicit Application(ApplicationSpecification specification);
         virtual ~Application();
 
-        void HandleEvent(Event& event);
-
         template<typename TEvent, typename TFunction>
         EventSubscriptionId SubscribeEvent(TFunction&& function, EventSubscriptionOptions<TEvent> options = {})
         {
@@ -125,6 +123,8 @@ namespace Life
     private:
         friend class ApplicationEventRouter;
         friend class ApplicationHost;
+
+        void HandleEvent(Event& event);
 
         void BindHost(ApplicationContext& context, ApplicationEventRouter& eventRouter);
 

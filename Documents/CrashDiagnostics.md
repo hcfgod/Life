@@ -43,13 +43,15 @@ The main entry points are:
 
 These values live inside `ApplicationSpecification.CrashReporting`, which makes crash-reporting behavior part of the normal application configuration surface.
 
+Life currently supports one live `ApplicationHost` per process. Crash diagnostics should therefore be treated as a process-level facility whose authoritative application-aware configuration is supplied by the active host.
+
 ## Install Timing and Lifecycle
 
 Crash diagnostics are installed in two phases.
 
-### Early Install During Runner Creation
+### Early Install During Entry Bootstrap
 
-`CreateApplicationRunner(...)` installs crash diagnostics before the host is created. At that point, the engine only knows a generic application name and the raw command line.
+The executable entry path prepares crash diagnostics before `CreateApplicationRunner(...)` is reached. At that point, the engine only knows a generic application name and the raw command line.
 
 This early step exists so bootstrap failures can still produce crash reports.
 
@@ -59,9 +61,13 @@ Once `ApplicationHost` has access to the application specification, it updates c
 
 - the configured application name
 - the normalized command-line vector
-- any non-default crash-reporting overrides from `ApplicationSpecification.CrashReporting`
+- the full crash-reporting policy from `ApplicationSpecification.CrashReporting`, even when it matches the default values
 
 This is the point where crash reporting becomes application-aware rather than bootstrap-generic.
+
+That full reapplication step is intentional. It prevents temporary bootstrap-era configuration from leaking into the active host configuration just because the application later chooses the default crash-reporting policy.
+
+Under the single-host runtime model, code should not assume host-specific crash-diagnostics configuration stacks or automatically restores across nested hosts.
 
 ## What Gets Captured
 
@@ -106,7 +112,14 @@ Crash diagnostics are not limited to fatal, unhandled failures.
 
 Use `ReportHandledException(...)` when code catches an exception but still wants to preserve a crash-style artifact for investigation.
 
-The engine uses this path during bootstrap exception handling in `RunApplicationMain(...)`. If the exception is a `Life::Error`, the detailed error string is included in the generated report.
+The engine uses this path in several authoritative exception boundaries, including:
+
+- executable bootstrap handling through `HandleApplicationBootstrapException(...)` with the `RunApplicationMain` phase
+- executable runtime-loop handling through `HandleApplicationRuntimeException(...)` with the `RunApplicationLoop` phase by default
+- SDL callback bootstrap handling through `HandleSDLApplicationBootstrapException(...)` with the `SDL_AppInit` phase
+- SDL callback runtime handling through `HandleSDLApplicationRuntimeException(...)` with phases such as `SDL_AppIterate` and `SDL_AppEvent`
+
+If the exception is a `Life::Error`, the detailed error string is included in the generated report.
 
 ### `ReportMessage(...)`
 

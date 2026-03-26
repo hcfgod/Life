@@ -68,31 +68,23 @@ TEST_CASE("Global service registry falls back after host destruction")
     CHECK_FALSE(Life::GetServices().Has<Life::ApplicationHost>());
 }
 
-TEST_CASE("Global service registry restores the previous host after nested destruction")
+TEST_CASE("Creating a second ApplicationHost while one is live is rejected")
 {
-    auto outerHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
-    CHECK(&Life::GetServices() == &outerHost->GetServices());
+    auto host = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+    CHECK(&Life::GetServices() == &host->GetServices());
 
+    try
     {
-        auto innerHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
-        CHECK(&Life::GetServices() == &innerHost->GetServices());
+        [[maybe_unused]] auto secondHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+        FAIL("Expected second host creation to throw");
+    }
+    catch (const Life::Error& error)
+    {
+        CHECK(error.GetCode() == Life::ErrorCode::InvalidState);
     }
 
-    CHECK(&Life::GetServices() == &outerHost->GetServices());
-}
+    CHECK(&Life::GetServices() == &host->GetServices());
 
-TEST_CASE("Global service registry preserves the current host when an older host is destroyed")
-{
-    auto firstHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
-    auto secondHost = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
-
-    CHECK(&Life::GetServices() == &secondHost->GetServices());
-
-    firstHost.reset();
-
-    CHECK(&Life::GetServices() == &secondHost->GetServices());
-
-    secondHost.reset();
-
+    host.reset();
     CHECK_FALSE(Life::GetServices().Has<Life::ApplicationHost>());
 }

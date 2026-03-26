@@ -2,9 +2,12 @@
 #include "Core/Concurrency/AsyncIO.h"
 #include "Core/Concurrency/JobSystem.h"
 #include "Core/CrashDiagnostics.h"
+#include "Core/Error.h"
 #include "Platform/PlatformDetection.h"
 
 #include <algorithm>
+#include <cstdio>
+#include <exception>
 #include <mutex>
 #include <stdexcept>
 #include <utility>
@@ -20,9 +23,21 @@ namespace Life
             std::size_t ActiveHostCount = 0;
         };
 
+        struct ActiveApplicationHostState final
+        {
+            std::mutex Mutex;
+            ApplicationHost* ActiveHost = nullptr;
+        };
+
         SharedEngineSystemsState& GetSharedEngineSystemsState()
         {
             static SharedEngineSystemsState state;
+            return state;
+        }
+
+        ActiveApplicationHostState& GetActiveApplicationHostState()
+        {
+            static ActiveApplicationHostState state;
             return state;
         }
 
@@ -52,6 +67,55 @@ namespace Life
                 Async::GetAsyncIO().Shutdown();
                 GetJobSystem().Shutdown();
             }
+        }
+
+        void RegisterActiveApplicationHost(ApplicationHost& host)
+        {
+            ActiveApplicationHostState& state = GetActiveApplicationHostState();
+            std::scoped_lock lock(state.Mutex);
+            if (state.ActiveHost != nullptr)
+            {
+                throw Error(
+                    ErrorCode::InvalidState,
+                    "Life supports only one live ApplicationHost per process. Destroy the current host before creating another.",
+                    std::source_location::current(),
+                    ErrorSeverity::Critical);
+            }
+
+            state.ActiveHost = &host;
+        }
+
+        void UnregisterActiveApplicationHost(ApplicationHost& host) noexcept
+        {
+            ActiveApplicationHostState& state = GetActiveApplicationHostState();
+            std::scoped_lock lock(state.Mutex);
+            if (state.ActiveHost == &host)
+                state.ActiveHost = nullptr;
+        }
+
+        void ReportApplicationHostTeardownException(const std::exception& exception) noexcept
+        {
+            try
+            {
+                CrashDiagnostics::ReportHandledException(exception, "ApplicationHost::~ApplicationHost");
+            }
+            catch (...)
+            {
+            }
+
+            try
+            {
+                LOG_CORE_ERROR("ApplicationHost teardown suppressed an exception: {}", exception.what());
+            }
+            catch (...)
+            {
+                std::fprintf(stderr, "ApplicationHost teardown suppressed an exception: %s\n", exception.what());
+            }
+        }
+
+        void ReportApplicationHostTeardownException() noexcept
+        {
+            std::fprintf(stderr, "ApplicationHost teardown suppressed a non-standard exception.\n");
         }
 
         std::vector<std::string> ToCommandLineVector(const ApplicationCommandLineArgs& args)
@@ -97,7 +161,11 @@ namespace Life
 
     ApplicationHost::ApplicationHost(Scope<Application> application, Scope<ApplicationRuntime> runtime)
         : m_Application(std::move(application)),
-          m_Runtime(std::move(runtime))
+          m_Runtime(std::move(runtime)),
+          m_Finalizing(false),
+          m_SharedSystemsAcquired(false),
+          m_GlobalServicesRegistered(false),
+          m_RegisteredAsActiveHost(false)
     {
         if (m_Application == nullptr)
             throw std::logic_error("ApplicationHost requires a valid application instance.");
@@ -106,27 +174,29 @@ namespace Life
             throw std::logic_error("ApplicationHost requires a valid application runtime.");
 
         const ApplicationSpecification& specification = m_Application->GetSpecification();
-        Log::Configure(specification.Logging);
-        CrashDiagnostics::Install();
-        CrashDiagnostics::SetApplicationInfo(specification.Name, ToCommandLineVector(specification.CommandLineArgs));
-        CrashDiagnostics::Configure(specification.CrashReporting);
-        PlatformDetection::Initialize();
-        LOG_CORE_INFO("Constructed application '{}'", specification.Name);
-        m_Window = m_Runtime->CreatePlatformWindow(WindowSpecification
-        {
-            specification.Name,
-            specification.Width,
-            specification.Height,
-            specification.VSync
-        });
-
-        AcquireSharedEngineSystems(specification.Concurrency);
-        bool pushedGlobalServices = false;
+        RegisterActiveApplicationHost(*this);
+        m_RegisteredAsActiveHost = true;
         try
         {
+            Log::Configure(specification.Logging);
+            CrashDiagnostics::Install();
+            CrashDiagnostics::SetApplicationInfo(specification.Name, ToCommandLineVector(specification.CommandLineArgs));
+            CrashDiagnostics::Configure(specification.CrashReporting);
+            PlatformDetection::Initialize();
+            LOG_CORE_INFO("Constructed application '{}'", specification.Name);
+            m_Window = m_Runtime->CreatePlatformWindow(WindowSpecification
+            {
+                specification.Name,
+                specification.Width,
+                specification.Height,
+                specification.VSync
+            });
+
+            AcquireSharedEngineSystems(specification.Concurrency);
+            m_SharedSystemsAcquired = true;
             RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, GetJobSystem(), Async::GetAsyncIO(), *m_Runtime, *m_Window);
-            PushGlobalServiceRegistry(m_Services);
-            pushedGlobalServices = true;
+            SetGlobalServiceRegistry(&m_Services);
+            m_GlobalServicesRegistered = true;
 
             m_Context.Bind(
                 *m_Window,
@@ -142,18 +212,61 @@ namespace Life
         }
         catch (...)
         {
-            if (pushedGlobalServices)
-                PopGlobalServiceRegistry(m_Services);
-            ReleaseSharedEngineSystems();
+            if (m_GlobalServicesRegistered)
+            {
+                SetGlobalServiceRegistry(nullptr);
+                m_GlobalServicesRegistered = false;
+            }
+
+            if (m_SharedSystemsAcquired)
+            {
+                ReleaseSharedEngineSystems();
+                m_SharedSystemsAcquired = false;
+            }
+
+            if (m_RegisteredAsActiveHost)
+            {
+                UnregisterActiveApplicationHost(*this);
+                m_RegisteredAsActiveHost = false;
+            }
+
             throw;
         }
     }
 
-    ApplicationHost::~ApplicationHost()
+    ApplicationHost::~ApplicationHost() noexcept
     {
-        Finalize();
-        ReleaseSharedEngineSystems();
-        PopGlobalServiceRegistry(m_Services);
+        try
+        {
+            Finalize();
+        }
+        catch (const std::exception& exception)
+        {
+            ReportApplicationHostTeardownException(exception);
+        }
+        catch (...)
+        {
+            ReportApplicationHostTeardownException();
+        }
+
+        if (m_GlobalServicesRegistered)
+        {
+            SetGlobalServiceRegistry(nullptr);
+            m_GlobalServicesRegistered = false;
+        }
+
+        if (m_SharedSystemsAcquired)
+        {
+            ReleaseSharedEngineSystems();
+            m_SharedSystemsAcquired = false;
+        }
+
+        if (m_RegisteredAsActiveHost)
+        {
+            UnregisterActiveApplicationHost(*this);
+            m_RegisteredAsActiveHost = false;
+        }
+
         m_Window.reset();
         m_Runtime.reset();
         m_Application.reset();
@@ -165,13 +278,22 @@ namespace Life
             return;
 
         m_Running = true;
-        m_Initialized = true;
-        m_Application->OnHostInitialize();
+        try
+        {
+            m_Application->OnHostInitialize();
+            m_Initialized = true;
+        }
+        catch (...)
+        {
+            m_Running = false;
+            m_Initialized = false;
+            throw;
+        }
     }
 
     void ApplicationHost::RunFrame(float timestep)
     {
-        if (!m_Running)
+        if (!m_Running || !m_Initialized)
             return;
 
         m_Application->OnHostRunFrame(timestep);
@@ -189,11 +311,25 @@ namespace Life
 
     void ApplicationHost::Finalize()
     {
-        if (!m_Initialized)
+        if (!m_Initialized || m_Finalizing)
             return;
 
-        m_Application->OnHostFinalize();
+        m_Finalizing = true;
         m_Running = false;
+        std::exception_ptr finalizationFailure;
+        try
+        {
+            m_Application->OnHostFinalize();
+        }
+        catch (...)
+        {
+            finalizationFailure = std::current_exception();
+        }
+
         m_Initialized = false;
+        m_Finalizing = false;
+
+        if (finalizationFailure != nullptr)
+            std::rethrow_exception(finalizationFailure);
     }
 }

@@ -7,17 +7,21 @@ The intent is to explain how the current systems fit together and where applicat
 ## Recommended Reading Order
 
 - `ApplicationArchitecture.md` for the canonical startup path, ownership model, and service boundaries.
+- `EntryPointsAndBootstrap.md` for executable entry, SDL callback bootstrap, runner state, and exception boundaries.
 - `EventThreadingInvariants.md` for the event pipeline and thread-safety assumptions that shape runtime behavior.
 - `Logging.md` for the authoritative logging configuration model.
 - `CrashDiagnostics.md` for crash-reporting lifecycle, output, and operational guidance.
 - `ErrorHandling.md` for the structured error model, result types, and error utilities.
+- `PlatformRuntime.md` for runtime platform metadata, SDL runtime ownership, and low-level platform utilities.
 - `PlatformSupport.md` for host and target platform expectations.
 
 ## Documents
 
 - `ApplicationArchitecture.md` - startup flow, ownership boundaries, service registry behavior, and the authoritative application loop.
+- `EntryPointsAndBootstrap.md` - executable entry, SDL callback bootstrap, runner iteration, event injection, and teardown responsibilities.
 - `EventThreadingInvariants.md` - event ordering, runtime ownership, and thread-safety boundaries for the current engine architecture.
 - `Logging.md` - engine logging configuration, sink behavior, reconfiguration, and integration guidance.
 - `CrashDiagnostics.md` - crash-reporting configuration, install timing, report contents, and platform-specific behavior.
 - `ErrorHandling.md` - the engine error model, `Result<T>` conventions, assertions, verification, and system error mapping.
+- `PlatformRuntime.md` - runtime platform detection, `ApplicationRuntime`, SDL runtime lifetime, and `PlatformUtils` behavior.
 - `PlatformSupport.md` - supported host and target platforms, Windows/Linux/macOS architecture notes, and CI/build expectations.

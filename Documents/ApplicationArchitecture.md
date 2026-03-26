@@ -12,12 +12,13 @@ For a normal executable entrypoint, startup flows through the following path:
 
 1. `main(...)` in `Core/EntryPoint.h`
 2. `Life::RunApplicationMain(...)`
-3. `CreateApplicationRunner(...)`
-4. `CreateApplicationHost(...)`
-5. `ApplicationHost` construction and shared-system setup
-6. `ApplicationHost::Initialize()`
-7. repeated runner iterations until shutdown
-8. `ApplicationHost::Finalize()` and runner teardown
+3. `PrepareApplicationBootstrapDiagnostics(...)`
+4. `CreateApplicationRunner(...)`
+5. `CreateApplicationHost(...)`
+6. `ApplicationHost` construction and shared-system setup
+7. host initialization inside `CreateApplicationRunner(...)`
+8. repeated runner iterations until shutdown
+9. `DestroyApplicationRunner(...)`, `ApplicationHost::Finalize()`, and runner teardown
 
 This matters because runtime behavior is defined by the runner and host, not by ad hoc calls into `Application`.
 
@@ -34,6 +35,7 @@ It is responsible for:
 - draining queued events
 - polling the platform runtime when external pumping is not enabled
 - computing frame timestep values
+- handling the executable-path bootstrap and runtime exception-reporting boundaries
 - ensuring host finalization during teardown
 
 If frame timing, loop structure, or cross-thread event injection behavior changes in the future, the runner path is the first place to inspect.
@@ -86,6 +88,7 @@ The engine currently uses a host-owned model.
 That means:
 
 - one `ApplicationHost` owns one active `Application`
+- only one live `ApplicationHost` is supported per process at a time
 - the host owns and binds the runtime context
 - the host constructs and exposes the service registry used by application-facing accessors
 - the host is responsible for finalization and shared-system release
@@ -162,7 +165,7 @@ New engine-control or ownership-facing capabilities should generally land on `Ap
 
 The authoritative service container is `ServiceRegistry`.
 
-During host construction, built-in engine services are registered and then pushed into the global registry stack. This makes the current host registry available through both explicit context access and the global `GetServices()` convenience function.
+During host construction, built-in engine services are registered and then exposed as the active global registry for the lifetime of that host. This makes the current host registry available through both explicit context access and the global `GetServices()` convenience function.
 
 Built-in registrations currently include:
 
@@ -174,6 +177,8 @@ Built-in registrations currently include:
 - `Window`
 - `JobSystem`
 - `Async::AsyncIO`
+
+When no host is active, `GetServices()` falls back to a process-local empty compatibility registry.
 
 Practical guidance:
 
@@ -187,15 +192,15 @@ Practical guidance:
 
 At a high level, the normal lifecycle is:
 
-1. crash diagnostics are installed early in the runner
+1. crash diagnostics are prepared early in the entry/bootstrap path
 2. the application instance is created
 3. the host configures logging from `ApplicationSpecification.Logging`
-4. the host sets application-specific crash-diagnostics metadata and optional crash-reporting overrides
+4. the host sets application-specific crash-diagnostics metadata and reapplies the full `ApplicationSpecification.CrashReporting` policy
 5. platform detection is initialized
 6. the platform window is created
 7. shared engine systems such as the job system and async I/O are acquired
 8. services are registered and the context is bound
-9. `ApplicationHost::Initialize()` marks the host running and invokes application initialization
+9. `ApplicationHost::Initialize()` enters the running phase, invokes application initialization, and marks the host initialized only after initialization completes successfully
 10. each runner iteration dispatches queued events, polls runtime events if needed, and runs one frame update
 11. shutdown clears the running state
 12. finalization invokes host/application teardown and releases shared systems
@@ -212,7 +217,7 @@ Within the application-facing pipeline, the current ordering is:
 2. event-bus subscribers
 3. built-in engine handlers such as window-close shutdown
 
-This ordering gives application code first inspection rights while still preserving built-in behavior when earlier stages do not mark the event handled.
+This ordering gives application code first inspection rights while still preserving built-in behavior when earlier stages neither stop propagation nor mark the event handled.
 
 ## External Event Pump Mode
 
@@ -220,9 +225,12 @@ The runner also supports an external event-pump mode for SDL callback-style inte
 
 In that mode:
 
+- `SDL_AppInit(...)` prepares bootstrap diagnostics and creates the runner state with external pumping enabled
 - foreign callbacks queue translated events into runner-owned pending storage
 - queue access is guarded by `ApplicationRunnerState::EventMutex`
-- queued events are dispatched during the same authoritative iteration path used by the normal loop
+- `SDL_AppEvent(...)` translates `SDL_Event` values into engine events and queues them through `QueueApplicationEvent(...)`
+- `SDL_AppIterate(...)` dispatches queued events and runs the same authoritative iteration path used by the normal loop
+- `SDL_AppQuit(...)` destroys the runner state and finalizes the host
 - runtime polling is skipped because the external source is already feeding events in
 
 The design goal is one dispatch point, even when event production comes from a different integration style.
@@ -237,11 +245,11 @@ Two related systems are configured around the host boundary.
 
 ### Crash Diagnostics
 
-Crash diagnostics are installed early in the runner so bootstrap failures can still be reported. Once the host has the application specification, crash diagnostics are updated with:
+Crash diagnostics are prepared early in the entry/bootstrap path so bootstrap failures can still be reported. Once the host has the application specification, crash diagnostics are updated with:
 
 - the real application name
 - the command line
-- any non-default `CrashReportingSpecification`
+- the authoritative `CrashReportingSpecification`, even when it matches default values
 
 This two-phase setup is deliberate. Early install protects startup, while host configuration makes reports application-aware.
 
