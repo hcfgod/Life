@@ -101,6 +101,7 @@ namespace Life
             }
             catch (...)
             {
+                std::fprintf(stderr, "Failed to report ApplicationHost teardown exception to crash diagnostics.\n");
             }
 
             try
