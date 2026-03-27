@@ -76,12 +76,16 @@ TEST_CASE("Unbound application context operations throw")
 TEST_CASE("Unbound application host dependent operations throw")
 {
     TestApplication application;
+    Life::LayerRef layer = Life::CreateRef<Life::Layer>("TestLayer");
 
     CHECK_FALSE(application.IsRunning());
     CHECK_FALSE(application.IsInitialized());
     CHECK_THROWS_AS(application.RequestShutdown(), std::logic_error);
     CHECK_THROWS_AS(application.GetWindow(), std::logic_error);
     CHECK_THROWS_AS(application.GetService<TestService>(), std::logic_error);
+    CHECK_THROWS_AS(application.GetLayerStack(), std::logic_error);
+    CHECK_THROWS_AS(application.PushLayer(layer), std::logic_error);
+    CHECK_THROWS_AS(application.PushOverlay(layer), std::logic_error);
     CHECK_THROWS_AS(application.SubscribeEvent<Life::WindowCloseEvent>([](Life::WindowCloseEvent&) { return false; }), std::logic_error);
     CHECK_THROWS_AS(application.UnsubscribeEvent(1), std::logic_error);
 }

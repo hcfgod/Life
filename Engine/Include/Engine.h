@@ -5,6 +5,8 @@
 #include "Core/Application.h"
 #include "Core/ApplicationContext.h"
 #include "Core/ApplicationEventRouter.h"
+#include "Core/Layer.h"
+#include "Core/LayerStack.h"
 #include "Core/Concurrency/AsyncIO.h"
 #include "Core/Concurrency/JobSystem.h"
 #include "Core/CrashDiagnostics.h"

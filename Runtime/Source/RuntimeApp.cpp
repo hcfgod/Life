@@ -1,5 +1,7 @@
 #include "Engine.h"
-#include <nlohmann/json.hpp>
+
+ #include "Runtime/GameLayer.h"
+ #include "Runtime/RuntimeDiagnosticsOverlay.h"
 
 class RuntimeApplication final : public Life::Application
 {
@@ -12,38 +14,15 @@ public:
 protected:
     void OnInit() override
     {
-        const Life::ApplicationSpecification& specification = GetSpecification();
-        nlohmann::json startupConfig =
-        {
-            { "name", specification.Name },
-            { "width", specification.Width },
-            { "height", specification.Height },
-            { "vsync", specification.VSync }
-        };
-
-        LOG_INFO("Runtime sandbox boot config: {}", startupConfig.dump());
-        LOG_INFO("Runtime sandbox initialized.");
+        PushLayer(Life::CreateRef<RuntimeApp::GameLayer>(GetSpecification()));
+        PushOverlay(Life::CreateRef<RuntimeApp::RuntimeDiagnosticsOverlay>());
+        LOG_INFO("Runtime initialized.");
     }
 
     void OnShutdown() override
     {
-        LOG_INFO("Runtime sandbox shutting down.");
+        LOG_INFO("Runtime shutting down.");
     }
-
-    void OnUpdate(float timestep) override
-    {
-        m_ElapsedTime += timestep;
-
-        if (!m_HasLoggedRuntime && m_ElapsedTime >= 1.0f)
-        {
-            LOG_INFO("Runtime sandbox running.");
-            m_HasLoggedRuntime = true;
-        }
-    }
-
-private:
-    float m_ElapsedTime = 0.0f;
-    bool m_HasLoggedRuntime = false;
 };
 
 namespace Life

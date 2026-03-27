@@ -1,5 +1,5 @@
 #include "Core/Application.h"
-
+#include "Core/LayerStack.h"
 #include <cstdio>
 #include <stdexcept>
 #include <utility>
@@ -51,6 +51,36 @@ namespace Life
     const Window& Application::GetWindow() const
     {
         return RequireContext().GetWindow();
+    }
+
+    void Application::PushLayer(Ref<Layer> layer)
+    {
+        GetLayerStack().PushLayer(std::move(layer));
+    }
+
+    void Application::PushOverlay(Ref<Layer> overlay)
+    {
+        GetLayerStack().PushOverlay(std::move(overlay));
+    }
+
+    bool Application::PopLayer(const Ref<Layer>& layer)
+    {
+        return GetLayerStack().PopLayer(layer);
+    }
+
+    bool Application::PopOverlay(const Ref<Layer>& overlay)
+    {
+        return GetLayerStack().PopOverlay(overlay);
+    }
+
+    LayerStack& Application::GetLayerStack()
+    {
+        return RequireContext().GetService<LayerStack>();
+    }
+
+    const LayerStack& Application::GetLayerStack() const
+    {
+        return RequireContext().GetService<LayerStack>();
     }
 
     void Application::BindHost(ApplicationContext& context, ApplicationEventRouter& eventRouter)

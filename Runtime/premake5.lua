@@ -6,12 +6,19 @@ project "Runtime"
 
     files
     {
+        "Include/**.h",
+        "Include/**.hpp",
         "Source/**.h",
         "Source/**.hpp",
         "Source/**.cpp"
     }
 
     UseEngineIncludeDirs()
+
+    includedirs
+    {
+        "Include"
+    }
 
     links
     {

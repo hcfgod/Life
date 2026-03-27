@@ -2,6 +2,7 @@
 
 #include "Core/Application.h"
 #include "Core/ApplicationEventRouter.h"
+#include "Core/LayerStack.h"
 #include "Core/ApplicationRuntime.h"
 #include "Core/Memory.h"
 #include "Core/ServiceRegistry.h"
@@ -35,6 +36,8 @@ namespace Life
         const ApplicationContext& GetContext() const { return m_Context; }
         ApplicationEventRouter& GetEventRouter() { return m_EventRouter; }
         const ApplicationEventRouter& GetEventRouter() const { return m_EventRouter; }
+        LayerStack& GetLayerStack() { return m_LayerStack; }
+        const LayerStack& GetLayerStack() const { return m_LayerStack; }
         ServiceRegistry& GetServices() { return m_Services; }
         const ServiceRegistry& GetServices() const { return m_Services; }
 
@@ -44,6 +47,7 @@ namespace Life
         Scope<Window> m_Window;
         ApplicationContext m_Context;
         ApplicationEventRouter m_EventRouter;
+        LayerStack m_LayerStack;
         ServiceRegistry m_Services;
         bool m_Running = false;
         bool m_Initialized = false;

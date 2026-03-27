@@ -1,6 +1,7 @@
 #include "Core/ApplicationEventRouter.h"
 
 #include "Core/Application.h"
+#include "Core/LayerStack.h"
 
 namespace Life
 {
@@ -9,6 +10,13 @@ namespace Life
         application.OnEvent(event);
         if (event.IsPropagationStopped())
             return;
+
+        if (LayerStack* layerStack = application.TryGetService<LayerStack>())
+        {
+            layerStack->OnEvent(event);
+            if (event.IsPropagationStopped())
+                return;
+        }
 
         m_EventBus.Dispatch(event);
         if (event.IsPropagationStopped())

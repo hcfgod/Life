@@ -43,6 +43,9 @@ namespace Life
         ApplicationCommandLineArgs CommandLineArgs;
     };
 
+    class Layer;
+    class LayerStack;
+
     class Application
     {
     public:
@@ -83,6 +86,12 @@ namespace Life
         const ApplicationSpecification& GetSpecification() const { return m_Specification; }
         Window& GetWindow();
         const Window& GetWindow() const;
+        void PushLayer(Ref<Layer> layer);
+        void PushOverlay(Ref<Layer> overlay);
+        bool PopLayer(const Ref<Layer>& layer);
+        bool PopOverlay(const Ref<Layer>& overlay);
+        LayerStack& GetLayerStack();
+        const LayerStack& GetLayerStack() const;
 
         template<typename TService>
         TService& GetService()

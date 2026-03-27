@@ -139,6 +139,7 @@ namespace Life
             Application& application,
             ApplicationContext& context,
             ApplicationEventRouter& eventRouter,
+            LayerStack& layerStack,
             JobSystem& jobSystem,
             Async::AsyncIO& asyncIO,
             ApplicationRuntime& runtime,
@@ -148,6 +149,7 @@ namespace Life
             services.Register<Application>(application);
             services.Register<ApplicationContext>(context);
             services.Register<ApplicationEventRouter>(eventRouter);
+            services.Register<LayerStack>(layerStack);
             services.Register<JobSystem>(jobSystem);
             services.Register<Async::AsyncIO>(asyncIO);
             services.Register<ApplicationRuntime>(runtime);
@@ -174,6 +176,7 @@ namespace Life
         if (m_Runtime == nullptr)
             throw std::logic_error("ApplicationHost requires a valid application runtime.");
 
+        m_LayerStack.BindApplication(*m_Application);
         const ApplicationSpecification& specification = m_Application->GetSpecification();
         RegisterActiveApplicationHost(*this);
         m_RegisteredAsActiveHost = true;
@@ -195,7 +198,7 @@ namespace Life
 
             AcquireSharedEngineSystems(specification.Concurrency);
             m_SharedSystemsAcquired = true;
-            RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, GetJobSystem(), Async::GetAsyncIO(), *m_Runtime, *m_Window);
+            RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, m_LayerStack, GetJobSystem(), Async::GetAsyncIO(), *m_Runtime, *m_Window);
             SetGlobalServiceRegistry(&m_Services);
             m_GlobalServicesRegistered = true;
 
@@ -288,6 +291,13 @@ namespace Life
         {
             m_Running = false;
             m_Initialized = false;
+            try
+            {
+                m_LayerStack.Clear();
+            }
+            catch (...)
+            {
+            }
             throw;
         }
     }
@@ -298,6 +308,8 @@ namespace Life
             return;
 
         m_Application->OnHostRunFrame(timestep);
+        if (m_Running)
+            m_LayerStack.OnUpdate(timestep);
     }
 
     void ApplicationHost::HandleEvent(Event& event)
@@ -325,6 +337,16 @@ namespace Life
         catch (...)
         {
             finalizationFailure = std::current_exception();
+        }
+
+        try
+        {
+            m_LayerStack.Clear();
+        }
+        catch (...)
+        {
+            if (finalizationFailure == nullptr)
+                finalizationFailure = std::current_exception();
         }
 
         m_Initialized = false;
