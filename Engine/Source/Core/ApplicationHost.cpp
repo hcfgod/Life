@@ -196,9 +196,23 @@ namespace Life
                 specification.VSync
             });
 
+            try
+            {
+                GraphicsDeviceSpecification graphicsSpec;
+                graphicsSpec.EnableValidation = true;
+                graphicsSpec.VSync = specification.VSync;
+                m_GraphicsDevice = CreateGraphicsDevice(graphicsSpec, *m_Window);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_CORE_WARN("Graphics device creation failed ({}). Continuing without GPU rendering.", e.what());
+            }
+
             AcquireSharedEngineSystems(specification.Concurrency);
             m_SharedSystemsAcquired = true;
             RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, m_LayerStack, GetJobSystem(), Async::GetAsyncIO(), *m_Runtime, *m_Window);
+            if (m_GraphicsDevice)
+                m_Services.Register<GraphicsDevice>(*m_GraphicsDevice);
             SetGlobalServiceRegistry(&m_Services);
             m_GlobalServicesRegistered = true;
 
@@ -271,6 +285,7 @@ namespace Life
             m_RegisteredAsActiveHost = false;
         }
 
+        m_GraphicsDevice.reset();
         m_Window.reset();
         m_Runtime.reset();
         m_Application.reset();
@@ -312,9 +327,22 @@ namespace Life
         if (!m_Running || !m_Initialized)
             return;
 
+        bool frameStarted = false;
+        if (m_GraphicsDevice)
+        {
+            try { frameStarted = m_GraphicsDevice->BeginFrame(); }
+            catch (const std::exception& e) { LOG_CORE_ERROR("BeginFrame failed: {}", e.what()); }
+        }
+
         m_Application->OnHostRunFrame(timestep);
         if (m_Running)
             m_LayerStack.OnUpdate(timestep);
+
+        if (frameStarted && m_GraphicsDevice)
+        {
+            try { m_GraphicsDevice->Present(); }
+            catch (const std::exception& e) { LOG_CORE_ERROR("Present failed: {}", e.what()); }
+        }
     }
 
     void ApplicationHost::HandleEvent(Event& event)

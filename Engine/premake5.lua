@@ -13,7 +13,18 @@ project "Engine"
         "Include/**.hpp"
     }
 
+    links
+    {
+        "VkBootstrap"
+    }
+
     UseEngineIncludeDirs()
     ConfigureProjectPCH("Core/LifePCH.h", "Source/Core/LifePCH.cpp")
+    ConfigureGraphicsDefines()
     ConfigureSanitizers()
     ConfigureCommonProject()
+
+    filter "system:windows"
+        externalincludedirs { IncludeDir["DirectXHeaders"] }
+
+    filter {}

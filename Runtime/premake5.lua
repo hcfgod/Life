@@ -26,7 +26,11 @@ project "Runtime"
     }
 
     ConfigureApplicationEntrypoints()
+    ConfigureGraphicsDefines()
     ConfigureSanitizers()
     ConfigureRuntimeSearchPaths()
     ConfigureSDL3Linking()
+    ConfigureNVRHILinking()
+    ConfigureVulkanLinking()
+    ConfigureD3D12Linking()
     ConfigureCommonProject()

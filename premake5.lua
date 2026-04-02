@@ -108,6 +108,10 @@ newoption
  IncludeDir["spdlog"] = path.join(RootDir, "Vendor/spdlog/include")
  IncludeDir["json"] = path.join(RootDir, "Vendor/json/include")
  IncludeDir["doctest"] = path.join(RootDir, "Vendor/doctest")
+ IncludeDir["nvrhi"] = path.join(RootDir, "Vendor/nvrhi/include")
+ IncludeDir["VulkanHeaders"] = path.join(RootDir, "Vendor/nvrhi/thirdparty/Vulkan-Headers/include")
+ IncludeDir["DirectXHeaders"] = path.join(RootDir, "Vendor/nvrhi/thirdparty/DirectX-Headers/include/directx")
+ IncludeDir["vk_bootstrap"] = path.join(RootDir, "Vendor/vk-bootstrap/src")
 
  local function GetSDLInstallPath(platformName, configuration, leaf)
      return path.join(RootDir, "Vendor/SDL3/Install/" .. platformName .. "/" .. TargetArchitecture .. "/" .. configuration .. "/" .. leaf)
@@ -137,6 +141,36 @@ newoption
  BinaryFile["SDL3_MacOS_Debug"] = path.getabsolute(BinaryDir["SDL3_MacOS_Debug"] .. "/libSDL3.0.dylib")
  BinaryFile["SDL3_MacOS_Release"] = path.getabsolute(BinaryDir["SDL3_MacOS_Release"] .. "/libSDL3.0.dylib")
 
+ local function GetNVRHIInstallPath(platformName, configuration, leaf)
+     return path.join(RootDir, "Vendor/nvrhi/Install/" .. platformName .. "/" .. TargetArchitecture .. "/" .. configuration .. "/" .. leaf)
+ end
+
+ NVRHILibDir = {}
+ NVRHILibDir["Windows_Debug"] = GetNVRHIInstallPath("windows", "Debug", "lib")
+ NVRHILibDir["Windows_Release"] = GetNVRHIInstallPath("windows", "Release", "lib")
+ NVRHILibDir["Linux_Debug"] = GetNVRHIInstallPath("linux", "Debug", "lib")
+ NVRHILibDir["Linux_Release"] = GetNVRHIInstallPath("linux", "Release", "lib")
+ NVRHILibDir["MacOS_Debug"] = GetNVRHIInstallPath("macos", "Debug", "lib")
+ NVRHILibDir["MacOS_Release"] = GetNVRHIInstallPath("macos", "Release", "lib")
+
+ -- Resolve Vulkan SDK path for Windows linking
+ local function ResolveVulkanSDKPath()
+     local vulkanSDK = os.getenv("VULKAN_SDK")
+     if vulkanSDK ~= nil and vulkanSDK ~= "" then
+         return vulkanSDK
+     end
+     local localPath = path.join(RootDir, "Vendor/VulkanSDK")
+     if os.isdir(localPath) then
+         local entries = os.matchdirs(localPath .. "/*")
+         if #entries > 0 then
+             return entries[#entries]
+         end
+     end
+     return nil
+ end
+
+ VulkanSDKPath = ResolveVulkanSDKPath()
+
 function SetupProject()
     language "C++"
     cppdialect "C++20"
@@ -160,7 +194,10 @@ function UseEngineIncludeDirs(extraIncludeDirs)
     {
         IncludeDir["SDL3"],
         IncludeDir["spdlog"],
-        IncludeDir["json"]
+        IncludeDir["json"],
+        IncludeDir["nvrhi"],
+        IncludeDir["VulkanHeaders"],
+        IncludeDir["vk_bootstrap"]
     }
 
     if extraIncludeDirs ~= nil then
@@ -313,6 +350,85 @@ function ConfigureSDL3Linking()
     filter {}
 end
 
+function ConfigureGraphicsDefines()
+    filter "system:windows"
+        defines { "LIFE_GRAPHICS_VULKAN", "LIFE_GRAPHICS_D3D12", "VK_USE_PLATFORM_WIN32_KHR", "NOMINMAX" }
+
+    filter "system:linux"
+        defines { "LIFE_GRAPHICS_VULKAN", "VK_USE_PLATFORM_XLIB_KHR" }
+
+    filter "system:macosx"
+        defines { "LIFE_GRAPHICS_VULKAN", "VK_USE_PLATFORM_METAL_EXT" }
+
+    filter {}
+end
+
+function ConfigureNVRHILinking()
+    filter { "system:windows", "configurations:Debug" }
+        libdirs { NVRHILibDir["Windows_Debug"] }
+        links { "nvrhi", "nvrhi_vk", "nvrhi_d3d12" }
+
+    filter { "system:windows", "configurations:Release" }
+        libdirs { NVRHILibDir["Windows_Release"] }
+        links { "nvrhi", "nvrhi_vk", "nvrhi_d3d12" }
+
+    filter { "system:windows", "configurations:Dist" }
+        libdirs { NVRHILibDir["Windows_Release"] }
+        links { "nvrhi", "nvrhi_vk", "nvrhi_d3d12" }
+
+    filter { "system:linux", "configurations:Debug" }
+        libdirs { NVRHILibDir["Linux_Debug"] }
+        links { "nvrhi", "nvrhi_vk" }
+
+    filter { "system:linux", "configurations:Release" }
+        libdirs { NVRHILibDir["Linux_Release"] }
+        links { "nvrhi", "nvrhi_vk" }
+
+    filter { "system:linux", "configurations:Dist" }
+        libdirs { NVRHILibDir["Linux_Release"] }
+        links { "nvrhi", "nvrhi_vk" }
+
+    filter { "system:macosx", "configurations:Debug" }
+        libdirs { NVRHILibDir["MacOS_Debug"] }
+        links { "nvrhi", "nvrhi_vk" }
+
+    filter { "system:macosx", "configurations:Release" }
+        libdirs { NVRHILibDir["MacOS_Release"] }
+        links { "nvrhi", "nvrhi_vk" }
+
+    filter { "system:macosx", "configurations:Dist" }
+        libdirs { NVRHILibDir["MacOS_Release"] }
+        links { "nvrhi", "nvrhi_vk" }
+
+    filter {}
+end
+
+function ConfigureVulkanLinking()
+    filter "system:windows"
+        if VulkanSDKPath ~= nil then
+            libdirs { path.join(VulkanSDKPath, "Lib") }
+        end
+        links { "vulkan-1" }
+
+    filter "system:linux"
+        links { "vulkan" }
+
+    filter "system:macosx"
+        links { "vulkan" }
+        if VulkanSDKPath ~= nil then
+            libdirs { path.join(VulkanSDKPath, "lib") }
+        end
+
+    filter {}
+end
+
+function ConfigureD3D12Linking()
+    filter "system:windows"
+        links { "d3d12", "dxgi", "dxguid" }
+
+    filter {}
+end
+
 function ConfigureApplicationEntrypoints()
     filter "system:windows"
         defines { "LIFE_ENABLE_ENTRYPOINT" }
@@ -331,6 +447,10 @@ function ConfigureApplicationEntrypoints()
 
     filter {}
 end
+
+group "Dependencies"
+include "Vendor/vk-bootstrap"
+group ""
 
 include "Engine"
 include "Runtime"

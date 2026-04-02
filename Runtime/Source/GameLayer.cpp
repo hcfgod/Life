@@ -1,4 +1,7 @@
 #include "Runtime/GameLayer.h"
+#include "Graphics/GraphicsDevice.h"
+
+#include <nvrhi/nvrhi.h>
 
 namespace RuntimeApp
 {
@@ -33,6 +36,18 @@ namespace RuntimeApp
         {
             LOG_INFO("Runtime running.");
             m_HasLoggedRuntime = true;
+        }
+
+        if (auto* graphics = GetApplication().TryGetService<Life::GraphicsDevice>())
+        {
+            nvrhi::ITexture* backBuffer = graphics->GetCurrentBackBuffer();
+            nvrhi::ICommandList* commandList = graphics->GetCurrentCommandList();
+
+            if (backBuffer && commandList)
+            {
+                nvrhi::Color clearColor(0.392f, 0.584f, 0.929f, 1.0f);
+                commandList->clearTextureFloat(backBuffer, nvrhi::AllSubresources, clearColor);
+            }
         }
     }
 

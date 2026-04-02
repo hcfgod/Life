@@ -123,7 +123,10 @@ jobs:
             libdrm-dev \
             libgbm-dev \
             libdbus-1-dev \
-            libudev-dev
+            libudev-dev \
+            libvulkan-dev \
+            vulkan-validationlayers-dev \
+            spirv-tools
 
       - name: Install Linux quality dependencies
         if: inputs.dependency_profile == 'linux-quality'
@@ -161,7 +164,10 @@ jobs:
             libdrm-dev \
             libgbm-dev \
             libdbus-1-dev \
-            libudev-dev
+            libudev-dev \
+            libvulkan-dev \
+            vulkan-validationlayers-dev \
+            spirv-tools
 
       - name: Install macOS quality dependencies
         if: inputs.dependency_profile == 'macos-quality'
@@ -177,6 +183,13 @@ jobs:
         run: |
           brew install llvm
           echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+
+      - name: Install macOS Vulkan SDK
+        if: inputs.dependency_profile == 'macos-quality' || inputs.dependency_profile == 'macos-llvm'
+        run: |
+          brew install vulkan-sdk
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
 
@@ -203,6 +216,25 @@ jobs:
           key: life-sdl-${{ runner.os }}-${{ inputs.sdl_cache_dir }}-${{ hashFiles('.gitmodules', 'Setup.bat', 'Setup.sh', 'premake5.lua', 'Engine/premake5.lua', 'Runtime/premake5.lua', 'Test/premake5.lua', 'Vendor/SDL3/CMakeLists.txt') }}
           restore-keys: |
             life-sdl-${{ runner.os }}-${{ inputs.sdl_cache_dir }}-
+
+      - name: Cache NVRHI build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            Vendor/nvrhi/Build/${{ inputs.sdl_cache_dir }}
+            Vendor/nvrhi/Install/${{ inputs.sdl_cache_dir }}
+          key: life-nvrhi-${{ runner.os }}-${{ inputs.sdl_cache_dir }}-${{ hashFiles('.gitmodules', 'Setup.bat', 'Setup.sh', 'Vendor/nvrhi/CMakeLists.txt') }}
+          restore-keys: |
+            life-nvrhi-${{ runner.os }}-${{ inputs.sdl_cache_dir }}-
+
+      - name: Cache Vulkan SDK (Windows)
+        if: inputs.platform == 'windows'
+        uses: actions/cache@v4
+        with:
+          path: Vendor/VulkanSDK
+          key: life-vulkansdk-windows-${{ hashFiles('Setup.bat') }}
+          restore-keys: |
+            life-vulkansdk-windows-
 
       - name: Prepare project files (Windows)
         if: inputs.platform == 'windows'

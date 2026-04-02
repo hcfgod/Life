@@ -66,11 +66,17 @@ namespace Life
         explicit SDLWindow(WindowSpecification specification)
             : m_Specification(std::move(specification))
         {
+            SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE;
+
+#ifdef LIFE_GRAPHICS_VULKAN
+            flags |= SDL_WINDOW_VULKAN;
+#endif
+
             m_WindowHandle.reset(SDL_CreateWindow(
                 m_Specification.Title.c_str(),
                 static_cast<int>(m_Specification.Width),
                 static_cast<int>(m_Specification.Height),
-                SDL_WINDOW_RESIZABLE
+                flags
             ));
 
             if (!m_WindowHandle)

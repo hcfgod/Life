@@ -5,6 +5,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT="$SCRIPT_DIR"
 PREMAKE_VERSION="5.0.0-beta2"
 CMAKE_VERSION="4.3.0"
+VULKAN_SDK_VERSION="1.4.304.1"
 cd "$REPO_ROOT"
 
 PREMAKE_ACTION=${1:-}
@@ -179,6 +180,14 @@ if [ "$needs_bootstrap" -eq 0 ] && ! grep -F "path = Vendor/doctest" .gitmodules
     needs_bootstrap=1
 fi
 
+if [ "$needs_bootstrap" -eq 0 ] && ! grep -F "path = Vendor/nvrhi" .gitmodules >/dev/null 2>&1; then
+    needs_bootstrap=1
+fi
+
+if [ "$needs_bootstrap" -eq 0 ] && ! grep -F "path = Vendor/vk-bootstrap" .gitmodules >/dev/null 2>&1; then
+    needs_bootstrap=1
+fi
+
 if [ "$needs_bootstrap" -eq 0 ] && [ ! -d "Vendor/SDL3" -o -z "$(ls -A "Vendor/SDL3" 2>/dev/null)" ]; then
     needs_bootstrap=1
 fi
@@ -192,6 +201,14 @@ if [ "$needs_bootstrap" -eq 0 ] && [ ! -d "Vendor/json" -o -z "$(ls -A "Vendor/j
 fi
 
 if [ "$needs_bootstrap" -eq 0 ] && [ ! -d "Vendor/doctest" -o -z "$(ls -A "Vendor/doctest" 2>/dev/null)" ]; then
+    needs_bootstrap=1
+fi
+
+if [ "$needs_bootstrap" -eq 0 ] && [ ! -d "Vendor/nvrhi" -o -z "$(ls -A "Vendor/nvrhi" 2>/dev/null)" ]; then
+    needs_bootstrap=1
+fi
+
+if [ "$needs_bootstrap" -eq 0 ] && [ ! -d "Vendor/vk-bootstrap" -o -z "$(ls -A "Vendor/vk-bootstrap" 2>/dev/null)" ]; then
     needs_bootstrap=1
 fi
 
@@ -432,6 +449,162 @@ bootstrap_premake_from_source() {
     chmod +x "$premake_bin"
 }
 
+resolve_vulkan_sdk() {
+    LIFE_VULKAN_SDK=""
+
+    case "$(uname -s)" in
+        Darwin)
+            vulkan_sdk_platform="mac"
+            vulkan_sdk_local_dir="$REPO_ROOT/Vendor/VulkanSDK/$VULKAN_SDK_VERSION/macOS"
+            vulkan_sdk_lib_check="lib/libvulkan.1.dylib"
+            ;;
+        Linux)
+            vulkan_sdk_platform="linux"
+            vulkan_sdk_local_dir="$REPO_ROOT/Vendor/VulkanSDK/$VULKAN_SDK_VERSION/x86_64"
+            vulkan_sdk_lib_check="lib/libvulkan.so.1"
+            ;;
+        *)
+            echo "[Setup] Unsupported platform for Vulkan SDK."
+            exit 1
+            ;;
+    esac
+
+    # Check VULKAN_SDK environment variable first
+    if [ -n "${VULKAN_SDK:-}" ] && [ -d "$VULKAN_SDK" ]; then
+        LIFE_VULKAN_SDK="$VULKAN_SDK"
+        echo "[Setup] Vulkan SDK found via VULKAN_SDK at $VULKAN_SDK"
+        return 0
+    fi
+
+    # Check system-installed Vulkan on Linux (from apt libvulkan-dev)
+    if [ "$(uname -s)" = "Linux" ]; then
+        if [ -f "/usr/lib/x86_64-linux-gnu/libvulkan.so" ] || [ -f "/usr/lib/aarch64-linux-gnu/libvulkan.so" ]; then
+            LIFE_VULKAN_SDK="system"
+            echo "[Setup] Vulkan SDK found via system packages."
+            return 0
+        fi
+    fi
+
+    # Check local vendor copy
+    if [ -d "$vulkan_sdk_local_dir" ]; then
+        LIFE_VULKAN_SDK="$vulkan_sdk_local_dir"
+        echo "[Setup] Vulkan SDK found at $vulkan_sdk_local_dir"
+        return 0
+    fi
+
+    # Download the SDK
+    vulkan_sdk_archive_dir="$REPO_ROOT/Vendor/VulkanSDK"
+    mkdir -p "$vulkan_sdk_archive_dir"
+
+    if [ "$vulkan_sdk_platform" = "linux" ]; then
+        vulkan_sdk_archive="$vulkan_sdk_archive_dir/vulkan_sdk_${VULKAN_SDK_VERSION}.tar.xz"
+        vulkan_sdk_url="https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/linux/vulkan_sdk.tar.xz"
+
+        echo "[Setup] Vulkan SDK not found. Downloading Vulkan SDK $VULKAN_SDK_VERSION for Linux..."
+        if command -v curl >/dev/null 2>&1; then
+            curl -L --fail -o "$vulkan_sdk_archive" "$vulkan_sdk_url"
+        elif command -v wget >/dev/null 2>&1; then
+            wget -O "$vulkan_sdk_archive" "$vulkan_sdk_url"
+        else
+            echo "[Setup] Neither curl nor wget is available to download Vulkan SDK."
+            exit 1
+        fi
+
+        echo "[Setup] Extracting Vulkan SDK..."
+        tar -xJf "$vulkan_sdk_archive" -C "$vulkan_sdk_archive_dir"
+        rm -f "$vulkan_sdk_archive"
+        LIFE_VULKAN_SDK="$vulkan_sdk_local_dir"
+
+    elif [ "$vulkan_sdk_platform" = "mac" ]; then
+        vulkan_sdk_archive="$vulkan_sdk_archive_dir/vulkan_sdk_${VULKAN_SDK_VERSION}.zip"
+        vulkan_sdk_url="https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/mac/vulkan_sdk.zip"
+
+        echo "[Setup] Vulkan SDK not found. Downloading Vulkan SDK $VULKAN_SDK_VERSION for macOS..."
+        if command -v curl >/dev/null 2>&1; then
+            curl -L --fail -o "$vulkan_sdk_archive" "$vulkan_sdk_url"
+        elif command -v wget >/dev/null 2>&1; then
+            wget -O "$vulkan_sdk_archive" "$vulkan_sdk_url"
+        else
+            echo "[Setup] Neither curl nor wget is available to download Vulkan SDK."
+            exit 1
+        fi
+
+        echo "[Setup] Extracting Vulkan SDK..."
+        unzip -q -o "$vulkan_sdk_archive" -d "$vulkan_sdk_archive_dir"
+        rm -f "$vulkan_sdk_archive"
+        LIFE_VULKAN_SDK="$vulkan_sdk_local_dir"
+    fi
+
+    if [ -n "$LIFE_VULKAN_SDK" ] && [ -d "$LIFE_VULKAN_SDK" ]; then
+        echo "[Setup] Vulkan SDK $VULKAN_SDK_VERSION installed locally at $LIFE_VULKAN_SDK"
+        return 0
+    fi
+
+    echo "[Setup] Vulkan SDK installation failed. Please install manually from https://vulkan.lunarg.com/sdk/home"
+    exit 1
+}
+
+build_nvrhi() {
+    case "$(uname -s)" in
+        Darwin)
+            nvrhi_platform="macos"
+            NVRHI_CMAKE_DX12_FLAG="-DNVRHI_WITH_DX12=OFF"
+            if [ "$PREMAKE_ACTION" = "xcode4" ]; then
+                NVRHI_CMAKE_GENERATOR="Xcode"
+            else
+                NVRHI_CMAKE_GENERATOR="Unix Makefiles"
+            fi
+            ;;
+        Linux)
+            nvrhi_platform="linux"
+            NVRHI_CMAKE_DX12_FLAG="-DNVRHI_WITH_DX12=OFF"
+            NVRHI_CMAKE_GENERATOR="Unix Makefiles"
+            ;;
+        *)
+            echo "[Setup] Unsupported platform for NVRHI build."
+            exit 1
+            ;;
+    esac
+
+    build_nvrhi_config Debug
+    build_nvrhi_config Release
+}
+
+build_nvrhi_config() {
+    nvrhi_config="$1"
+    nvrhi_build_dir="$REPO_ROOT/Vendor/nvrhi/Build/$nvrhi_platform/$TARGET_ARCH/$nvrhi_config"
+    nvrhi_install_dir="$REPO_ROOT/Vendor/nvrhi/Install/$nvrhi_platform/$TARGET_ARCH/$nvrhi_config"
+
+    if [ -f "$nvrhi_install_dir/lib/libnvrhi.a" ]; then
+        echo "[Setup] NVRHI ($nvrhi_config) is already available. Skipping build."
+        return 0
+    fi
+
+    echo "[Setup] Building NVRHI ($nvrhi_config)..."
+    set -- "$CMAKE_CMD" -S "$REPO_ROOT/Vendor/nvrhi" -B "$nvrhi_build_dir" -G "$NVRHI_CMAKE_GENERATOR" \
+        -DNVRHI_WITH_VULKAN=ON \
+        $NVRHI_CMAKE_DX12_FLAG \
+        -DNVRHI_WITH_DX11=OFF \
+        -DNVRHI_WITH_NVAPI=OFF \
+        -DNVRHI_WITH_RTXMU=OFF \
+        -DNVRHI_WITH_AFTERMATH=OFF \
+        -DNVRHI_BUILD_SHARED=OFF \
+        -DNVRHI_INSTALL=ON \
+        -DCMAKE_BUILD_TYPE="$nvrhi_config" \
+        -DCMAKE_INSTALL_PREFIX="$nvrhi_install_dir"
+
+    if [ "$(uname -s)" = "Darwin" ] && [ -n "$TARGET_ARCH" ]; then
+        if [ "$TARGET_ARCH" = "arm64" ]; then
+            set -- "$@" -DCMAKE_OSX_ARCHITECTURES="arm64"
+        else
+            set -- "$@" -DCMAKE_OSX_ARCHITECTURES="x86_64"
+        fi
+    fi
+
+    "$@"
+    "$CMAKE_CMD" --build "$nvrhi_build_dir" --config "$nvrhi_config" --target install
+}
+
 resolve_premake() {
     case "$(uname -s)" in
         Darwin)
@@ -503,9 +676,11 @@ resolve_premake
 resolve_cmake
 configure_linux_cross_toolchain
 build_sdl
+resolve_vulkan_sdk
+build_nvrhi
 
 echo "[Setup] Using Premake command: $PREMAKE_CMD"
 echo "[Setup] Generating project files with Premake ($PREMAKE_ACTION)..."
 "$PREMAKE_CMD" "$PREMAKE_ACTION" "$@"
 
-echo "[Setup] Dependencies, SDL3, and project files are ready."
+echo "[Setup] Dependencies, SDL3, NVRHI, and project files are ready."

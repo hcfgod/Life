@@ -9,6 +9,9 @@ Scripts/CMake/*
 Scripts/Premake/*
 Vendor/SDL3/Build/
 Vendor/SDL3/Install/
+Vendor/nvrhi/Build/
+Vendor/nvrhi/Install/
+Vendor/VulkanSDK/
 
 # Visual Studio files
 .vs/

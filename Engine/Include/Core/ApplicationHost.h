@@ -7,6 +7,7 @@
 #include "Core/Memory.h"
 #include "Core/ServiceRegistry.h"
 #include "Core/Window.h"
+#include "Graphics/GraphicsDevice.h"
 
 namespace Life
 {
@@ -40,11 +41,14 @@ namespace Life
         const LayerStack& GetLayerStack() const { return m_LayerStack; }
         ServiceRegistry& GetServices() { return m_Services; }
         const ServiceRegistry& GetServices() const { return m_Services; }
+        GraphicsDevice* GetGraphicsDevice() { return m_GraphicsDevice.get(); }
+        const GraphicsDevice* GetGraphicsDevice() const { return m_GraphicsDevice.get(); }
 
     private:
         Scope<Application> m_Application;
         Scope<ApplicationRuntime> m_Runtime;
         Scope<Window> m_Window;
+        Scope<GraphicsDevice> m_GraphicsDevice;
         ApplicationContext m_Context;
         ApplicationEventRouter m_EventRouter;
         LayerStack m_LayerStack;

@@ -39,6 +39,8 @@ ensure_submodule "Vendor/SDL3" "https://github.com/libsdl-org/SDL.git"
 ensure_submodule "Vendor/spdlog" "https://github.com/gabime/spdlog.git"
 ensure_submodule "Vendor/json" "https://github.com/nlohmann/json.git"
 ensure_submodule "Vendor/doctest" "https://github.com/doctest/doctest.git"
+ensure_submodule "Vendor/nvrhi" "https://github.com/NVIDIAGameWorks/nvrhi.git"
+ensure_submodule "Vendor/vk-bootstrap" "https://github.com/charles-lunarg/vk-bootstrap.git"
 
 echo "[Bootstrap] Syncing submodules..."
 git submodule update --init --recursive
