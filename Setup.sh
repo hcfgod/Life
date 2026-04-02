@@ -518,6 +518,8 @@ resolve_vulkan_sdk() {
     elif [ "$vulkan_sdk_platform" = "mac" ]; then
         vulkan_sdk_archive="$vulkan_sdk_archive_dir/vulkan_sdk_${VULKAN_SDK_VERSION}.zip"
         vulkan_sdk_url="https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/mac/vulkan_sdk.zip"
+        vulkan_sdk_extract_dir="$vulkan_sdk_archive_dir/vulkansdk-macOS-${VULKAN_SDK_VERSION}-extract"
+        vulkan_sdk_install_root="$REPO_ROOT/Vendor/VulkanSDK/$VULKAN_SDK_VERSION"
 
         echo "[Setup] Vulkan SDK not found. Downloading Vulkan SDK $VULKAN_SDK_VERSION for macOS..."
         if command -v curl >/dev/null 2>&1; then
@@ -530,8 +532,27 @@ resolve_vulkan_sdk() {
         fi
 
         echo "[Setup] Extracting Vulkan SDK..."
-        unzip -q -o "$vulkan_sdk_archive" -d "$vulkan_sdk_archive_dir"
+        rm -rf "$vulkan_sdk_extract_dir"
+        mkdir -p "$vulkan_sdk_extract_dir"
+        unzip -q -o "$vulkan_sdk_archive" -d "$vulkan_sdk_extract_dir"
         rm -f "$vulkan_sdk_archive"
+
+        vulkan_sdk_installer_app=$(find "$vulkan_sdk_extract_dir" -type d -name "vulkansdk-macOS-*.app" | head -n 1)
+        if [ -z "$vulkan_sdk_installer_app" ]; then
+            echo "[Setup] Unable to locate the extracted macOS Vulkan SDK installer app."
+            exit 1
+        fi
+
+        vulkan_sdk_installer_bin="$vulkan_sdk_installer_app/Contents/MacOS/$(basename "$vulkan_sdk_installer_app" .app)"
+        if [ ! -f "$vulkan_sdk_installer_bin" ]; then
+            echo "[Setup] Unable to locate the macOS Vulkan SDK installer binary."
+            exit 1
+        fi
+
+        mkdir -p "$vulkan_sdk_install_root"
+        "$vulkan_sdk_installer_bin" --root "$vulkan_sdk_install_root" --accept-licenses --default-answer --confirm-command install copy_only=1
+
+        rm -rf "$vulkan_sdk_extract_dir"
         LIFE_VULKAN_SDK="$vulkan_sdk_local_dir"
     fi
 
