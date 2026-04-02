@@ -92,12 +92,13 @@ jobs:
       - name: Install Linux build dependencies
         if: inputs.dependency_profile == 'linux'
         run: |
+          sudo apt-get update
+
           VULKAN_VALIDATION_PACKAGE=vulkan-utility-libraries-dev
-          if apt-cache show vulkan-validationlayers-dev >/dev/null 2>&1; then
+          if apt-cache policy vulkan-validationlayers-dev | awk '/Candidate:/ { exit ($2 == "(none)") ? 1 : 0 }'; then
             VULKAN_VALIDATION_PACKAGE=vulkan-validationlayers-dev
           fi
 
-          sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
             clang \
@@ -136,12 +137,13 @@ jobs:
       - name: Install Linux quality dependencies
         if: inputs.dependency_profile == 'linux-quality'
         run: |
+          sudo apt-get update
+
           VULKAN_VALIDATION_PACKAGE=vulkan-utility-libraries-dev
-          if apt-cache show vulkan-validationlayers-dev >/dev/null 2>&1; then
+          if apt-cache policy vulkan-validationlayers-dev | awk '/Candidate:/ { exit ($2 == "(none)") ? 1 : 0 }'; then
             VULKAN_VALIDATION_PACKAGE=vulkan-validationlayers-dev
           fi
 
-          sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
             clang \

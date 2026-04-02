@@ -537,13 +537,19 @@ resolve_vulkan_sdk() {
         unzip -q -o "$vulkan_sdk_archive" -d "$vulkan_sdk_extract_dir"
         rm -f "$vulkan_sdk_archive"
 
-        vulkan_sdk_installer_app=$(find "$vulkan_sdk_extract_dir" -type d -name "vulkansdk-macOS-*.app" | head -n 1)
+        vulkan_sdk_installer_app=$(find "$vulkan_sdk_extract_dir" -type d -name "InstallVulkan.app" | head -n 1)
+        if [ -z "$vulkan_sdk_installer_app" ]; then
+            vulkan_sdk_installer_app=$(find "$vulkan_sdk_extract_dir" -type d -name "*.app" | head -n 1)
+        fi
         if [ -z "$vulkan_sdk_installer_app" ]; then
             echo "[Setup] Unable to locate the extracted macOS Vulkan SDK installer app."
             exit 1
         fi
 
-        vulkan_sdk_installer_bin="$vulkan_sdk_installer_app/Contents/MacOS/$(basename "$vulkan_sdk_installer_app" .app)"
+        vulkan_sdk_installer_bin="$vulkan_sdk_installer_app/Contents/MacOS/InstallVulkan"
+        if [ ! -f "$vulkan_sdk_installer_bin" ]; then
+            vulkan_sdk_installer_bin=$(find "$vulkan_sdk_installer_app/Contents/MacOS" -maxdepth 1 -type f -perm -111 | head -n 1)
+        fi
         if [ ! -f "$vulkan_sdk_installer_bin" ]; then
             echo "[Setup] Unable to locate the macOS Vulkan SDK installer binary."
             exit 1
