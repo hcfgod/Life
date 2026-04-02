@@ -92,6 +92,11 @@ jobs:
       - name: Install Linux build dependencies
         if: inputs.dependency_profile == 'linux'
         run: |
+          VULKAN_VALIDATION_PACKAGE=vulkan-utility-libraries-dev
+          if apt-cache show vulkan-validationlayers-dev >/dev/null 2>&1; then
+            VULKAN_VALIDATION_PACKAGE=vulkan-validationlayers-dev
+          fi
+
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
@@ -125,12 +130,17 @@ jobs:
             libdbus-1-dev \
             libudev-dev \
             libvulkan-dev \
-            vulkan-validationlayers-dev \
+            "$VULKAN_VALIDATION_PACKAGE" \
             spirv-tools
 
       - name: Install Linux quality dependencies
         if: inputs.dependency_profile == 'linux-quality'
         run: |
+          VULKAN_VALIDATION_PACKAGE=vulkan-utility-libraries-dev
+          if apt-cache show vulkan-validationlayers-dev >/dev/null 2>&1; then
+            VULKAN_VALIDATION_PACKAGE=vulkan-validationlayers-dev
+          fi
+
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
@@ -166,7 +176,7 @@ jobs:
             libdbus-1-dev \
             libudev-dev \
             libvulkan-dev \
-            vulkan-validationlayers-dev \
+            "$VULKAN_VALIDATION_PACKAGE" \
             spirv-tools
 
       - name: Install macOS quality dependencies
@@ -183,13 +193,6 @@ jobs:
         run: |
           brew install llvm
           echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: '1'
-
-      - name: Install macOS Vulkan SDK
-        if: inputs.dependency_profile == 'macos-quality' || inputs.dependency_profile == 'macos-llvm'
-        run: |
-          brew install vulkan-sdk
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
 
