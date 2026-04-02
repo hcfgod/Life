@@ -295,8 +295,13 @@ namespace Life
             {
                 m_LayerStack.Clear();
             }
+            catch (const std::exception& exception)
+            {
+                LOG_CORE_ERROR("Failed to clear layers during initialization cleanup: {}", exception.what());
+            }
             catch (...)
             {
+                LOG_CORE_ERROR("Failed to clear layers during initialization cleanup due to an unknown exception.");
             }
             throw;
         }
