@@ -71,6 +71,44 @@ function Find-SdlBinDirectory([string]$PlatformSuffix, [string]$BuildConfigurati
     return $null
 }
 
+function Install-VulkanRuntimeIfNeeded() {
+    $vulkanDll = Get-Command 'vulkan-1.dll' -ErrorAction SilentlyContinue
+    if ($null -ne $vulkanDll) {
+        Write-Host "[CI] Vulkan Runtime already available: $($vulkanDll.Source)"
+        return
+    }
+
+    if (Test-Path -LiteralPath "$env:SystemRoot\System32\vulkan-1.dll") {
+        Write-Host "[CI] Vulkan Runtime found in System32."
+        return
+    }
+
+    $searchRoots = @()
+    if (-not [string]::IsNullOrWhiteSpace($env:VULKAN_SDK)) {
+        $searchRoots += $env:VULKAN_SDK
+    }
+    $vendorRoot = Join-Path $RepoRoot 'Vendor/VulkanSDK'
+    if (Test-Path -LiteralPath $vendorRoot) {
+        $searchRoots += @(Get-ChildItem -LiteralPath $vendorRoot -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | ForEach-Object { $_.FullName })
+    }
+
+    foreach ($sdkRoot in $searchRoots) {
+        $rtInstaller = Join-Path $sdkRoot 'Helpers/VulkanRT.exe'
+        if (Test-Path -LiteralPath $rtInstaller) {
+            Write-Host "[CI] Installing Vulkan Runtime from $rtInstaller ..."
+            $proc = Start-Process -FilePath $rtInstaller -ArgumentList '/S' -Wait -PassThru
+            if ($proc.ExitCode -eq 0) {
+                Write-Host "[CI] Vulkan Runtime installed successfully."
+            } else {
+                Write-Host "[CI] WARNING: Vulkan Runtime installer exited with code $($proc.ExitCode)."
+            }
+            return
+        }
+    }
+
+    Write-Host "[CI] WARNING: vulkan-1.dll not found and no VulkanRT installer available."
+}
+
 function Find-VulkanBinDirectory() {
     $candidates = @()
 
@@ -109,6 +147,8 @@ $testBinary = Find-TestBinary -PlatformSuffix $platformSuffix -BuildConfiguratio
 $testDirectory = Split-Path -Parent $testBinary
 $sdlBinDirectory = Find-SdlBinDirectory -PlatformSuffix $platformSuffix -BuildConfiguration $Configuration
 $vulkanBinDirectory = Find-VulkanBinDirectory
+
+Install-VulkanRuntimeIfNeeded
 
 $pathEntries = @($testDirectory)
 if ($null -ne $sdlBinDirectory) {
