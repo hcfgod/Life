@@ -22,7 +22,8 @@ project "Test"
 
     links
     {
-        "Engine"
+        "Engine",
+        "VkBootstrap"
     }
 
     ConfigureGraphicsDefines()

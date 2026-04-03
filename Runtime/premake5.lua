@@ -22,7 +22,8 @@ project "Runtime"
 
     links
     {
-        "Engine"
+        "Engine",
+        "VkBootstrap"
     }
 
     ConfigureApplicationEntrypoints()
