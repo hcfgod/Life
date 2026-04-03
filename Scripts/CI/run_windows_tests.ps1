@@ -71,14 +71,49 @@ function Find-SdlBinDirectory([string]$PlatformSuffix, [string]$BuildConfigurati
     return $null
 }
 
+function Find-VulkanBinDirectory() {
+    $candidates = @()
+
+    if (-not [string]::IsNullOrWhiteSpace($env:VULKAN_SDK)) {
+        $candidates += (Join-Path $env:VULKAN_SDK 'Bin')
+    }
+
+    $vendorRoot = Join-Path $RepoRoot 'Vendor/VulkanSDK'
+    if (Test-Path -LiteralPath $vendorRoot) {
+        $candidates += @(Get-ChildItem -LiteralPath $vendorRoot -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | ForEach-Object {
+            Join-Path $_.FullName 'Bin'
+        })
+    }
+
+    $defaultSdkRoot = 'C:\VulkanSDK'
+    if (Test-Path -LiteralPath $defaultSdkRoot) {
+        $candidates += @(Get-ChildItem -LiteralPath $defaultSdkRoot -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | ForEach-Object {
+            Join-Path $_.FullName 'Bin'
+        })
+    }
+
+    foreach ($candidate in ($candidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)) {
+        if (Test-Path -LiteralPath (Join-Path $candidate 'vulkan-1.dll')) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
 $platformSuffix = Resolve-PlatformSuffix $Platform
 $testBinary = Find-TestBinary -PlatformSuffix $platformSuffix -BuildConfiguration $Configuration
 $testDirectory = Split-Path -Parent $testBinary
 $sdlBinDirectory = Find-SdlBinDirectory -PlatformSuffix $platformSuffix -BuildConfiguration $Configuration
+$vulkanBinDirectory = Find-VulkanBinDirectory
 
 $pathEntries = @($testDirectory)
 if ($null -ne $sdlBinDirectory) {
     $pathEntries += $sdlBinDirectory
+}
+if ($null -ne $vulkanBinDirectory) {
+    $pathEntries += $vulkanBinDirectory
+    $env:VK_LAYER_PATH = $vulkanBinDirectory
 }
 
 $env:PATH = (($pathEntries | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) + $env:PATH) -join ';'
@@ -88,6 +123,9 @@ Write-Host "[CI] Test binary: $testBinary"
 Write-Host "[CI] Working directory: $testDirectory"
 if ($null -ne $sdlBinDirectory) {
     Write-Host "[CI] SDL runtime directory: $sdlBinDirectory"
+}
+if ($null -ne $vulkanBinDirectory) {
+    Write-Host "[CI] Vulkan runtime directory: $vulkanBinDirectory"
 }
 
 Push-Location $testDirectory

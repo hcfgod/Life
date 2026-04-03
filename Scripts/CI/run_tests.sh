@@ -65,6 +65,23 @@ resolve_target_arch_suffix() {
 
 TARGET_ARCH_SUFFIX=$(resolve_target_arch_suffix)
 
+find_vulkan_sdk_dir() {
+    system_name=$1
+
+    case "$system_name" in
+        Darwin|macosx)
+            for vulkan_sdk_dir in "$REPO_ROOT"/Vendor/VulkanSDK/*/macOS; do
+                if [ -d "$vulkan_sdk_dir" ] && [ -f "$vulkan_sdk_dir/lib/libvulkan.1.dylib" ]; then
+                    printf '%s' "$vulkan_sdk_dir"
+                    return 0
+                fi
+            done
+            ;;
+    esac
+
+    return 1
+}
+
 find_test_binary() {
     system_name=$1
 
@@ -124,7 +141,14 @@ case "$(uname -s)" in
         TEST_BINARY=$(find_test_binary "$SYSTEM_NAME")
         TEST_DIRECTORY=$(dirname "$TEST_BINARY")
         SDL_LIB_DIR=$(find_sdl_lib_dir "$SYSTEM_NAME")
-        DYLD_LIBRARY_PATH="$TEST_DIRECTORY:$SDL_LIB_DIR${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" "$TEST_BINARY"
+        VULKAN_SDK_DIR=$(find_vulkan_sdk_dir "$SYSTEM_NAME")
+        VULKAN_LIB_DIR="$VULKAN_SDK_DIR/lib"
+        VULKAN_ICD_FILE="$VULKAN_SDK_DIR/share/vulkan/icd.d/MoltenVK_icd.json"
+        VULKAN_LAYER_DIR="$VULKAN_SDK_DIR/share/vulkan/explicit_layer.d"
+        DYLD_LIBRARY_PATH="$TEST_DIRECTORY:$SDL_LIB_DIR:$VULKAN_LIB_DIR${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" \
+        VK_ICD_FILENAMES="$VULKAN_ICD_FILE" \
+        VK_LAYER_PATH="$VULKAN_LAYER_DIR" \
+        "$TEST_BINARY"
         ;;
     Linux)
         SYSTEM_NAME="linux"
