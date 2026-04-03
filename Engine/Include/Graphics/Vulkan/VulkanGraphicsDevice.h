@@ -4,18 +4,6 @@
 
 #include <vulkan/vulkan.h>
 
-#if defined(__linux__)
-#ifdef None
-#undef None
-#endif
-#ifdef Always
-#undef Always
-#endif
-#ifdef TileShape
-#undef TileShape
-#endif
-#endif
-
 #include <nvrhi/vulkan.h>
 #include <VkBootstrap.h>
 

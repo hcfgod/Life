@@ -163,7 +163,21 @@ newoption
      if os.isdir(localPath) then
          local entries = os.matchdirs(localPath .. "/*")
          if #entries > 0 then
-             return entries[#entries]
+             local sdkRoot = entries[#entries]
+
+             if os.host() == "macosx" then
+                 local macSdkRoot = path.join(sdkRoot, "macOS")
+                 if os.isdir(macSdkRoot) then
+                     return macSdkRoot
+                 end
+             elseif os.host() == "linux" then
+                 local linuxSdkRoot = path.join(sdkRoot, "x86_64")
+                 if os.isdir(linuxSdkRoot) then
+                     return linuxSdkRoot
+                 end
+             end
+
+             return sdkRoot
          end
      end
      return nil
@@ -355,7 +369,7 @@ function ConfigureGraphicsDefines()
         defines { "LIFE_GRAPHICS_VULKAN", "LIFE_GRAPHICS_D3D12", "VK_USE_PLATFORM_WIN32_KHR", "NOMINMAX" }
 
     filter "system:linux"
-        defines { "LIFE_GRAPHICS_VULKAN", "VK_USE_PLATFORM_XLIB_KHR" }
+        defines { "LIFE_GRAPHICS_VULKAN" }
 
     filter "system:macosx"
         defines { "LIFE_GRAPHICS_VULKAN", "VK_USE_PLATFORM_METAL_EXT" }
