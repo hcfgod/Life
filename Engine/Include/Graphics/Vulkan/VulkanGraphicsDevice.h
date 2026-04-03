@@ -11,6 +11,9 @@
 #ifdef Always
 #undef Always
 #endif
+#ifdef TileShape
+#undef TileShape
+#endif
 #endif
 
 #include <nvrhi/vulkan.h>
