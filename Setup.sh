@@ -223,6 +223,45 @@ git submodule init
 echo "[Setup] Updating submodules recursively..."
 git submodule update --init --recursive
 
+ensure_vk_bootstrap_premake() {
+    if [ ! -d "$REPO_ROOT/Vendor/vk-bootstrap" ]; then
+        echo "[Setup] Vendor/vk-bootstrap was not found after submodule sync."
+        exit 1
+    fi
+
+    cat > "$REPO_ROOT/Vendor/vk-bootstrap/premake5.lua" <<'EOF'
+project "VkBootstrap"
+    location "."
+    kind "StaticLib"
+
+    SetupProject()
+
+    files
+    {
+        "src/VkBootstrap.h",
+        "src/VkBootstrap.cpp",
+        "src/VkBootstrapDispatch.h",
+        "src/VkBootstrapFeatureChain.h",
+        "src/VkBootstrapFeatureChain.inl"
+    }
+
+    includedirs
+    {
+        "src"
+    }
+
+    externalincludedirs
+    {
+        IncludeDir["VulkanHeaders"]
+    }
+
+    ConfigureSanitizers()
+    ConfigureCommonProject()
+EOF
+}
+
+ensure_vk_bootstrap_premake
+
 resolve_cmake() {
     if command -v cmake >/dev/null 2>&1; then
         CMAKE_CMD="cmake"

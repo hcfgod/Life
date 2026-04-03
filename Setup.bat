@@ -44,6 +44,9 @@ echo [Setup] Updating submodules recursively...
 git submodule update --init --recursive
 if errorlevel 1 goto :error
 
+call :ensure_vk_bootstrap_premake
+if errorlevel 1 goto :error
+
 call :resolve_premake "%PREMAKE_ACTION_ARG%"
 if errorlevel 1 goto :error
 
@@ -66,6 +69,44 @@ if errorlevel 1 goto :error
 
 echo [Setup] Dependencies, SDL3, NVRHI, and project files are ready.
 popd >nul
+exit /b 0
+
+:ensure_vk_bootstrap_premake
+if not exist "Vendor\vk-bootstrap\" (
+    echo [Setup] Vendor\vk-bootstrap was not found after submodule sync.
+    exit /b 1
+)
+
+> "Vendor\vk-bootstrap\premake5.lua" echo project "VkBootstrap"
+>> "Vendor\vk-bootstrap\premake5.lua" echo     location "."
+>> "Vendor\vk-bootstrap\premake5.lua" echo     kind "StaticLib"
+>> "Vendor\vk-bootstrap\premake5.lua" echo.
+>> "Vendor\vk-bootstrap\premake5.lua" echo     SetupProject()
+>> "Vendor\vk-bootstrap\premake5.lua" echo.
+>> "Vendor\vk-bootstrap\premake5.lua" echo     files
+>> "Vendor\vk-bootstrap\premake5.lua" echo     {
+>> "Vendor\vk-bootstrap\premake5.lua" echo         "src/VkBootstrap.h",
+>> "Vendor\vk-bootstrap\premake5.lua" echo         "src/VkBootstrap.cpp",
+>> "Vendor\vk-bootstrap\premake5.lua" echo         "src/VkBootstrapDispatch.h",
+>> "Vendor\vk-bootstrap\premake5.lua" echo         "src/VkBootstrapFeatureChain.h",
+>> "Vendor\vk-bootstrap\premake5.lua" echo         "src/VkBootstrapFeatureChain.inl"
+>> "Vendor\vk-bootstrap\premake5.lua" echo     }
+>> "Vendor\vk-bootstrap\premake5.lua" echo.
+>> "Vendor\vk-bootstrap\premake5.lua" echo     includedirs
+>> "Vendor\vk-bootstrap\premake5.lua" echo     {
+>> "Vendor\vk-bootstrap\premake5.lua" echo         "src"
+>> "Vendor\vk-bootstrap\premake5.lua" echo     }
+>> "Vendor\vk-bootstrap\premake5.lua" echo.
+>> "Vendor\vk-bootstrap\premake5.lua" echo     externalincludedirs
+>> "Vendor\vk-bootstrap\premake5.lua" echo     {
+>> "Vendor\vk-bootstrap\premake5.lua" echo         IncludeDir["VulkanHeaders"]
+>> "Vendor\vk-bootstrap\premake5.lua" echo     }
+>> "Vendor\vk-bootstrap\premake5.lua" echo.
+>> "Vendor\vk-bootstrap\premake5.lua" echo     ConfigureSanitizers()
+>> "Vendor\vk-bootstrap\premake5.lua" echo     ConfigureCommonProject()
+
+if not exist "Vendor\vk-bootstrap\premake5.lua" exit /b 1
+
 exit /b 0
 
 :resolve_cmake

@@ -463,7 +463,7 @@ function ConfigureApplicationEntrypoints()
 end
 
 group "Dependencies"
-include "Vendor/VkBootstrap"
+include "Vendor/vk-bootstrap"
 group ""
 
 include "Engine"
