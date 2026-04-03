@@ -7,6 +7,10 @@ param(
     [string]$Platform = ''
 )
 
+$ErrorActionPreference = 'Stop'
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot = (Resolve-Path -LiteralPath (Join-Path $ScriptRoot '..\..')).Path
+
 function Resolve-PlatformSuffix([string]$RequestedPlatform) {
     if (-not [string]::IsNullOrWhiteSpace($RequestedPlatform)) {
         $normalized = $RequestedPlatform.Trim().ToLowerInvariant()
@@ -28,28 +32,83 @@ function Resolve-PlatformSuffix([string]$RequestedPlatform) {
     }
 }
 
-$platformSuffix = Resolve-PlatformSuffix $Platform
+function Find-TestBinary([string]$PlatformSuffix, [string]$BuildConfiguration) {
+    $candidates = @(
+        (Join-Path $RepoRoot "Build/windows-$PlatformSuffix/$BuildConfiguration/Test/Test.exe"),
+        (Join-Path $RepoRoot "Build/windows-x64/$BuildConfiguration/Test/Test.exe"),
+        (Join-Path $RepoRoot "Build/windows-arm64/$BuildConfiguration/Test/Test.exe"),
+        (Join-Path $RepoRoot "Build/windows-x86_64/$BuildConfiguration/Test/Test.exe")
+    )
 
-$candidates = @(
-    "Build/windows-$platformSuffix/$Configuration/Test/Test.exe",
-    "Build/windows-x64/$Configuration/Test/Test.exe",
-    "Build/windows-arm64/$Configuration/Test/Test.exe",
-    "Build/windows-x86_64/$Configuration/Test/Test.exe"
-)
-
-$testBinary = $null
-foreach ($candidate in $candidates) {
-    if (Test-Path -LiteralPath $candidate) {
-        $testBinary = $candidate
-        break
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
     }
+
+    $availableBinaries = @(Get-ChildItem -Path (Join-Path $RepoRoot 'Build') -Filter Test.exe -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    $searchedPaths = $candidates -join [Environment]::NewLine
+    $availablePaths = if ($availableBinaries.Count -gt 0) { $availableBinaries -join [Environment]::NewLine } else { '<none>' }
+    throw "Unable to find Windows Test binary for configuration '$BuildConfiguration'. Searched:`n$searchedPaths`nAvailable Test.exe files:`n$availablePaths"
 }
 
-if ($null -eq $testBinary) {
-    throw "Unable to find Windows Test binary for configuration '$Configuration'."
+function Find-SdlBinDirectory([string]$PlatformSuffix, [string]$BuildConfiguration) {
+    $candidates = @(
+        (Join-Path $RepoRoot "Vendor/SDL3/Install/windows/$PlatformSuffix/$BuildConfiguration/bin"),
+        (Join-Path $RepoRoot "Vendor/SDL3/Install/windows/$PlatformSuffix/Release/bin"),
+        (Join-Path $RepoRoot "Vendor/SDL3/Install/windows/x64/$BuildConfiguration/bin"),
+        (Join-Path $RepoRoot "Vendor/SDL3/Install/windows/x64/Release/bin"),
+        (Join-Path $RepoRoot "Vendor/SDL3/Install/windows/arm64/$BuildConfiguration/bin"),
+        (Join-Path $RepoRoot "Vendor/SDL3/Install/windows/arm64/Release/bin")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
 }
 
-& $testBinary
-if ($LASTEXITCODE -ne 0) {
-    exit $LASTEXITCODE
+$platformSuffix = Resolve-PlatformSuffix $Platform
+$testBinary = Find-TestBinary -PlatformSuffix $platformSuffix -BuildConfiguration $Configuration
+$testDirectory = Split-Path -Parent $testBinary
+$sdlBinDirectory = Find-SdlBinDirectory -PlatformSuffix $platformSuffix -BuildConfiguration $Configuration
+
+$pathEntries = @($testDirectory)
+if ($null -ne $sdlBinDirectory) {
+    $pathEntries += $sdlBinDirectory
+}
+
+$env:PATH = (($pathEntries | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) + $env:PATH) -join ';'
+
+Write-Host "[CI] Repo root: $RepoRoot"
+Write-Host "[CI] Test binary: $testBinary"
+Write-Host "[CI] Working directory: $testDirectory"
+if ($null -ne $sdlBinDirectory) {
+    Write-Host "[CI] SDL runtime directory: $sdlBinDirectory"
+}
+
+Push-Location $testDirectory
+try {
+    & $testBinary
+    $testExitCode = $LASTEXITCODE
+}
+finally {
+    Pop-Location
+}
+
+if ($testExitCode -ne 0) {
+    Write-Host "[CI] Windows tests exited with code $testExitCode"
+
+    $crashDirectory = Join-Path $testDirectory 'Crashes'
+    if (Test-Path -LiteralPath $crashDirectory) {
+        Write-Host "[CI] Crash artifacts found in $crashDirectory"
+        Get-ChildItem -LiteralPath $crashDirectory -File | Sort-Object LastWriteTime | ForEach-Object {
+            Write-Host "[CI] Crash artifact: $($_.FullName)"
+        }
+    }
+
+    exit $testExitCode
 }
