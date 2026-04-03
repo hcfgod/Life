@@ -93,7 +93,10 @@ function Find-VulkanBinDirectory() {
     }
 
     foreach ($candidate in ($candidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)) {
-        if (Test-Path -LiteralPath (Join-Path $candidate 'vulkan-1.dll')) {
+        if ((Test-Path -LiteralPath (Join-Path $candidate 'vulkan-1.dll')) -or
+            (Test-Path -LiteralPath (Join-Path $candidate 'dxcompiler.dll')) -or
+            (Test-Path -LiteralPath (Join-Path $candidate 'shaderc_shared.dll')) -or
+            (Test-Path -LiteralPath (Join-Path $candidate 'VkLayer_khronos_validation.json'))) {
             return $candidate
         }
     }
