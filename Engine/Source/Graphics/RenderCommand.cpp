@@ -1,0 +1,41 @@
+#include "Core/LifePCH.h"
+#include "Graphics/RenderCommand.h"
+#include "Graphics/Renderer.h"
+#include "Graphics/GraphicsBuffer.h"
+#include "Graphics/GraphicsPipeline.h"
+
+namespace Life
+{
+    void RenderCommand::Clear(Renderer& renderer, float r, float g, float b, float a)
+    {
+        renderer.Clear(r, g, b, a);
+    }
+
+    void RenderCommand::SetViewport(Renderer& renderer, float x, float y, float width, float height)
+    {
+        renderer.SetViewport(x, y, width, height);
+    }
+
+    void RenderCommand::SetScissor(Renderer& renderer, int32_t x, int32_t y, uint32_t width, uint32_t height)
+    {
+        renderer.SetScissor(x, y, width, height);
+    }
+
+    void RenderCommand::Draw(Renderer& renderer,
+                             GraphicsPipeline& pipeline,
+                             GraphicsBuffer& vertexBuffer,
+                             uint32_t vertexCount)
+    {
+        renderer.Submit(pipeline, vertexBuffer, vertexCount);
+    }
+
+    void RenderCommand::DrawIndexed(Renderer& renderer,
+                                    GraphicsPipeline& pipeline,
+                                    GraphicsBuffer& vertexBuffer,
+                                    GraphicsBuffer& indexBuffer,
+                                    uint32_t indexCount,
+                                    uint32_t indexOffset)
+    {
+        renderer.SubmitIndexed(pipeline, vertexBuffer, indexBuffer, indexCount, indexOffset);
+    }
+}

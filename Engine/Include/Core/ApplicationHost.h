@@ -9,6 +9,7 @@
 #include "Core/ServiceRegistry.h"
 #include "Core/Window.h"
 #include "Graphics/GraphicsDevice.h"
+#include "Graphics/Renderer.h"
 
 namespace Life
 {
@@ -46,12 +47,15 @@ namespace Life
         const ServiceRegistry& GetServices() const { return m_Services; }
         GraphicsDevice* GetGraphicsDevice() { return m_GraphicsDevice.get(); }
         const GraphicsDevice* GetGraphicsDevice() const { return m_GraphicsDevice.get(); }
+        Renderer* GetRenderer() { return m_Renderer.get(); }
+        const Renderer* GetRenderer() const { return m_Renderer.get(); }
 
     private:
         Scope<Application> m_Application;
         Scope<ApplicationRuntime> m_Runtime;
         Scope<Window> m_Window;
         Scope<GraphicsDevice> m_GraphicsDevice;
+        Scope<Renderer> m_Renderer;
         ApplicationContext m_Context;
         ApplicationEventRouter m_EventRouter;
         LayerStack m_LayerStack;

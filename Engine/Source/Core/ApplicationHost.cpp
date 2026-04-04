@@ -214,7 +214,18 @@ namespace Life
             m_SharedSystemsAcquired = true;
             RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, m_LayerStack, m_InputSystem, GetJobSystem(), Async::GetAsyncIO(), *m_Runtime, *m_Window);
             if (m_GraphicsDevice)
+            {
                 m_Services.Register<GraphicsDevice>(*m_GraphicsDevice);
+                try
+                {
+                    m_Renderer = CreateScope<Renderer>(*m_GraphicsDevice);
+                    m_Services.Register<Renderer>(*m_Renderer);
+                }
+                catch (const std::exception& e)
+                {
+                    LOG_CORE_WARN("Renderer creation failed ({}). Continuing without renderer.", e.what());
+                }
+            }
             m_InputSystem.SyncConnectedGamepads();
             SetGlobalServiceRegistry(&m_Services);
             m_GlobalServicesRegistered = true;
@@ -288,6 +299,7 @@ namespace Life
             m_RegisteredAsActiveHost = false;
         }
 
+        m_Renderer.reset();
         m_GraphicsDevice.reset();
         m_Window.reset();
         m_Runtime.reset();

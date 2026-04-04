@@ -1,8 +1,8 @@
 #include "Runtime/GameLayer.h"
-#include "Graphics/GraphicsDevice.h"
+#include "Graphics/Renderer.h"
+#include "Graphics/RenderCommand.h"
 
 #include <cmath>
-#include <nvrhi/nvrhi.h>
 
 namespace RuntimeApp
 {
@@ -61,16 +61,9 @@ namespace RuntimeApp
             m_WasMovementInputActive = movementActive;
         }
 
-        if (auto* graphics = GetApplication().TryGetService<Life::GraphicsDevice>())
+        if (auto* renderer = GetApplication().TryGetService<Life::Renderer>())
         {
-            nvrhi::ITexture* backBuffer = graphics->GetCurrentBackBuffer();
-            nvrhi::ICommandList* commandList = graphics->GetCurrentCommandList();
-
-            if (backBuffer && commandList)
-            {
-                nvrhi::Color clearColor(0.392f, 0.584f, 0.929f, 1.0f);
-                commandList->clearTextureFloat(backBuffer, nvrhi::AllSubresources, clearColor);
-            }
+            Life::RenderCommand::Clear(*renderer, 0.392f, 0.584f, 0.929f, 1.0f);
         }
     }
 

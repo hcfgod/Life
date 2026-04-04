@@ -19,6 +19,11 @@ project "Engine"
     }
 
     UseEngineIncludeDirs()
+
+    includedirs
+    {
+        "Source"
+    }
     ConfigureProjectPCH("Core/LifePCH.h", "Source/Core/LifePCH.cpp")
     ConfigureGraphicsDefines()
     ConfigureSanitizers()
