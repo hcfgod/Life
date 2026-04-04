@@ -2,7 +2,9 @@
 
 #include "Engine.h"
 
+#include <functional>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 
 namespace RuntimeApp
@@ -20,7 +22,13 @@ namespace RuntimeApp
         void OnEvent(Life::Event& event) override;
 
     private:
+        void CacheServices();
+        void ResetServices() noexcept;
+
         nlohmann::json m_StartupConfig;
+        std::optional<std::reference_wrapper<Life::InputSystem>> m_InputSystem;
+        std::optional<std::reference_wrapper<Life::CameraManager>> m_CameraManager;
+        std::optional<std::reference_wrapper<Life::Renderer2D>> m_Renderer2D;
         float m_ElapsedTime = 0.0f;
         bool m_HasLoggedRuntime = false;
         bool m_WasMovementInputActive = false;

@@ -18,10 +18,13 @@ namespace RuntimeApp
 
     void GameLayer::OnAttach()
     {
+        CacheServices();
+
         LOG_INFO("Runtime boot config: {}", m_StartupConfig.dump());
-        if (auto* cameraManager = GetApplication().TryGetService<Life::CameraManager>())
+        if (m_CameraManager)
         {
             const auto& specification = GetApplication().GetSpecification();
+            Life::CameraManager& cameraManager = m_CameraManager->get();
             const float aspectRatio = specification.Height > 0
                 ? static_cast<float>(specification.Width) / static_cast<float>(specification.Height)
                 : 1.0f;
@@ -36,7 +39,7 @@ namespace RuntimeApp
             orthographicCameraSpec.Priority = 0;
             orthographicCameraSpec.ClearColor = { 0.08f, 0.08f, 0.12f, 1.0f };
 
-            if (Life::Camera* orthographicCamera = cameraManager->CreateCamera(orthographicCameraSpec))
+            if (Life::Camera* orthographicCamera = cameraManager.CreateCamera(orthographicCameraSpec))
             {
                 orthographicCamera->SetPosition({ 0.0f, 0.0f, 1.0f });
                 orthographicCamera->LookAt({ 0.0f, 0.0f, 0.0f });
@@ -52,13 +55,13 @@ namespace RuntimeApp
             perspectiveCameraSpec.Priority = 1;
             perspectiveCameraSpec.ClearColor = { 0.08f, 0.08f, 0.12f, 1.0f };
 
-            if (Life::Camera* perspectiveCamera = cameraManager->CreateCamera(perspectiveCameraSpec))
+            if (Life::Camera* perspectiveCamera = cameraManager.CreateCamera(perspectiveCameraSpec))
             {
                 perspectiveCamera->SetPosition({ 0.0f, 0.0f, 6.0f });
                 perspectiveCamera->LookAt({ 0.0f, 0.0f, 0.0f });
             }
 
-            cameraManager->SetPrimaryCamera(m_OrthographicCameraName);
+            cameraManager.SetPrimaryCamera(m_OrthographicCameraName);
         }
 
         LOG_INFO("Game layer attached.");
@@ -66,11 +69,14 @@ namespace RuntimeApp
 
     void GameLayer::OnDetach()
     {
-        if (auto* cameraManager = GetApplication().TryGetService<Life::CameraManager>())
+        if (m_CameraManager)
         {
-            cameraManager->DestroyCamera(m_OrthographicCameraName);
-            cameraManager->DestroyCamera(m_PerspectiveCameraName);
+            Life::CameraManager& cameraManager = m_CameraManager->get();
+            cameraManager.DestroyCamera(m_OrthographicCameraName);
+            cameraManager.DestroyCamera(m_PerspectiveCameraName);
         }
+
+        ResetServices();
 
         LOG_INFO("Game layer detached.");
     }
@@ -85,15 +91,17 @@ namespace RuntimeApp
             m_HasLoggedRuntime = true;
         }
 
-        if (auto* input = GetApplication().TryGetService<Life::InputSystem>())
+        if (m_InputSystem)
         {
-            if (input->WasActionStartedThisFrame("Gameplay", "Quit"))
+            Life::InputSystem& input = m_InputSystem->get();
+
+            if (input.WasActionStartedThisFrame("Gameplay", "Quit"))
             {
                 LOG_INFO("Quit action triggered.");
                 GetApplication().RequestShutdown();
             }
 
-            const Life::InputVector2 movement = input->ReadActionAxis2D("Gameplay", "Move");
+            const Life::InputVector2 movement = input.ReadActionAxis2D("Gameplay", "Move");
             const bool movementActive = std::abs(movement.x) > 0.01f || std::abs(movement.y) > 0.01f;
             if (movementActive && !m_WasMovementInputActive)
             {
@@ -105,19 +113,16 @@ namespace RuntimeApp
             }
 
             m_WasMovementInputActive = movementActive;
-        }
 
-        if (auto* cameraManager = GetApplication().TryGetService<Life::CameraManager>())
-        {
-            const bool shouldUsePerspectiveCamera = std::fmod(m_ElapsedTime, 6.0f) >= 3.0f;
-            if (shouldUsePerspectiveCamera != m_IsUsingPerspectiveCamera)
+            if (input.WasActionStartedThisFrame("Gameplay", "ToggleCamera") && m_CameraManager)
             {
-                m_IsUsingPerspectiveCamera = shouldUsePerspectiveCamera;
+                Life::CameraManager& cameraManager = m_CameraManager->get();
+                m_IsUsingPerspectiveCamera = !m_IsUsingPerspectiveCamera;
                 const std::string& activeCameraName = m_IsUsingPerspectiveCamera
                     ? m_PerspectiveCameraName
                     : m_OrthographicCameraName;
 
-                if (cameraManager->SetPrimaryCamera(activeCameraName))
+                if (cameraManager.SetPrimaryCamera(activeCameraName))
                     LOG_INFO("Active camera switched to '{}'.", activeCameraName);
             }
         }
@@ -125,22 +130,21 @@ namespace RuntimeApp
 
     void GameLayer::OnRender()
     {
-        if (auto* cameraManager = GetApplication().TryGetService<Life::CameraManager>())
+        if (m_CameraManager && m_Renderer2D)
         {
-            if (auto* renderer2D = GetApplication().TryGetService<Life::Renderer2D>())
+            Life::CameraManager& cameraManager = m_CameraManager->get();
+            Life::Renderer2D& renderer2D = m_Renderer2D->get();
+            if (Life::Camera* activeCamera = cameraManager.GetPrimaryCamera())
             {
-                if (Life::Camera* activeCamera = cameraManager->GetPrimaryCamera())
-                {
-                    renderer2D->BeginScene(*activeCamera);
-                    renderer2D->DrawQuad({ 0.0f, 0.0f, 0.0f }, { 3.5f, 3.5f }, { 0.20f, 0.55f, 0.95f, 1.0f });
-                    renderer2D->DrawRotatedQuad(
-                        { std::sin(m_ElapsedTime) * 1.75f, std::cos(m_ElapsedTime * 0.75f) * 1.25f, -0.5f },
-                        { 1.35f, 1.35f },
-                        m_ElapsedTime,
-                        { 0.95f, 0.45f, 0.25f, 0.90f });
-                    renderer2D->DrawQuad({ -2.0f, -1.4f, -1.0f }, { 1.25f, 1.25f }, { 0.25f, 0.90f, 0.45f, 0.85f });
-                    renderer2D->EndScene();
-                }
+                renderer2D.BeginScene(*activeCamera);
+                renderer2D.DrawQuad({ 0.0f, 0.0f, 0.0f }, { 3.5f, 3.5f }, { 0.20f, 0.55f, 0.95f, 1.0f });
+                renderer2D.DrawRotatedQuad(
+                    { std::sin(m_ElapsedTime) * 1.75f, std::cos(m_ElapsedTime * 0.75f) * 1.25f, -0.5f },
+                    { 1.35f, 1.35f },
+                    m_ElapsedTime,
+                    { 0.95f, 0.45f, 0.25f, 0.90f });
+                renderer2D.DrawQuad({ -2.0f, -1.4f, -1.0f }, { 1.25f, 1.25f }, { 0.25f, 0.90f, 0.45f, 0.85f });
+                renderer2D.EndScene();
             }
         }
     }
@@ -151,12 +155,13 @@ namespace RuntimeApp
         dispatcher.Dispatch<Life::WindowResizeEvent>([&](Life::WindowResizeEvent& resizeEvent)
         {
             LOG_INFO("Runtime window resized to {}x{}.", resizeEvent.GetWidth(), resizeEvent.GetHeight());
-            if (auto* cameraManager = GetApplication().TryGetService<Life::CameraManager>())
+            if (m_CameraManager)
             {
+                Life::CameraManager& cameraManager = m_CameraManager->get();
                 const float aspectRatio = resizeEvent.GetHeight() > 0
                     ? static_cast<float>(resizeEvent.GetWidth()) / static_cast<float>(resizeEvent.GetHeight())
                     : 1.0f;
-                cameraManager->SetAspectRatioAll(aspectRatio);
+                cameraManager.SetAspectRatioAll(aspectRatio);
             }
             return false;
         });
@@ -165,5 +170,23 @@ namespace RuntimeApp
             LOG_INFO("Runtime window moved to {}, {}.", movedEvent.GetX(), movedEvent.GetY());
             return false;
         });
+    }
+
+    void GameLayer::CacheServices()
+    {
+        m_InputSystem = std::ref(GetApplication().GetService<Life::InputSystem>());
+        m_CameraManager = std::ref(GetApplication().GetService<Life::CameraManager>());
+
+        if (GetApplication().HasService<Life::Renderer2D>())
+            m_Renderer2D = std::ref(GetApplication().GetService<Life::Renderer2D>());
+        else
+            m_Renderer2D.reset();
+    }
+
+    void GameLayer::ResetServices() noexcept
+    {
+        m_Renderer2D.reset();
+        m_CameraManager.reset();
+        m_InputSystem.reset();
     }
 }

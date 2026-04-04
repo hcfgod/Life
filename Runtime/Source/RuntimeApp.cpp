@@ -21,6 +21,10 @@ protected:
         quitAction.AddBinding(Life::KeyboardButtonBinding{ Life::KeyCodes::Escape });
         quitAction.AddBinding(Life::GamepadButtonBinding{ Life::GamepadButtons::Start, 0 });
 
+        Life::InputAction& toggleCameraAction = gameplayMap.AddAction("ToggleCamera", Life::InputActionValueType::Button);
+        toggleCameraAction.AddBinding(Life::KeyboardButtonBinding{ Life::KeyCodes::C });
+        toggleCameraAction.AddBinding(Life::GamepadButtonBinding{ Life::GamepadButtons::RightShoulder, 0 });
+
         Life::InputAction& moveAction = gameplayMap.AddAction("Move", Life::InputActionValueType::Axis2D);
         Life::KeyboardAxis2DBinding movementKeys{};
         movementKeys.Up = Life::KeyCodes::W;
