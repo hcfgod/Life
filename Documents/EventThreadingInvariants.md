@@ -71,10 +71,11 @@ This distinction is important. An event may be marked handled without stopping l
 `ApplicationEventRouter::Route(...)` currently processes an event in this order:
 
 1. `application.OnEvent(event)`
-2. `EventBus` subscriber dispatch
-3. built-in engine handlers such as `WindowCloseEvent` shutdown
+2. `LayerStack::OnEvent(event)` when the service is present
+3. `EventBus` subscriber dispatch
+4. built-in engine handlers such as `WindowCloseEvent` shutdown
 
-If propagation is stopped after application callbacks or event-bus subscribers, routing returns immediately and built-in handlers do not run.
+If propagation is stopped after application callbacks, layer dispatch, or event-bus subscribers, routing returns immediately and built-in handlers do not run.
 
 The built-in window-close handler is therefore a true fallback. It only requests shutdown if earlier stages neither stopped propagation nor already marked the close event handled.
 
@@ -83,7 +84,8 @@ This ordering is intentional.
 Practical implications:
 
 - application overrides get first chance to inspect or mark an event handled
-- subscribed systems observe the event after application-level inspection
+- layers observe the event after application-level inspection and before the event bus
+- subscribed systems observe the event after application and layer inspection
 - built-in shutdown remains available as a fallback rather than pre-empting application logic
 
 ## EventBus Semantics

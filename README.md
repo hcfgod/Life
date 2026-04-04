@@ -1,16 +1,28 @@
 # Life Engine
 
-Life is a custom C++ engine workspace focused on building a clean, professional engine foundation with explicit ownership, strong lifecycle boundaries, and practical cross-platform tooling.
+Life is a custom C++ engine workspace focused on building a clean, professional engine foundation with explicit ownership, strong lifecycle boundaries, practical cross-platform tooling, and a host-owned runtime architecture.
 
 ## What This Repository Is
 
 The repository is organized around three primary targets:
 
-- `Engine` - the core engine library containing application lifecycle, windowing, events, memory helpers, logging, and platform abstractions.
-- `Runtime` - the executable app that consumes `Engine`; treat it as the current sandbox/runtime host for engine development.
-- `Test` - the doctest-based validation target for engine behavior, including lifecycle and event-flow coverage.
+- `Engine` - the core engine library containing application lifecycle, services, layers, input, logging, crash diagnostics, platform abstractions, and the current rendering foundation.
+- `Runtime` - the executable app that consumes `Engine`; treat it as the current sandbox/runtime host and integration sample for engine development.
+- `Test` - the doctest-based validation target for engine behavior, including lifecycle, event-flow, and regression coverage.
 
 The current platform layer is SDL-backed, with the runtime owning SDL subsystem lifetime and event polling while window objects stay focused on window state and native handles.
+
+## Current Engine Capabilities
+
+The workspace now includes a broader first-pass runtime foundation than the original core-only setup.
+
+- `ApplicationRunner` and `ApplicationHost` provide the authoritative loop, lifecycle sequencing, and host-owned service model.
+- `ServiceRegistry` is host-owned and exposed through application-facing accessors so runtime systems can be consumed without falling back to globals.
+- `LayerStack` is host-owned and integrated into update, render, and event routing.
+- `InputSystem` is host-owned and provides raw-state polling plus action-based input.
+- `GraphicsDevice` remains the backend abstraction, with `Renderer` as the general rendering service and `Renderer2D` as the first built-in higher-level renderer.
+- `Camera` and `CameraManager` provide named camera ownership, primary-camera selection, per-camera clear settings, aspect-ratio updates, and viewport handling.
+- Logging, crash diagnostics, structured error handling, and platform/runtime metadata are integrated as first-class engine systems rather than ad hoc utilities.
 
 ## Current Goals
 
@@ -19,6 +31,7 @@ The current direction of the project is to establish a solid engine core before 
 - keeping ownership and lifetime boundaries explicit
 - maintaining a clean application/runtime API
 - preserving deterministic event flow and shutdown behavior
+- growing rendering and input features on top of stable host-owned systems
 - building reliable Windows, Linux, and macOS workflows
 - strengthening CI and test coverage as engine systems mature
 
@@ -168,6 +181,14 @@ To target Intel explicitly:
 
 `Runtime` is the current executable entrypoint for exercising the engine in a real app context. It is the place to wire up engine systems, validate runtime behavior, and evolve the public engine-facing API from a consumer's point of view.
 
+At the moment it serves as a practical integration sample for:
+
+- layer attachment and teardown
+- action-based input
+- host-owned camera registration and switching
+- first-pass 2D rendering through `Renderer2D`
+- resize-driven camera aspect-ratio updates
+
 ## What `Test` Is For
 
 `Test` exists to validate engine behavior independently of the runtime executable. It is the right place for fast checks of core systems such as events, application lifecycle, shutdown behavior, and regression coverage for engine refactors.
@@ -178,16 +199,22 @@ To target Intel explicitly:
 - `Setup.bat` accepts `--arch=x64` and `--arch=arm64`; `Setup.sh` does the same for native Unix hosts.
 - On Linux arm64 hosts, `Setup.sh` bootstraps Premake from source when a preinstalled `premake5` is not available.
 - CI caches downloaded toolchains and reusable SDL build/install outputs to reduce repeated setup work.
+- On Windows, the `Runtime` build compiles the current `Renderer2D` GLSL shaders into SPIR-V output under the target `Assets/Shaders` folder when the Vulkan SDK is available.
 - Logging is configured through `ApplicationSpecification.Logging`, giving the engine a thread-safe, configurable logging surface backed by `spdlog` multi-threaded sinks.
 - Generated artifacts stay out of source control; the repository tracks source, scripts, configuration, and documentation rather than build outputs.
 
 ## Documents
 
+- `Documents/README.md` - index and reading order for the implementation-facing documentation set.
 - `Documents/ApplicationArchitecture.md` - the canonical startup path, ownership model, service registry boundaries, and authoritative loop structure.
+- `Documents/EntryPointsAndBootstrap.md` - executable entry, SDL callback bootstrap, runner state, exception phases, and teardown boundaries.
+- `Documents/Rendering.md` - rendering ownership, service boundaries, `GraphicsDevice`, `Renderer`, `Renderer2D`, cameras, and current Vulkan/NVRHI behavior.
+- `Documents/InputSystem.md` - host-owned input architecture, action assets, rebinding, and frame semantics.
 - `Documents/EventThreadingInvariants.md` - runtime ownership, event ordering, and thread-safety boundaries.
 - `Documents/Logging.md` - logging configuration, sink behavior, reconfiguration, and integration guidance.
 - `Documents/CrashDiagnostics.md` - crash-reporting lifecycle, report contents, handled-exception reporting, and platform-specific behavior.
 - `Documents/ErrorHandling.md` - the structured error model, `Result<T>` conventions, assertions, verification, and system-error translation.
+- `Documents/PlatformRuntime.md` - runtime platform metadata, SDL runtime ownership, and low-level platform utilities.
 - `Documents/PlatformSupport.md` - target platforms, Windows/Linux/macOS architecture notes, and build/CI expectations.
 
 ## Repository Layout

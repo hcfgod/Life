@@ -8,7 +8,7 @@ The intent is to explain how the current systems fit together, what owns what at
 
 - `ApplicationArchitecture.md` for the canonical startup path, ownership model, and service boundaries.
 - `EntryPointsAndBootstrap.md` for executable entry, SDL callback bootstrap, runner state, and exception boundaries.
-- `Rendering.md` for graphics-device ownership, frame boundaries, backend selection, and current Vulkan/NVRHI runtime behavior.
+- `Rendering.md` for rendering ownership, service boundaries, cameras, `Renderer`, `Renderer2D`, shader asset flow, and current Vulkan/NVRHI runtime behavior.
 - `InputSystem.md` for raw input state, action assets, rebinding, and frame-based input semantics.
 - `EventThreadingInvariants.md` for the event pipeline and thread-safety assumptions that shape runtime behavior.
 - `Logging.md` for the authoritative logging configuration model.
@@ -21,7 +21,7 @@ The intent is to explain how the current systems fit together, what owns what at
 
 - `ApplicationArchitecture.md` - startup flow, ownership boundaries, service registry behavior, and the authoritative application loop.
 - `EntryPointsAndBootstrap.md` - executable entry, SDL callback bootstrap, runner iteration, event injection, and teardown responsibilities.
-- `Rendering.md` - graphics-device ownership, frame sequencing, backend responsibilities, and current Vulkan/NVRHI integration behavior.
+- `Rendering.md` - rendering ownership, frame sequencing, service responsibilities, camera integration, `Renderer2D`, shader assets, and current Vulkan/NVRHI behavior.
 - `InputSystem.md` - host-owned input architecture, raw-state polling, action assets, rebinding, and input frame semantics.
 - `EventThreadingInvariants.md` - event ordering, runtime ownership, and thread-safety boundaries for the current engine architecture.
 - `Logging.md` - engine logging configuration, sink behavior, reconfiguration, and integration guidance.

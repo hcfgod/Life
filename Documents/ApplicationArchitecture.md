@@ -52,6 +52,9 @@ It owns:
 - the bound `ApplicationContext`
 - the `ApplicationEventRouter`
 - the authoritative `ServiceRegistry`
+- the host-owned `LayerStack` and `InputSystem`
+- the host-owned `CameraManager`
+- optional graphics services including `GraphicsDevice`, `Renderer`, and `Renderer2D`
 
 The host also becomes the point where application specification values become operational. In practice that means logging is configured here, crash diagnostics are re-bound to application-specific settings here, and platform detection is initialized here before the window is created.
 
@@ -167,16 +170,22 @@ The authoritative service container is `ServiceRegistry`.
 
 During host construction, built-in engine services are registered and then exposed as the active global registry for the lifetime of that host. This makes the current host registry available through both explicit context access and the global `GetServices()` convenience function.
 
-Built-in registrations currently include:
+Host-managed registrations currently include:
 
 - `ApplicationHost`
 - `Application`
 - `ApplicationContext`
 - `ApplicationEventRouter`
-- `ApplicationRuntime`
-- `Window`
+- `LayerStack`
+- `InputSystem`
 - `JobSystem`
 - `Async::AsyncIO`
+- `ApplicationRuntime`
+- `Window`
+- `CameraManager`
+- `GraphicsDevice` when device creation succeeds
+- `Renderer` when renderer creation succeeds
+- `Renderer2D` when renderer-service creation succeeds
 
 When no host is active, `GetServices()` falls back to a process-local empty compatibility registry.
 
@@ -198,12 +207,14 @@ At a high level, the normal lifecycle is:
 4. the host sets application-specific crash-diagnostics metadata and reapplies the full `ApplicationSpecification.CrashReporting` policy
 5. platform detection is initialized
 6. the platform window is created
-7. shared engine systems such as the job system and async I/O are acquired
-8. services are registered and the context is bound
-9. `ApplicationHost::Initialize()` enters the running phase, invokes application initialization, and marks the host initialized only after initialization completes successfully
-10. each runner iteration dispatches queued events, polls runtime events if needed, and runs one frame update
-11. shutdown clears the running state
-12. finalization invokes host/application teardown and releases shared systems
+7. graphics-device creation is attempted and may fail without aborting the rest of the runtime
+8. shared engine systems such as the job system and async I/O are acquired
+9. core services are registered, then host-owned camera and optional rendering services are registered
+10. the context is bound to the host-owned state and service registry
+11. `ApplicationHost::Initialize()` enters the running phase, invokes application initialization, and marks the host initialized only after initialization completes successfully
+12. each runner iteration dispatches queued events, polls runtime events if needed, updates input actions, and runs one host-owned frame update
+13. shutdown clears the running state
+14. finalization invokes host/application teardown, clears layers, resets optional rendering services, and releases shared systems
 
 ## Event Flow in Context
 
@@ -214,8 +225,9 @@ The runner and runtime collect events, but `ApplicationHost::HandleEvent(...)` d
 Within the application-facing pipeline, the current ordering is:
 
 1. `Application::OnEvent(...)`
-2. event-bus subscribers
-3. built-in engine handlers such as window-close shutdown
+2. `LayerStack::OnEvent(...)` when the service is present
+3. event-bus subscribers
+4. built-in engine handlers such as window-close shutdown
 
 This ordering gives application code first inspection rights while still preserving built-in behavior when earlier stages neither stop propagation nor mark the event handled.
 

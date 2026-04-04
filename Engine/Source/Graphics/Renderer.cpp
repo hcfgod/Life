@@ -6,8 +6,23 @@
 
 #include <nvrhi/nvrhi.h>
 
+#include <cstdio>
+
 namespace Life
 {
+    namespace
+    {
+        void ReportRendererTeardownException(const std::exception& exception) noexcept
+        {
+            std::fprintf(stderr, "Renderer teardown suppressed an exception: %s\n", exception.what());
+        }
+
+        void ReportRendererTeardownException() noexcept
+        {
+            std::fprintf(stderr, "Renderer teardown suppressed a non-standard exception.\n");
+        }
+    }
+
     struct Renderer::Impl
     {
         nvrhi::FramebufferHandle CurrentFramebuffer;
@@ -34,8 +49,13 @@ namespace Life
                 m_Impl->CurrentFramebuffer = nullptr;
             LOG_CORE_INFO("Renderer destroyed.");
         }
+        catch (const std::exception& exception)
+        {
+            ReportRendererTeardownException(exception);
+        }
         catch (...)
         {
+            ReportRendererTeardownException();
         }
     }
 
