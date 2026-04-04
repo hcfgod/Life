@@ -33,9 +33,8 @@ namespace Life
                                     GraphicsPipeline& pipeline,
                                     GraphicsBuffer& vertexBuffer,
                                     GraphicsBuffer& indexBuffer,
-                                    uint32_t indexCount,
-                                    uint32_t indexOffset)
+                                    const IndexedDrawParameters& drawParameters)
     {
-        renderer.SubmitIndexed(pipeline, vertexBuffer, indexBuffer, indexCount, indexOffset);
+        renderer.SubmitIndexed(pipeline, vertexBuffer, indexBuffer, drawParameters);
     }
 }

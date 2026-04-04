@@ -68,17 +68,16 @@ namespace Life
     }
 
     Scope<GraphicsBuffer> GraphicsBuffer::CreateVertex(GraphicsDevice& device, const void* data,
-                                                        uint32_t sizeInBytes, uint32_t stride,
-                                                        const std::string& debugName)
+                                                       const VertexBufferSpecification& specification)
     {
         nvrhi::IDevice* nvrhiDevice = device.GetNvrhiDevice();
         if (!nvrhiDevice)
             return nullptr;
 
         nvrhi::BufferDesc bufferDesc;
-        bufferDesc.byteSize = sizeInBytes;
+        bufferDesc.byteSize = specification.SizeInBytes;
         bufferDesc.isVertexBuffer = true;
-        bufferDesc.debugName = debugName.c_str();
+        bufferDesc.debugName = specification.DebugName.c_str();
         bufferDesc.initialState = nvrhi::ResourceStates::VertexBuffer;
         bufferDesc.keepInitialState = true;
 
@@ -90,7 +89,7 @@ namespace Life
         {
             nvrhi::CommandListHandle commandList = nvrhiDevice->createCommandList();
             commandList->open();
-            commandList->writeBuffer(handle, data, sizeInBytes);
+            commandList->writeBuffer(handle, data, specification.SizeInBytes);
             commandList->close();
             nvrhiDevice->executeCommandList(commandList);
         }
@@ -98,42 +97,41 @@ namespace Life
         Scope<GraphicsBuffer> buffer(new GraphicsBuffer());
         buffer->m_Impl = CreateScope<Impl>();
         buffer->m_Impl->Handle = handle;
-        buffer->m_Description.DebugName = debugName;
+        buffer->m_Description.DebugName = specification.DebugName;
         buffer->m_Description.Usage = BufferUsage::Vertex;
-        buffer->m_Description.SizeInBytes = sizeInBytes;
-        buffer->m_Description.Stride = stride;
+        buffer->m_Description.SizeInBytes = specification.SizeInBytes;
+        buffer->m_Description.Stride = specification.Stride;
         return buffer;
     }
 
-    Scope<GraphicsBuffer> GraphicsBuffer::CreateDynamicVertex(GraphicsDevice& device, uint32_t sizeInBytes,
-                                                               uint32_t stride,
-                                                               const std::string& debugName)
+    Scope<GraphicsBuffer> GraphicsBuffer::CreateDynamicVertex(GraphicsDevice& device,
+                                                              const VertexBufferSpecification& specification)
     {
         nvrhi::IDevice* nvrhiDevice = device.GetNvrhiDevice();
         if (!nvrhiDevice)
             return nullptr;
 
         nvrhi::BufferDesc bufferDesc;
-        bufferDesc.byteSize = sizeInBytes;
+        bufferDesc.byteSize = specification.SizeInBytes;
         bufferDesc.isVertexBuffer = true;
-        bufferDesc.debugName = debugName.c_str();
+        bufferDesc.debugName = specification.DebugName.c_str();
         bufferDesc.initialState = nvrhi::ResourceStates::VertexBuffer;
         bufferDesc.keepInitialState = true;
 
         nvrhi::BufferHandle handle = nvrhiDevice->createBuffer(bufferDesc);
         if (!handle)
         {
-            LOG_CORE_ERROR("GraphicsBuffer::CreateDynamicVertex: Failed to create dynamic vertex buffer '{}'.", debugName);
+            LOG_CORE_ERROR("GraphicsBuffer::CreateDynamicVertex: Failed to create dynamic vertex buffer '{}'.", specification.DebugName);
             return nullptr;
         }
 
         Scope<GraphicsBuffer> buffer(new GraphicsBuffer());
         buffer->m_Impl = CreateScope<Impl>();
         buffer->m_Impl->Handle = handle;
-        buffer->m_Description.DebugName = debugName;
+        buffer->m_Description.DebugName = specification.DebugName;
         buffer->m_Description.Usage = BufferUsage::Vertex;
-        buffer->m_Description.SizeInBytes = sizeInBytes;
-        buffer->m_Description.Stride = stride;
+        buffer->m_Description.SizeInBytes = specification.SizeInBytes;
+        buffer->m_Description.Stride = specification.Stride;
         buffer->m_Description.Dynamic = true;
         return buffer;
     }

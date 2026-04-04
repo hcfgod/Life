@@ -25,6 +25,13 @@ namespace Life
         bool Dynamic = false;
     };
 
+    struct VertexBufferSpecification
+    {
+        uint32_t SizeInBytes = 0;
+        uint32_t Stride = 0;
+        std::string DebugName = "VertexBuffer";
+    };
+
     class GraphicsBuffer
     {
     public:
@@ -44,12 +51,10 @@ namespace Life
         nvrhi::IBuffer* GetNativeHandle() const;
 
         static Scope<GraphicsBuffer> CreateVertex(GraphicsDevice& device, const void* data,
-                                                   uint32_t sizeInBytes, uint32_t stride,
-                                                   const std::string& debugName = "VertexBuffer");
+                                                  const VertexBufferSpecification& specification);
 
-        static Scope<GraphicsBuffer> CreateDynamicVertex(GraphicsDevice& device, uint32_t sizeInBytes,
-                                                         uint32_t stride,
-                                                         const std::string& debugName = "DynamicVertexBuffer");
+        static Scope<GraphicsBuffer> CreateDynamicVertex(GraphicsDevice& device,
+                                                         const VertexBufferSpecification& specification);
 
         static Scope<GraphicsBuffer> CreateIndex(GraphicsDevice& device, const void* data,
                                                   uint32_t sizeInBytes, IndexFormat format,

@@ -39,7 +39,7 @@ namespace Life
     {
     public:
         explicit Renderer(GraphicsDevice& graphicsDevice);
-        ~Renderer();
+        ~Renderer() noexcept;
 
         Renderer(const Renderer&) = delete;
         Renderer& operator=(const Renderer&) = delete;
@@ -66,8 +66,7 @@ namespace Life
         void SubmitIndexed(GraphicsPipeline& pipeline,
                            GraphicsBuffer& vertexBuffer,
                            GraphicsBuffer& indexBuffer,
-                           uint32_t indexCount,
-                           uint32_t indexOffset = 0);
+                           const IndexedDrawParameters& drawParameters = {});
 
         Scope<GraphicsPipeline> CreatePipeline(const GraphicsPipelineDescription& desc);
 

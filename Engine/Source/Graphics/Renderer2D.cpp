@@ -49,7 +49,9 @@ namespace Life
         : m_Renderer(renderer)
         , m_Impl(CreateScope<Impl>())
     {
-        m_Impl->Vertices.reserve(MaxQuads * VerticesPerQuad);
+        m_Impl->Vertices.reserve(
+            static_cast<decltype(m_Impl->Vertices)::size_type>(MaxQuads)
+            * static_cast<decltype(m_Impl->Vertices)::size_type>(VerticesPerQuad));
     }
 
     Renderer2D::~Renderer2D() = default;
@@ -60,9 +62,12 @@ namespace Life
         if (!m_Impl->Initialized)
             return;
 
-        const Viewport viewport = camera.GetPixelViewport(
+        const FramebufferExtent framebufferExtent
+        {
             m_Renderer.GetGraphicsDevice().GetBackBufferWidth(),
-            m_Renderer.GetGraphicsDevice().GetBackBufferHeight());
+            m_Renderer.GetGraphicsDevice().GetBackBufferHeight()
+        };
+        const Viewport viewport = camera.GetPixelViewport(framebufferExtent);
 
         RenderCommand::SetViewport(m_Renderer, viewport.X, viewport.Y, viewport.Width, viewport.Height);
         RenderCommand::SetScissor(m_Renderer,
@@ -169,6 +174,13 @@ namespace Life
         m_Impl->InitializationAttempted = true;
 
         GraphicsDevice& device = m_Renderer.GetGraphicsDevice();
+        const auto maxVertexCount =
+            static_cast<decltype(m_Impl->Vertices)::size_type>(MaxQuads)
+            * static_cast<decltype(m_Impl->Vertices)::size_type>(VerticesPerQuad);
+        VertexBufferSpecification vertexBufferSpecification;
+        vertexBufferSpecification.SizeInBytes = static_cast<uint32_t>(maxVertexCount * sizeof(QuadVertex));
+        vertexBufferSpecification.Stride = static_cast<uint32_t>(sizeof(QuadVertex));
+        vertexBufferSpecification.DebugName = "Renderer2DVertexBuffer";
 
         m_Impl->Layout = VertexLayout
         {
@@ -176,11 +188,7 @@ namespace Life
             { "inColor", VertexAttributeSemantic::Color, TextureFormat::RGBA32_FLOAT }
         };
 
-        m_Impl->VertexBuffer = GraphicsBuffer::CreateDynamicVertex(
-            device,
-            MaxQuads * VerticesPerQuad * sizeof(QuadVertex),
-            sizeof(QuadVertex),
-            "Renderer2DVertexBuffer");
+        m_Impl->VertexBuffer = GraphicsBuffer::CreateDynamicVertex(device, vertexBufferSpecification);
 
         const std::filesystem::path executablePath = PlatformDetection::GetExecutablePath();
         const std::filesystem::path shaderDirectory = executablePath.parent_path() / "Assets" / "Shaders";

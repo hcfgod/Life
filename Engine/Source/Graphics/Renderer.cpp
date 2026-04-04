@@ -25,12 +25,18 @@ namespace Life
         LOG_CORE_INFO("Renderer initialized.");
     }
 
-    Renderer::~Renderer()
+    Renderer::~Renderer() noexcept
     {
-        m_ShaderLibrary.Clear();
-        if (m_Impl)
-            m_Impl->CurrentFramebuffer = nullptr;
-        LOG_CORE_INFO("Renderer destroyed.");
+        try
+        {
+            m_ShaderLibrary.Clear();
+            if (m_Impl)
+                m_Impl->CurrentFramebuffer = nullptr;
+            LOG_CORE_INFO("Renderer destroyed.");
+        }
+        catch (...)
+        {
+        }
     }
 
     void Renderer::BeginScene(const glm::mat4& viewProjection)
@@ -138,8 +144,7 @@ namespace Life
     void Renderer::SubmitIndexed(GraphicsPipeline& pipeline,
                                   GraphicsBuffer& vertexBuffer,
                                   GraphicsBuffer& indexBuffer,
-                                  uint32_t indexCount,
-                                  uint32_t indexOffset)
+                                  const IndexedDrawParameters& drawParameters)
     {
         nvrhi::ICommandList* commandList = m_GraphicsDevice.GetCurrentCommandList();
         if (!commandList)
@@ -187,12 +192,12 @@ namespace Life
         commandList->setGraphicsState(state);
 
         nvrhi::DrawArguments drawArgs;
-        drawArgs.vertexCount = indexCount;
-        drawArgs.startIndexLocation = indexOffset;
+        drawArgs.vertexCount = drawParameters.IndexCount;
+        drawArgs.startIndexLocation = drawParameters.IndexOffset;
         commandList->drawIndexed(drawArgs);
 
         m_Stats.DrawCalls++;
-        m_Stats.IndicesSubmitted += indexCount;
+        m_Stats.IndicesSubmitted += drawParameters.IndexCount;
     }
 
     Scope<GraphicsPipeline> Renderer::CreatePipeline(const GraphicsPipelineDescription& desc)

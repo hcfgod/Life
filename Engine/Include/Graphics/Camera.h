@@ -40,10 +40,30 @@ namespace Life
         Viewport ViewportRect = { 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f };
     };
 
+    struct CameraLookAtParameters
+    {
+        glm::vec3 Target{ 0.0f, 0.0f, 0.0f };
+        glm::vec3 Up{ 0.0f, 1.0f, 0.0f };
+    };
+
+    struct PerspectiveProjectionParameters
+    {
+        float VerticalFieldOfViewDegrees = 60.0f;
+        float NearClip = 0.1f;
+        float FarClip = 1000.0f;
+    };
+
+    struct OrthographicProjectionParameters
+    {
+        float Size = 5.0f;
+        float NearClip = -1.0f;
+        float FarClip = 1.0f;
+    };
+
     class Camera
     {
     public:
-        explicit Camera(const CameraSpecification& specification = {});
+        explicit Camera(CameraSpecification specification = {});
         ~Camera() = default;
 
         Camera(const Camera&) = delete;
@@ -72,10 +92,11 @@ namespace Life
         void SetPosition(const glm::vec3& position);
         void SetOrientation(const glm::quat& orientation);
         void SetTransform(const glm::vec3& position, const glm::quat& orientation);
-        void LookAt(const glm::vec3& target, const glm::vec3& up = glm::vec3(0.0f, 1.0f, 0.0f));
+        void LookAt(const glm::vec3& target);
+        void LookAtWithUp(const CameraLookAtParameters& parameters);
 
-        void SetPerspective(float verticalFieldOfViewDegrees, float nearClip, float farClip);
-        void SetOrthographic(float size, float nearClip, float farClip);
+        void SetPerspective(const PerspectiveProjectionParameters& parameters);
+        void SetOrthographic(const OrthographicProjectionParameters& parameters);
         void SetAspectRatio(float aspectRatio);
         void SetPriority(int32_t priority) noexcept;
         void SetClearMode(CameraClearMode clearMode) noexcept;
@@ -85,7 +106,7 @@ namespace Life
         glm::mat4 GetViewMatrix() const;
         glm::mat4 GetProjectionMatrix() const;
         glm::mat4 GetViewProjectionMatrix() const;
-        Viewport GetPixelViewport(uint32_t framebufferWidth, uint32_t framebufferHeight) const;
+        Viewport GetPixelViewport(const FramebufferExtent& framebufferExtent) const;
 
     private:
         void InvalidateView() noexcept;

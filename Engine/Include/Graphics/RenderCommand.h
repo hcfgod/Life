@@ -28,7 +28,6 @@ namespace Life
                                 GraphicsPipeline& pipeline,
                                 GraphicsBuffer& vertexBuffer,
                                 GraphicsBuffer& indexBuffer,
-                                uint32_t indexCount,
-                                uint32_t indexOffset = 0);
+                                const IndexedDrawParameters& drawParameters = {});
     };
 }

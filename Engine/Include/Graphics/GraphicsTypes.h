@@ -151,4 +151,16 @@ namespace Life
         uint32_t Width = 0;
         uint32_t Height = 0;
     };
+
+    struct FramebufferExtent
+    {
+        uint32_t Width = 0;
+        uint32_t Height = 0;
+    };
+
+    struct IndexedDrawParameters
+    {
+        uint32_t IndexCount = 0;
+        uint32_t IndexOffset = 0;
+    };
 }

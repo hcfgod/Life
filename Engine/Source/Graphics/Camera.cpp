@@ -17,8 +17,8 @@ namespace Life
         constexpr glm::vec3 s_DefaultUp(0.0f, 1.0f, 0.0f);
     }
 
-    Camera::Camera(const CameraSpecification& specification)
-        : m_Specification(specification)
+    Camera::Camera(CameraSpecification specification)
+        : m_Specification(std::move(specification))
     {
         if (m_Specification.AspectRatio <= 0.0f)
             m_Specification.AspectRatio = 16.0f / 9.0f;
@@ -48,15 +48,22 @@ namespace Life
         InvalidateView();
     }
 
-    void Camera::LookAt(const glm::vec3& target, const glm::vec3& up)
+    void Camera::LookAt(const glm::vec3& target)
     {
-        const glm::vec3 forward = target - m_Position;
+        CameraLookAtParameters parameters;
+        parameters.Target = target;
+        LookAtWithUp(parameters);
+    }
+
+    void Camera::LookAtWithUp(const CameraLookAtParameters& parameters)
+    {
+        const glm::vec3 forward = parameters.Target - m_Position;
         if (glm::dot(forward, forward) <= std::numeric_limits<float>::epsilon())
             return;
 
         const glm::vec3 normalizedForward = glm::normalize(forward);
-        const glm::vec3 normalizedUp = glm::dot(up, up) > std::numeric_limits<float>::epsilon()
-            ? glm::normalize(up)
+        const glm::vec3 normalizedUp = glm::dot(parameters.Up, parameters.Up) > std::numeric_limits<float>::epsilon()
+            ? glm::normalize(parameters.Up)
             : s_DefaultUp;
 
         const glm::mat4 lookAtMatrix = glm::inverse(glm::lookAtRH(m_Position, m_Position + normalizedForward, normalizedUp));
@@ -64,21 +71,21 @@ namespace Life
         InvalidateView();
     }
 
-    void Camera::SetPerspective(float verticalFieldOfViewDegrees, float nearClip, float farClip)
+    void Camera::SetPerspective(const PerspectiveProjectionParameters& parameters)
     {
         m_Specification.Projection = ProjectionType::Perspective;
-        m_Specification.FieldOfView = verticalFieldOfViewDegrees;
-        m_Specification.NearClip = nearClip;
-        m_Specification.FarClip = farClip;
+        m_Specification.FieldOfView = parameters.VerticalFieldOfViewDegrees;
+        m_Specification.NearClip = parameters.NearClip;
+        m_Specification.FarClip = parameters.FarClip;
         InvalidateProjection();
     }
 
-    void Camera::SetOrthographic(float size, float nearClip, float farClip)
+    void Camera::SetOrthographic(const OrthographicProjectionParameters& parameters)
     {
         m_Specification.Projection = ProjectionType::Orthographic;
-        m_Specification.OrthoSize = size;
-        m_Specification.OrthoNear = nearClip;
-        m_Specification.OrthoFar = farClip;
+        m_Specification.OrthoSize = parameters.Size;
+        m_Specification.OrthoNear = parameters.NearClip;
+        m_Specification.OrthoFar = parameters.FarClip;
         InvalidateProjection();
     }
 
@@ -134,15 +141,15 @@ namespace Life
         return GetProjectionMatrix() * GetViewMatrix();
     }
 
-    Viewport Camera::GetPixelViewport(uint32_t framebufferWidth, uint32_t framebufferHeight) const
+    Viewport Camera::GetPixelViewport(const FramebufferExtent& framebufferExtent) const
     {
         const Viewport& normalizedViewport = m_Specification.ViewportRect;
 
         Viewport pixelViewport;
-        pixelViewport.X = normalizedViewport.X * static_cast<float>(framebufferWidth);
-        pixelViewport.Y = normalizedViewport.Y * static_cast<float>(framebufferHeight);
-        pixelViewport.Width = normalizedViewport.Width * static_cast<float>(framebufferWidth);
-        pixelViewport.Height = normalizedViewport.Height * static_cast<float>(framebufferHeight);
+        pixelViewport.X = normalizedViewport.X * static_cast<float>(framebufferExtent.Width);
+        pixelViewport.Y = normalizedViewport.Y * static_cast<float>(framebufferExtent.Height);
+        pixelViewport.Width = normalizedViewport.Width * static_cast<float>(framebufferExtent.Width);
+        pixelViewport.Height = normalizedViewport.Height * static_cast<float>(framebufferExtent.Height);
         pixelViewport.MinDepth = normalizedViewport.MinDepth;
         pixelViewport.MaxDepth = normalizedViewport.MaxDepth;
         return pixelViewport;
