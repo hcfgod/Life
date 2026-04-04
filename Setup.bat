@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 
 set "PREMAKE_VERSION=5.0.0-beta2"
 set "CMAKE_VERSION=4.3.0"
@@ -286,12 +286,24 @@ if errorlevel 1 exit /b 1
 
 exit /b 0
 
+:nvrhi_install_ready
+set "NVRHI_READY=0"
+if not defined NVRHI_INSTALL_DIR exit /b 0
+if not exist "%NVRHI_INSTALL_DIR%\include\nvrhi\nvrhi.h" exit /b 0
+if not exist "%NVRHI_INSTALL_DIR%\lib\nvrhi.lib" exit /b 0
+if not exist "%NVRHI_INSTALL_DIR%\lib\nvrhi_vk.lib" exit /b 0
+if not exist "%NVRHI_INSTALL_DIR%\lib\nvrhi_d3d12.lib" exit /b 0
+set "NVRHI_READY=1"
+exit /b 0
+
 :build_nvrhi_config
 set "NVRHI_CONFIG=%~1"
 set "NVRHI_BUILD_DIR=Vendor\nvrhi\Build\windows\%TARGET_ARCH%\%NVRHI_CONFIG%"
 set "NVRHI_INSTALL_DIR=%CD%\Vendor\nvrhi\Install\windows\%TARGET_ARCH%\%NVRHI_CONFIG%"
 
-if exist "%NVRHI_INSTALL_DIR%\lib\nvrhi.lib" (
+call :nvrhi_install_ready
+if errorlevel 1 exit /b 1
+if "%NVRHI_READY%"=="1" (
     echo [Setup] NVRHI %NVRHI_CONFIG% is already available. Skipping build.
     exit /b 0
 )
@@ -303,7 +315,7 @@ if /i "%TARGET_ARCH%"=="arm64" (
 )
 
 echo [Setup] Building NVRHI (%NVRHI_CONFIG%)...
-"%CMAKE_CMD%" -S "Vendor\nvrhi" -B "%NVRHI_BUILD_DIR%" -G "%SDL_CMAKE_GENERATOR%" -A %NVRHI_CMAKE_ARCHITECTURE% -DNVRHI_WITH_VULKAN=ON -DNVRHI_WITH_DX12=ON -DNVRHI_WITH_DX11=OFF -DNVRHI_WITH_NVAPI=OFF -DNVRHI_WITH_RTXMU=OFF -DNVRHI_WITH_AFTERMATH=OFF -DNVRHI_BUILD_SHARED=OFF -DNVRHI_INSTALL=ON -DCMAKE_INSTALL_PREFIX="%NVRHI_INSTALL_DIR%"
+"%CMAKE_CMD%" -S "Vendor\nvrhi" -B "%NVRHI_BUILD_DIR%" -G "%SDL_CMAKE_GENERATOR%" -A %NVRHI_CMAKE_ARCHITECTURE% -DNVRHI_WITH_VULKAN=ON -DNVRHI_WITH_DX12=ON -DNVRHI_WITH_DX11=OFF -DNVRHI_WITH_NVAPI=OFF -DNVRHI_WITH_RTXMU=OFF -DNVRHI_WITH_AFTERMATH=OFF -DNVRHI_BUILD_SHARED=OFF -DNVRHI_INSTALL=ON -DCMAKE_INSTALL_PREFIX="%NVRHI_INSTALL_DIR%" "-DCMAKE_CXX_FLAGS=/DNVRHI_SHARED_LIBRARY_BUILD"
 if errorlevel 1 exit /b 1
 
 "%CMAKE_CMD%" --build "%NVRHI_BUILD_DIR%" --config %NVRHI_CONFIG% --target install
@@ -318,18 +330,21 @@ if not exist ".gitmodules" (
     exit /b 0
 )
 
-findstr /i /c:"path = Vendor/SDL3" ".gitmodules" >nul || set "NEEDS_BOOTSTRAP=1"
-findstr /i /c:"path = Vendor/spdlog" ".gitmodules" >nul || set "NEEDS_BOOTSTRAP=1"
-findstr /i /c:"path = Vendor/json" ".gitmodules" >nul || set "NEEDS_BOOTSTRAP=1"
-findstr /i /c:"path = Vendor/doctest" ".gitmodules" >nul || set "NEEDS_BOOTSTRAP=1"
-findstr /i /c:"path = Vendor/nvrhi" ".gitmodules" >nul || set "NEEDS_BOOTSTRAP=1"
-findstr /i /c:"path = Vendor/vk-bootstrap" ".gitmodules" >nul || set "NEEDS_BOOTSTRAP=1"
-if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\SDL3\*" set "NEEDS_BOOTSTRAP=1"
-if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\spdlog\*" set "NEEDS_BOOTSTRAP=1"
-if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\json\*" set "NEEDS_BOOTSTRAP=1"
-if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\doctest\*" set "NEEDS_BOOTSTRAP=1"
-if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\nvrhi\*" set "NEEDS_BOOTSTRAP=1"
-if "%NEEDS_BOOTSTRAP%"=="0" if not exist "Vendor\vk-bootstrap\*" set "NEEDS_BOOTSTRAP=1"
+call :evaluate_declared_submodules
+if errorlevel 1 exit /b 1
+exit /b 0
+
+:evaluate_declared_submodules
+set "FOUND_DECLARED_SUBMODULE=0"
+for /f "usebackq tokens=1,*" %%A in (`git config --file .gitmodules --get-regexp "^submodule\..*\.path$" 2^>nul`) do (
+    set "FOUND_DECLARED_SUBMODULE=1"
+    set "submodulePath=%%~B"
+    git submodule status -- "!submodulePath!" >nul 2>&1
+    if errorlevel 1 set "NEEDS_BOOTSTRAP=1"
+    if "!NEEDS_BOOTSTRAP!"=="0" if not exist "!submodulePath!\*" set "NEEDS_BOOTSTRAP=1"
+)
+
+if "!FOUND_DECLARED_SUBMODULE!"=="0" set "NEEDS_BOOTSTRAP=1"
 exit /b 0
 
 :capture_arch_arg

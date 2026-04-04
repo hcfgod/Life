@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 
 pushd "%~dp0\.." >nul || goto :error
 
@@ -11,17 +11,7 @@ if errorlevel 1 (
     if errorlevel 1 goto :error
 )
 
-call :ensure_submodule "Vendor/SDL3" "https://github.com/libsdl-org/SDL.git"
-if errorlevel 1 goto :error
-call :ensure_submodule "Vendor/spdlog" "https://github.com/gabime/spdlog.git"
-if errorlevel 1 goto :error
-call :ensure_submodule "Vendor/json" "https://github.com/nlohmann/json.git"
-if errorlevel 1 goto :error
-call :ensure_submodule "Vendor/doctest" "https://github.com/doctest/doctest.git"
-if errorlevel 1 goto :error
-call :ensure_submodule "Vendor/nvrhi" "https://github.com/NVIDIAGameWorks/nvrhi.git"
-if errorlevel 1 goto :error
-call :ensure_submodule "Vendor/vk-bootstrap" "https://github.com/charles-lunarg/vk-bootstrap.git"
+call :register_declared_submodules
 if errorlevel 1 goto :error
 
 echo [Bootstrap] Syncing submodules...
@@ -30,6 +20,34 @@ if errorlevel 1 goto :error
 
 echo [Bootstrap] Repository dependencies are ready.
 popd >nul
+exit /b 0
+
+:register_declared_submodules
+if not exist ".gitmodules" (
+    echo [Bootstrap] .gitmodules was not found. No dependencies to register.
+    exit /b 0
+)
+
+set "SUBMODULES_FOUND=0"
+for /f "usebackq tokens=1,*" %%A in (`git config --file .gitmodules --get-regexp "^submodule\..*\.path$" 2^>nul`) do (
+    set "SUBMODULES_FOUND=1"
+    set "submoduleKey=%%~A"
+    set "submodulePath=%%~B"
+    set "submoduleUrl="
+    call set "submoduleUrlKey=%%submoduleKey:.path=.url%%"
+    for /f "usebackq delims=" %%U in (`git config --file .gitmodules --get "!submoduleUrlKey!" 2^>nul`) do set "submoduleUrl=%%~U"
+    if not defined submoduleUrl (
+        echo [Bootstrap] Skipping !submodulePath! because no submodule URL is declared.
+    ) else (
+        call :ensure_submodule "!submodulePath!" "!submoduleUrl!"
+        if errorlevel 1 exit /b 1
+    )
+)
+
+if "!SUBMODULES_FOUND!"=="0" (
+    echo [Bootstrap] No submodules were declared in .gitmodules.
+)
+
 exit /b 0
 
 :ensure_submodule

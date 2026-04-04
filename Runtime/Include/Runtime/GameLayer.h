@@ -21,5 +21,6 @@ namespace RuntimeApp
         nlohmann::json m_StartupConfig;
         float m_ElapsedTime = 0.0f;
         bool m_HasLoggedRuntime = false;
+        bool m_WasMovementInputActive = false;
     };
 }

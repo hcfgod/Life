@@ -35,6 +35,7 @@ TEST_CASE("ApplicationHost registers built-in and custom services")
     CHECK(host->GetServices().Has<Life::ApplicationContext>());
     CHECK(host->GetServices().Has<Life::ApplicationEventRouter>());
     CHECK(host->GetServices().Has<Life::JobSystem>());
+    CHECK(host->GetServices().Has<Life::InputSystem>());
     CHECK(host->GetServices().Has<Life::Async::AsyncIO>());
     CHECK(host->GetServices().Has<Life::ApplicationRuntime>());
     CHECK(host->GetServices().Has<Life::Window>());
@@ -43,10 +44,12 @@ TEST_CASE("ApplicationHost registers built-in and custom services")
     CHECK(&host->GetServices().Get<Life::Application>() == applicationInstance);
     CHECK(&host->GetServices().Get<Life::ApplicationContext>() == &host->GetContext());
     CHECK(&host->GetServices().Get<Life::JobSystem>() == &Life::GetJobSystem());
+    CHECK(&host->GetServices().Get<Life::InputSystem>() == &host->GetInputSystem());
     CHECK(&host->GetServices().Get<Life::Async::AsyncIO>() == &Life::Async::GetAsyncIO());
     CHECK(&host->GetServices().Get<Life::ApplicationRuntime>() == &host->GetRuntime());
     CHECK(&applicationInstance->GetService<Life::Async::AsyncIO>() == &Life::Async::GetAsyncIO());
     CHECK(&applicationInstance->GetService<Life::ApplicationHost>() == host.get());
+    CHECK(&applicationInstance->GetService<Life::InputSystem>() == &host->GetInputSystem());
     CHECK(&applicationInstance->GetService<Life::Window>() == &host->GetWindow());
 
     TestService service{ 7 };

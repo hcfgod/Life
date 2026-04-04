@@ -1,6 +1,8 @@
 #include "Core/ApplicationRuntime.h"
 #include "Core/Error.h"
+#include "Core/Input/InputSystem.h"
 #include "Core/Log.h"
+#include "Core/ServiceRegistry.h"
 #include "Platform/SDL/SDLEvent.h"
 
 #include <SDL3/SDL.h>
@@ -31,7 +33,7 @@ namespace Life
             std::scoped_lock lock(state.Mutex);
             if (state.ReferenceCount == 0)
             {
-                if (!SDL_Init(SDL_INIT_VIDEO))
+                if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
                     throw Error(ErrorCode::PlatformInitializationFailed, SDL_GetError(), std::source_location::current(), ErrorSeverity::Critical);
             }
 
@@ -141,6 +143,9 @@ namespace Life
                 SDL_Event sdlEvent;
                 if (!SDL_PollEvent(&sdlEvent))
                     return nullptr;
+
+                if (InputSystem* inputSystem = GetServices().TryGet<InputSystem>())
+                    inputSystem->OnSdlEvent(sdlEvent);
 
                 if (Scope<Event> event = TranslateSDLEvent(sdlEvent))
                     return event;

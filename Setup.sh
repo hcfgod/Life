@@ -164,52 +164,31 @@ if [ ! -f .gitmodules ]; then
     needs_bootstrap=1
 fi
 
-if [ "$needs_bootstrap" -eq 0 ] && ! grep -F "path = Vendor/SDL3" .gitmodules >/dev/null 2>&1; then
-    needs_bootstrap=1
-fi
+evaluate_declared_submodules() {
+    found_declared_submodule=0
+    while read -r submodule_key submodule_path; do
+        [ -n "$submodule_key" ] || continue
+        found_declared_submodule=1
 
-if [ "$needs_bootstrap" -eq 0 ] && ! grep -F "path = Vendor/spdlog" .gitmodules >/dev/null 2>&1; then
-    needs_bootstrap=1
-fi
+        if ! git submodule status -- "$submodule_path" >/dev/null 2>&1; then
+            needs_bootstrap=1
+            continue
+        fi
 
-if [ "$needs_bootstrap" -eq 0 ] && ! grep -F "path = Vendor/json" .gitmodules >/dev/null 2>&1; then
-    needs_bootstrap=1
-fi
+        if [ ! -d "$submodule_path" ] || [ -z "$(ls -A "$submodule_path" 2>/dev/null)" ]; then
+            needs_bootstrap=1
+        fi
+    done <<EOF
+$(git config --file .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null || true)
+EOF
 
-if [ "$needs_bootstrap" -eq 0 ] && ! grep -F "path = Vendor/doctest" .gitmodules >/dev/null 2>&1; then
-    needs_bootstrap=1
-fi
+    if [ "$found_declared_submodule" -eq 0 ]; then
+        needs_bootstrap=1
+    fi
+}
 
-if [ "$needs_bootstrap" -eq 0 ] && ! grep -F "path = Vendor/nvrhi" .gitmodules >/dev/null 2>&1; then
-    needs_bootstrap=1
-fi
-
-if [ "$needs_bootstrap" -eq 0 ] && ! grep -F "path = Vendor/vk-bootstrap" .gitmodules >/dev/null 2>&1; then
-    needs_bootstrap=1
-fi
-
-if [ "$needs_bootstrap" -eq 0 ] && [ ! -d "Vendor/SDL3" -o -z "$(ls -A "Vendor/SDL3" 2>/dev/null)" ]; then
-    needs_bootstrap=1
-fi
-
-if [ "$needs_bootstrap" -eq 0 ] && [ ! -d "Vendor/spdlog" -o -z "$(ls -A "Vendor/spdlog" 2>/dev/null)" ]; then
-    needs_bootstrap=1
-fi
-
-if [ "$needs_bootstrap" -eq 0 ] && [ ! -d "Vendor/json" -o -z "$(ls -A "Vendor/json" 2>/dev/null)" ]; then
-    needs_bootstrap=1
-fi
-
-if [ "$needs_bootstrap" -eq 0 ] && [ ! -d "Vendor/doctest" -o -z "$(ls -A "Vendor/doctest" 2>/dev/null)" ]; then
-    needs_bootstrap=1
-fi
-
-if [ "$needs_bootstrap" -eq 0 ] && [ ! -d "Vendor/nvrhi" -o -z "$(ls -A "Vendor/nvrhi" 2>/dev/null)" ]; then
-    needs_bootstrap=1
-fi
-
-if [ "$needs_bootstrap" -eq 0 ] && [ ! -d "Vendor/vk-bootstrap" -o -z "$(ls -A "Vendor/vk-bootstrap" 2>/dev/null)" ]; then
-    needs_bootstrap=1
+if [ "$needs_bootstrap" -eq 0 ]; then
+    evaluate_declared_submodules
 fi
 
 if [ "$needs_bootstrap" -eq 1 ]; then
@@ -636,12 +615,21 @@ build_nvrhi() {
     build_nvrhi_config Release
 }
 
+have_nvrhi_install_artifacts() {
+    nvrhi_install_dir="$1"
+
+    [ -f "$nvrhi_install_dir/include/nvrhi/nvrhi.h" ] || return 1
+    [ -f "$nvrhi_install_dir/lib/libnvrhi.a" ] || return 1
+    [ -f "$nvrhi_install_dir/lib/libnvrhi_vk.a" ] || return 1
+    return 0
+}
+
 build_nvrhi_config() {
     nvrhi_config="$1"
     nvrhi_build_dir="$REPO_ROOT/Vendor/nvrhi/Build/$nvrhi_platform/$TARGET_ARCH/$nvrhi_config"
     nvrhi_install_dir="$REPO_ROOT/Vendor/nvrhi/Install/$nvrhi_platform/$TARGET_ARCH/$nvrhi_config"
 
-    if [ -f "$nvrhi_install_dir/lib/libnvrhi.a" ]; then
+    if have_nvrhi_install_artifacts "$nvrhi_install_dir"; then
         echo "[Setup] NVRHI ($nvrhi_config) is already available. Skipping build."
         return 0
     fi

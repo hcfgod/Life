@@ -24,6 +24,17 @@ namespace Life
         WindowFocusLost,
         WindowMinimized,
         WindowRestored,
+        KeyPressed,
+        KeyReleased,
+        MouseMoved,
+        MouseScrolled,
+        MouseButtonPressed,
+        MouseButtonReleased,
+        GamepadAdded,
+        GamepadRemoved,
+        GamepadButtonPressed,
+        GamepadButtonReleased,
+        GamepadAxisMoved,
         Count
     };
 
@@ -35,7 +46,8 @@ namespace Life
         Input = 1 << 2,
         Keyboard = 1 << 3,
         Mouse = 1 << 4,
-        MouseButton = 1 << 5
+        MouseButton = 1 << 5,
+        Gamepad = 1 << 6
     };
 
     enum class EventDispatchResult

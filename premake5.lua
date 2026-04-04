@@ -105,10 +105,10 @@ newoption
  IncludeDir = {}
  IncludeDir["Engine"] = path.join(RootDir, "Engine/Include")
  IncludeDir["SDL3"] = path.join(RootDir, "Vendor/SDL3/include")
+ IncludeDir["glm"] = path.join(RootDir, "Vendor/glm")
  IncludeDir["spdlog"] = path.join(RootDir, "Vendor/spdlog/include")
  IncludeDir["json"] = path.join(RootDir, "Vendor/json/include")
  IncludeDir["doctest"] = path.join(RootDir, "Vendor/doctest")
- IncludeDir["nvrhi"] = path.join(RootDir, "Vendor/nvrhi/include")
  IncludeDir["VulkanHeaders"] = path.join(RootDir, "Vendor/nvrhi/thirdparty/Vulkan-Headers/include")
  IncludeDir["DirectXHeaders"] = path.join(RootDir, "Vendor/nvrhi/thirdparty/DirectX-Headers/include/directx")
  IncludeDir["vk_bootstrap"] = path.join(RootDir, "Vendor/vk-bootstrap/src")
@@ -207,9 +207,9 @@ function UseEngineIncludeDirs(extraIncludeDirs)
     local externalIncludeDirs =
     {
         IncludeDir["SDL3"],
+        IncludeDir["glm"],
         IncludeDir["spdlog"],
         IncludeDir["json"],
-        IncludeDir["nvrhi"],
         IncludeDir["VulkanHeaders"],
         IncludeDir["vk_bootstrap"]
     }
@@ -222,6 +222,35 @@ function UseEngineIncludeDirs(extraIncludeDirs)
 
     includedirs(includeDirs)
     externalincludedirs(externalIncludeDirs)
+
+    filter { "system:windows", "configurations:Debug" }
+        externalincludedirs { GetNVRHIInstallPath("windows", "Debug", "include") }
+
+    filter { "system:windows", "configurations:Release" }
+        externalincludedirs { GetNVRHIInstallPath("windows", "Release", "include") }
+
+    filter { "system:windows", "configurations:Dist" }
+        externalincludedirs { GetNVRHIInstallPath("windows", "Release", "include") }
+
+    filter { "system:linux", "configurations:Debug" }
+        externalincludedirs { GetNVRHIInstallPath("linux", "Debug", "include") }
+
+    filter { "system:linux", "configurations:Release" }
+        externalincludedirs { GetNVRHIInstallPath("linux", "Release", "include") }
+
+    filter { "system:linux", "configurations:Dist" }
+        externalincludedirs { GetNVRHIInstallPath("linux", "Release", "include") }
+
+    filter { "system:macosx", "configurations:Debug" }
+        externalincludedirs { GetNVRHIInstallPath("macos", "Debug", "include") }
+
+    filter { "system:macosx", "configurations:Release" }
+        externalincludedirs { GetNVRHIInstallPath("macos", "Release", "include") }
+
+    filter { "system:macosx", "configurations:Dist" }
+        externalincludedirs { GetNVRHIInstallPath("macos", "Release", "include") }
+
+    filter {}
 end
 
 function ConfigureCommonProject()

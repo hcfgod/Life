@@ -7,10 +7,6 @@
 
 #include <nvrhi/utils.h>
 
-#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
-#include <vulkan/vulkan.hpp>
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
-
 #include <array>
 #include <cstring>
 #include <string_view>
@@ -169,9 +165,6 @@ namespace Life
         m_Instance = m_VkbInstance.instance;
         m_DebugMessenger = m_VkbInstance.debug_messenger;
 
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(m_VkbInstance.fp_vkGetInstanceProcAddr);
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(m_Instance, m_VkbInstance.fp_vkGetInstanceProcAddr);
-
         LOG_CORE_INFO("Vulkan instance created.");
     }
 
@@ -207,7 +200,8 @@ namespace Life
                 ErrorSeverity::Critical);
         }
 
-        m_PhysicalDevice = physResult.value().physical_device;
+        m_VkbPhysicalDevice = physResult.value();
+        m_PhysicalDevice = m_VkbPhysicalDevice.physical_device;
 
         VkPhysicalDeviceProperties props;
         vkGetPhysicalDeviceProperties(m_PhysicalDevice, &props);
@@ -216,22 +210,12 @@ namespace Life
 
     void VulkanGraphicsDevice::CreateLogicalDevice()
     {
-        vkb::PhysicalDeviceSelector selector(m_VkbInstance);
-        selector.set_surface(m_Surface)
-                .set_minimum_version(1, 3)
-                .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete);
+        VkPhysicalDeviceVulkan12Features features12{};
+        features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        features12.timelineSemaphore = VK_TRUE;
 
-        auto physResult = selector.select();
-        if (!physResult)
-        {
-            throw Error(
-                ErrorCode::GraphicsError,
-                "Failed to re-select physical device for logical device creation.",
-                std::source_location::current(),
-                ErrorSeverity::Critical);
-        }
-
-        vkb::DeviceBuilder deviceBuilder(physResult.value());
+        vkb::DeviceBuilder deviceBuilder(m_VkbPhysicalDevice);
+        deviceBuilder.add_pNext(&features12);
         auto deviceResult = deviceBuilder.build();
         if (!deviceResult)
         {
@@ -270,13 +254,18 @@ namespace Life
             m_PresentQueueFamily = m_VkbDevice.get_queue_index(vkb::QueueType::present).value();
         }
 
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(m_Instance, m_VkbInstance.fp_vkGetInstanceProcAddr, m_Device);
-
         LOG_CORE_INFO("Vulkan logical device created.");
     }
 
     void VulkanGraphicsDevice::CreateNvrhiDevice()
     {
+        // Collect enabled device extensions from vk-bootstrap as persistent C strings
+        auto vkbDeviceExtensions = m_VkbPhysicalDevice.get_extensions();
+        std::vector<const char*> deviceExtensionPtrs;
+        deviceExtensionPtrs.reserve(vkbDeviceExtensions.size());
+        for (const auto& ext : vkbDeviceExtensions)
+            deviceExtensionPtrs.push_back(ext.c_str());
+
         nvrhi::vulkan::DeviceDesc deviceDesc{};
         deviceDesc.errorCB = &GetNvrhiMessageCallback();
         deviceDesc.instance = m_Instance;
@@ -288,6 +277,8 @@ namespace Life
         deviceDesc.transferQueueIndex = -1;
         deviceDesc.computeQueue = VK_NULL_HANDLE;
         deviceDesc.computeQueueIndex = -1;
+        deviceDesc.deviceExtensions = deviceExtensionPtrs.data();
+        deviceDesc.numDeviceExtensions = deviceExtensionPtrs.size();
 
         m_NvrhiDevice = nvrhi::vulkan::createDevice(deviceDesc);
         if (!m_NvrhiDevice)

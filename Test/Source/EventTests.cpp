@@ -364,10 +364,41 @@ TEST_CASE("TranslateSDLEvent preserves SDL window resize and move payloads")
     CHECK(windowMovedEvent.GetY() == 75);
 }
 
+TEST_CASE("TranslateSDLEvent maps SDL keyboard and mouse input events")
+{
+    SDL_Event keyEvent{};
+    keyEvent.type = SDL_EVENT_KEY_DOWN;
+    keyEvent.key.scancode = SDL_SCANCODE_SPACE;
+    keyEvent.key.repeat = false;
+
+    Life::Scope<Life::Event> translatedKeyEvent = Life::TranslateSDLEvent(keyEvent);
+    REQUIRE(translatedKeyEvent != nullptr);
+    REQUIRE(translatedKeyEvent->GetEventType() == Life::KeyPressedEvent::GetStaticType());
+    const auto& keyPressedEvent = static_cast<const Life::KeyPressedEvent&>(*translatedKeyEvent);
+    CHECK(keyPressedEvent.GetKeyCode() == Life::KeyCodes::Space);
+    CHECK_FALSE(keyPressedEvent.IsRepeat());
+
+    SDL_Event mouseMotionEvent{};
+    mouseMotionEvent.type = SDL_EVENT_MOUSE_MOTION;
+    mouseMotionEvent.motion.x = 320.0f;
+    mouseMotionEvent.motion.y = 240.0f;
+    mouseMotionEvent.motion.xrel = 5.0f;
+    mouseMotionEvent.motion.yrel = -3.0f;
+
+    Life::Scope<Life::Event> translatedMouseMotionEvent = Life::TranslateSDLEvent(mouseMotionEvent);
+    REQUIRE(translatedMouseMotionEvent != nullptr);
+    REQUIRE(translatedMouseMotionEvent->GetEventType() == Life::MouseMovedEvent::GetStaticType());
+    const auto& mouseMovedEvent = static_cast<const Life::MouseMovedEvent&>(*translatedMouseMotionEvent);
+    CHECK(mouseMovedEvent.GetX() == doctest::Approx(320.0f));
+    CHECK(mouseMovedEvent.GetY() == doctest::Approx(240.0f));
+    CHECK(mouseMovedEvent.GetDeltaX() == doctest::Approx(5.0f));
+    CHECK(mouseMovedEvent.GetDeltaY() == doctest::Approx(-3.0f));
+}
+
 TEST_CASE("TranslateSDLEvent returns null for unsupported SDL events")
 {
     SDL_Event event{};
-    event.type = SDL_EVENT_MOUSE_MOTION;
+    event.type = SDL_EVENT_TEXT_INPUT;
 
     CHECK(Life::TranslateSDLEvent(event) == nullptr);
 }

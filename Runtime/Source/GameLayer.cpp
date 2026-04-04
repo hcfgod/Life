@@ -1,6 +1,7 @@
 #include "Runtime/GameLayer.h"
 #include "Graphics/GraphicsDevice.h"
 
+#include <cmath>
 #include <nvrhi/nvrhi.h>
 
 namespace RuntimeApp
@@ -36,6 +37,28 @@ namespace RuntimeApp
         {
             LOG_INFO("Runtime running.");
             m_HasLoggedRuntime = true;
+        }
+
+        if (auto* input = GetApplication().TryGetService<Life::InputSystem>())
+        {
+            if (input->WasActionStartedThisFrame("Gameplay", "Quit"))
+            {
+                LOG_INFO("Quit action triggered.");
+                GetApplication().RequestShutdown();
+            }
+
+            const Life::InputVector2 movement = input->ReadActionAxis2D("Gameplay", "Move");
+            const bool movementActive = std::abs(movement.x) > 0.01f || std::abs(movement.y) > 0.01f;
+            if (movementActive && !m_WasMovementInputActive)
+            {
+                LOG_INFO("Movement input detected: ({}, {}).", movement.x, movement.y);
+            }
+            else if (!movementActive && m_WasMovementInputActive)
+            {
+                LOG_INFO("Movement input released.");
+            }
+
+            m_WasMovementInputActive = movementActive;
         }
 
         if (auto* graphics = GetApplication().TryGetService<Life::GraphicsDevice>())

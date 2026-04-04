@@ -11,6 +11,34 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git init
 fi
 
+register_declared_submodules() {
+    if [ ! -f .gitmodules ]; then
+        echo "[Bootstrap] .gitmodules was not found. No dependencies to register."
+        return 0
+    fi
+
+    submodules_found=0
+    while read -r submodule_key submodule_path; do
+        [ -n "$submodule_key" ] || continue
+        submodules_found=1
+        submodule_url_key=${submodule_key%.path}.url
+        submodule_url=$(git config --file .gitmodules --get "$submodule_url_key" 2>/dev/null || true)
+
+        if [ -z "$submodule_url" ]; then
+            echo "[Bootstrap] Skipping $submodule_path because no submodule URL is declared."
+            continue
+        fi
+
+        ensure_submodule "$submodule_path" "$submodule_url"
+    done <<EOF
+$(git config --file .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null || true)
+EOF
+
+    if [ "$submodules_found" -eq 0 ]; then
+        echo "[Bootstrap] No submodules were declared in .gitmodules."
+    fi
+}
+
 ensure_submodule() {
     submodule_path="$1"
     submodule_url="$2"
@@ -35,12 +63,7 @@ ensure_submodule() {
     git submodule add --force "$submodule_url" "$submodule_path"
 }
 
-ensure_submodule "Vendor/SDL3" "https://github.com/libsdl-org/SDL.git"
-ensure_submodule "Vendor/spdlog" "https://github.com/gabime/spdlog.git"
-ensure_submodule "Vendor/json" "https://github.com/nlohmann/json.git"
-ensure_submodule "Vendor/doctest" "https://github.com/doctest/doctest.git"
-ensure_submodule "Vendor/nvrhi" "https://github.com/NVIDIAGameWorks/nvrhi.git"
-ensure_submodule "Vendor/vk-bootstrap" "https://github.com/charles-lunarg/vk-bootstrap.git"
+register_declared_submodules
 
 echo "[Bootstrap] Syncing submodules..."
 git submodule update --init --recursive

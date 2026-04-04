@@ -73,6 +73,7 @@ namespace Life
         static constexpr uint32_t MaxFramesInFlight = 2;
 
         vkb::Instance m_VkbInstance;
+        vkb::PhysicalDevice m_VkbPhysicalDevice;
         vkb::Device m_VkbDevice;
     };
 }

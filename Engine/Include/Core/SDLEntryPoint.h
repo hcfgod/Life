@@ -82,7 +82,14 @@ inline SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 
     try
     {
-        Life::QueueApplicationEvent(state, Life::TranslateSDLEvent(*event));
+        SDL_Event queuedEvent = *event;
+        Life::QueueApplicationEvent(
+            state,
+            Life::TranslateSDLEvent(queuedEvent),
+            [queuedEvent](Life::ApplicationHost& host) mutable
+            {
+                host.GetInputSystem().OnSdlEvent(queuedEvent);
+            });
         return state->Host->IsRunning() ? SDL_APP_CONTINUE : SDL_APP_SUCCESS;
     }
     catch (const std::exception& exception)

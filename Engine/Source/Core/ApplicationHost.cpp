@@ -140,6 +140,7 @@ namespace Life
             ApplicationContext& context,
             ApplicationEventRouter& eventRouter,
             LayerStack& layerStack,
+            InputSystem& inputSystem,
             JobSystem& jobSystem,
             Async::AsyncIO& asyncIO,
             ApplicationRuntime& runtime,
@@ -150,6 +151,7 @@ namespace Life
             services.Register<ApplicationContext>(context);
             services.Register<ApplicationEventRouter>(eventRouter);
             services.Register<LayerStack>(layerStack);
+            services.Register<InputSystem>(inputSystem);
             services.Register<JobSystem>(jobSystem);
             services.Register<Async::AsyncIO>(asyncIO);
             services.Register<ApplicationRuntime>(runtime);
@@ -210,9 +212,10 @@ namespace Life
 
             AcquireSharedEngineSystems(specification.Concurrency);
             m_SharedSystemsAcquired = true;
-            RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, m_LayerStack, GetJobSystem(), Async::GetAsyncIO(), *m_Runtime, *m_Window);
+            RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, m_LayerStack, m_InputSystem, GetJobSystem(), Async::GetAsyncIO(), *m_Runtime, *m_Window);
             if (m_GraphicsDevice)
                 m_Services.Register<GraphicsDevice>(*m_GraphicsDevice);
+            m_InputSystem.SyncConnectedGamepads();
             SetGlobalServiceRegistry(&m_Services);
             m_GlobalServicesRegistered = true;
 
@@ -326,6 +329,23 @@ namespace Life
     {
         if (!m_Running || !m_Initialized)
             return;
+
+        struct InputFrameFinalizer final
+        {
+            explicit InputFrameFinalizer(InputSystem& inputSystem)
+                : Input(inputSystem)
+            {
+            }
+
+            ~InputFrameFinalizer()
+            {
+                Input.EndFrame();
+            }
+
+            InputSystem& Input;
+        } inputFrameFinalizer(m_InputSystem);
+
+        m_InputSystem.UpdateActions();
 
         bool frameStarted = false;
         if (m_GraphicsDevice)

@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <exception>
+#include <functional>
 #include <mutex>
 #include <utility>
 #include <vector>
@@ -67,12 +68,18 @@ namespace Life
         }
     }
 
+    struct QueuedApplicationEvent
+    {
+        std::function<void(ApplicationHost&)> Prepare;
+        Scope<Event> Event;
+    };
+
     struct ApplicationRunnerState
     {
         Scope<ApplicationHost> Host;
         std::chrono::steady_clock::time_point LastFrameTime;
         std::mutex EventMutex;
-        std::vector<Scope<Event>> PendingEvents;
+        std::vector<QueuedApplicationEvent> PendingEvents;
         bool UseExternalEventPump = false;
     };
 
@@ -81,6 +88,26 @@ namespace Life
         for (Scope<Event>& event : pendingEvents)
         {
             host.HandleEvent(*event);
+
+            if (!host.IsRunning())
+                break;
+        }
+
+        pendingEvents.clear();
+    }
+
+    inline void DispatchApplicationEvents(ApplicationHost& host, std::vector<QueuedApplicationEvent>& pendingEvents)
+    {
+        for (QueuedApplicationEvent& pendingEvent : pendingEvents)
+        {
+            if (pendingEvent.Prepare)
+                pendingEvent.Prepare(host);
+
+            if (!host.IsRunning())
+                break;
+
+            if (pendingEvent.Event)
+                host.HandleEvent(*pendingEvent.Event);
 
             if (!host.IsRunning())
                 break;
@@ -105,6 +132,31 @@ namespace Life
         ApplicationHost& host,
         std::chrono::steady_clock::time_point& lastFrameTime,
         std::vector<Scope<Event>>& pendingEvents,
+        bool useExternalEventPump)
+    {
+        if (!host.IsRunning())
+            return false;
+
+        DispatchApplicationEvents(host, pendingEvents);
+
+        if (host.IsRunning() && !useExternalEventPump)
+            PollApplicationRuntimeEvents(host);
+
+        if (!host.IsRunning())
+            return false;
+
+        auto currentFrameTime = std::chrono::steady_clock::now();
+        float timestep = std::chrono::duration<float>(currentFrameTime - lastFrameTime).count();
+        lastFrameTime = currentFrameTime;
+
+        host.RunFrame(timestep);
+        return host.IsRunning();
+    }
+
+    inline bool RunApplicationLoopIteration(
+        ApplicationHost& host,
+        std::chrono::steady_clock::time_point& lastFrameTime,
+        std::vector<QueuedApplicationEvent>& pendingEvents,
         bool useExternalEventPump)
     {
         if (!host.IsRunning())
@@ -175,7 +227,19 @@ namespace Life
             return;
 
         std::scoped_lock lock(state->EventMutex);
-        state->PendingEvents.emplace_back(std::move(event));
+        state->PendingEvents.emplace_back(QueuedApplicationEvent{ {}, std::move(event) });
+    }
+
+    inline void QueueApplicationEvent(
+        ApplicationRunnerState* state,
+        Scope<Event> event,
+        std::function<void(ApplicationHost&)> prepareCallback)
+    {
+        if (state == nullptr || (!event && !prepareCallback))
+            return;
+
+        std::scoped_lock lock(state->EventMutex);
+        state->PendingEvents.emplace_back(QueuedApplicationEvent{ std::move(prepareCallback), std::move(event) });
     }
 
     inline bool RunApplicationRunnerIteration(ApplicationRunnerState* state)
@@ -183,7 +247,7 @@ namespace Life
         if (state == nullptr || state->Host == nullptr)
             return false;
 
-        std::vector<Scope<Event>> pendingEvents;
+        std::vector<QueuedApplicationEvent> pendingEvents;
         {
             std::scoped_lock lock(state->EventMutex);
             pendingEvents.swap(state->PendingEvents);

@@ -2,6 +2,7 @@
 
 #include "Core/Application.h"
 #include "Core/ApplicationEventRouter.h"
+#include "Core/Input/InputSystem.h"
 #include "Core/LayerStack.h"
 #include "Core/ApplicationRuntime.h"
 #include "Core/Memory.h"
@@ -39,6 +40,8 @@ namespace Life
         const ApplicationEventRouter& GetEventRouter() const { return m_EventRouter; }
         LayerStack& GetLayerStack() { return m_LayerStack; }
         const LayerStack& GetLayerStack() const { return m_LayerStack; }
+        InputSystem& GetInputSystem() { return m_InputSystem; }
+        const InputSystem& GetInputSystem() const { return m_InputSystem; }
         ServiceRegistry& GetServices() { return m_Services; }
         const ServiceRegistry& GetServices() const { return m_Services; }
         GraphicsDevice* GetGraphicsDevice() { return m_GraphicsDevice.get(); }
@@ -52,6 +55,7 @@ namespace Life
         ApplicationContext m_Context;
         ApplicationEventRouter m_EventRouter;
         LayerStack m_LayerStack;
+        InputSystem m_InputSystem;
         ServiceRegistry m_Services;
         bool m_Running = false;
         bool m_Initialized = false;

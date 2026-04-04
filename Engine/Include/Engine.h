@@ -7,6 +7,8 @@
 #include "Core/ApplicationEventRouter.h"
 #include "Core/Layer.h"
 #include "Core/LayerStack.h"
+#include "Core/Input/InputAction.h"
+#include "Core/Input/InputSystem.h"
 #include "Core/Concurrency/AsyncIO.h"
 #include "Core/Concurrency/JobSystem.h"
 #include "Core/CrashDiagnostics.h"
