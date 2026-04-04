@@ -2,12 +2,14 @@
 
 This folder contains implementation-facing documentation for the engine's runtime architecture, operational behavior, and integration surfaces.
 
-The intent is to explain how the current systems fit together and where application or engine code is expected to plug in, without forcing readers to reconstruct design intent from headers alone.
+The intent is to explain how the current systems fit together, what owns what at runtime, and where application or engine code is expected to plug in without forcing readers to reconstruct design intent from headers alone.
 
 ## Recommended Reading Order
 
 - `ApplicationArchitecture.md` for the canonical startup path, ownership model, and service boundaries.
 - `EntryPointsAndBootstrap.md` for executable entry, SDL callback bootstrap, runner state, and exception boundaries.
+- `Rendering.md` for graphics-device ownership, frame boundaries, backend selection, and current Vulkan/NVRHI runtime behavior.
+- `InputSystem.md` for raw input state, action assets, rebinding, and frame-based input semantics.
 - `EventThreadingInvariants.md` for the event pipeline and thread-safety assumptions that shape runtime behavior.
 - `Logging.md` for the authoritative logging configuration model.
 - `CrashDiagnostics.md` for crash-reporting lifecycle, output, and operational guidance.
@@ -19,6 +21,8 @@ The intent is to explain how the current systems fit together and where applicat
 
 - `ApplicationArchitecture.md` - startup flow, ownership boundaries, service registry behavior, and the authoritative application loop.
 - `EntryPointsAndBootstrap.md` - executable entry, SDL callback bootstrap, runner iteration, event injection, and teardown responsibilities.
+- `Rendering.md` - graphics-device ownership, frame sequencing, backend responsibilities, and current Vulkan/NVRHI integration behavior.
+- `InputSystem.md` - host-owned input architecture, raw-state polling, action assets, rebinding, and input frame semantics.
 - `EventThreadingInvariants.md` - event ordering, runtime ownership, and thread-safety boundaries for the current engine architecture.
 - `Logging.md` - engine logging configuration, sink behavior, reconfiguration, and integration guidance.
 - `CrashDiagnostics.md` - crash-reporting configuration, install timing, report contents, and platform-specific behavior.

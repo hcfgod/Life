@@ -2,15 +2,17 @@
 
 ## Purpose
 
-Life provides a structured error model for engine code that needs more context than a bare `std::runtime_error` and more flexibility than a single exception-only policy.
+Life uses a structured error model so failures carry stable identity, severity, and context across runtime code, tooling, tests, and crash reporting.
 
-The current system supports three complementary styles:
+The system is intentionally flexible rather than doctrinaire. Different subsystems have different control-flow needs, but they should still speak the same failure language.
+
+The current model supports three complementary styles:
 
 - throwing `Life::Error` or a derived type
 - returning `Result<T>` or `Result<void>`
-- using engine helpers such as assertions, verification, and system-error translation
+- using shared engine helpers such as assertions, verification, and system-error translation
 
-The goal is not to force every subsystem into one pattern. The goal is to preserve consistent error identity, severity, and context across different integration points.
+The design goal is not to force every subsystem into a single pattern. It is to ensure that failures remain classifiable, loggable, and diagnosable even when they cross subsystem or exception boundaries.
 
 ## Core Types
 
@@ -107,7 +109,7 @@ These do not introduce new behavior. Their value is semantic clarity at throw si
 
 ## Result Types
 
-`Result<T>` and `Result<void>` provide an alternative to exception-only control flow.
+`Result<T>` and `Result<void>` provide the engine's explicit success-or-failure path.
 
 They can hold either:
 
@@ -125,7 +127,7 @@ Useful operations include:
 - `GetError()`
 - `GetErrorPtr()`
 
-This pattern is a good fit when a subsystem wants explicit success/failure branching without losing structured diagnostics.
+Use `Result<T>` when the caller is expected to branch intentionally on the outcome and continue operating in a controlled way. This is especially appropriate at file, platform, serialization, and integration boundaries where failure is a normal possibility rather than a broken invariant.
 
 ## Error-Handling Utilities
 
@@ -145,7 +147,9 @@ The default behavior is:
 - log the error through `Error::LogError(...)`
 - break into the debugger for fatal errors when supported by the platform layer
 
-`ScopedErrorHandlerOverride` provides an RAII mechanism for temporary overrides. This is primarily useful in tests and tooling where an expected failure should not spam normal logs.
+Because the current runtime model is process-oriented, the error handler should also be treated as process-oriented configuration. It is not intended as a per-system policy switch.
+
+`ScopedErrorHandlerOverride` provides an RAII mechanism for temporary overrides. In practice this is mainly useful in tests and tooling, where an expected failure should not pollute normal logs or debugger behavior.
 
 ### Assertions and Verification
 
@@ -229,7 +233,7 @@ These are convenience tools, not a substitute for thoughtful API design. Use the
 
 ## Recommended Usage Guidelines
 
-A few conventions help keep error behavior consistent across the codebase.
+A few conventions keep error behavior consistent across the engine.
 
 ### Prefer `ErrorCode` That Matches the Failure Domain
 
@@ -250,20 +254,32 @@ As a general rule:
 - use exceptions when failure should unwind immediately through the current control flow
 - use `Result<T>` when the caller is expected to branch explicitly on success vs failure
 
-Both approaches are valid inside the current engine. The important part is preserving `Life::Error` information instead of degrading into opaque failures.
+Both approaches are valid inside the current engine. The important part is preserving `Life::Error` information instead of degrading into opaque failures, ad hoc booleans, or message-only logging.
 
 ### Keep the Global Error Handler Stable in Production Paths
 
 The scoped handler override exists mainly for tests and tooling. Production code should usually rely on the default handler and logging configuration rather than swapping global error behavior dynamically.
 
+### Treat Assertions as Invariant Failures
+
+`LIFE_ASSERT(...)` and `Assert(...)` are for conditions that indicate the engine or application has reached a state that should not be possible if the surrounding code is correct.
+
+That is a stronger statement than ordinary runtime failure. Assertions should not become a substitute for input validation, file-format checks, or recoverable platform errors.
+
+### Treat Verification as Recoverable Failure Reporting
+
+`LIFE_VERIFY(...)` and `Verify(...)` are better suited to cases where execution cannot continue normally at the current call site, but the condition still belongs to the engine's standard error-reporting path rather than to an invariant break.
+
+That distinction helps logs and debugger behavior stay meaningful.
+
 ## Relationship to Crash Diagnostics
 
 `Life::Error` integrates naturally with crash diagnostics.
 
-When `CrashDiagnostics::ReportHandledException(...)` receives a caught exception that is actually a `Life::Error`, the report writer includes the detailed error string rather than just `what()` output. That means structured engine errors remain useful even after they cross an exception boundary.
+When `CrashDiagnostics::ReportHandledException(...)` receives a caught exception that is actually a `Life::Error`, the report writer includes the detailed error string rather than just `what()` output. That means structured engine errors remain useful even after they cross an exception boundary at bootstrap, runtime-loop, or integration-level catch sites.
 
 ## Design Intent
 
 The error layer exists to make failures easier to classify, inspect, log, and translate across engine boundaries.
 
-It is not trying to be a full policy engine. Instead, it gives the codebase a shared vocabulary for failure so that logs, tests, runtime handling, and crash reports all speak the same language.
+It is not trying to be a full reliability framework or a substitute for sound subsystem design. Its purpose is narrower and more practical: give the codebase a shared vocabulary for failure so that logs, tests, runtime handling, and crash reports all describe the same event in compatible terms.

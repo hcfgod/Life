@@ -104,8 +104,8 @@ coverage/
 *.gprof
 
 # Core dumps
-core
-core.*
+/core
+/core.*
 
 # Backup files
 *.bak
