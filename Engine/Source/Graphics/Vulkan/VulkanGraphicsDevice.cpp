@@ -316,7 +316,6 @@ namespace Life
 
         auto swapchain = swapchainResult.value();
         m_Swapchain = swapchain.swapchain;
-        m_SwapchainFormat = swapchain.image_format;
         m_SwapchainWidth = swapchain.extent.width;
         m_SwapchainHeight = swapchain.extent.height;
 

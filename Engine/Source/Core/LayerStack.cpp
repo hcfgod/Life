@@ -136,6 +136,17 @@ namespace Life
         }
     }
 
+    void LayerStack::OnRender()
+    {
+        for (const LayerRef& layer : m_Layers)
+        {
+            if (layer == nullptr || !layer->IsEnabled())
+                continue;
+
+            layer->OnRender();
+        }
+    }
+
     void LayerStack::OnEvent(Event& event)
     {
         for (auto iterator = m_Layers.rbegin(); iterator != m_Layers.rend(); ++iterator)

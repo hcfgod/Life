@@ -1,6 +1,7 @@
 #include "Core/LifePCH.h"
 #include "Graphics/GraphicsBuffer.h"
 #include "Graphics/GraphicsDevice.h"
+#include "Core/Log.h"
 
 #include <nvrhi/nvrhi.h>
 
@@ -10,6 +11,33 @@ namespace Life
     {
         nvrhi::BufferHandle Handle;
     };
+
+    namespace
+    {
+        bool UploadBufferData(GraphicsDevice& device, nvrhi::IBuffer* buffer, const void* data,
+                              uint32_t sizeInBytes, uint32_t destinationOffset)
+        {
+            if (!buffer || !data || sizeInBytes == 0)
+                return false;
+
+            if (nvrhi::ICommandList* commandList = device.GetCurrentCommandList())
+            {
+                commandList->writeBuffer(buffer, data, sizeInBytes, destinationOffset);
+                return true;
+            }
+
+            nvrhi::IDevice* nvrhiDevice = device.GetNvrhiDevice();
+            if (!nvrhiDevice)
+                return false;
+
+            nvrhi::CommandListHandle commandList = nvrhiDevice->createCommandList();
+            commandList->open();
+            commandList->writeBuffer(buffer, data, sizeInBytes, destinationOffset);
+            commandList->close();
+            nvrhiDevice->executeCommandList(commandList);
+            return true;
+        }
+    }
 
     GraphicsBuffer::~GraphicsBuffer() = default;
 
@@ -74,6 +102,39 @@ namespace Life
         buffer->m_Description.Usage = BufferUsage::Vertex;
         buffer->m_Description.SizeInBytes = sizeInBytes;
         buffer->m_Description.Stride = stride;
+        return buffer;
+    }
+
+    Scope<GraphicsBuffer> GraphicsBuffer::CreateDynamicVertex(GraphicsDevice& device, uint32_t sizeInBytes,
+                                                               uint32_t stride,
+                                                               const std::string& debugName)
+    {
+        nvrhi::IDevice* nvrhiDevice = device.GetNvrhiDevice();
+        if (!nvrhiDevice)
+            return nullptr;
+
+        nvrhi::BufferDesc bufferDesc;
+        bufferDesc.byteSize = sizeInBytes;
+        bufferDesc.isVertexBuffer = true;
+        bufferDesc.debugName = debugName.c_str();
+        bufferDesc.initialState = nvrhi::ResourceStates::VertexBuffer;
+        bufferDesc.keepInitialState = true;
+
+        nvrhi::BufferHandle handle = nvrhiDevice->createBuffer(bufferDesc);
+        if (!handle)
+        {
+            LOG_CORE_ERROR("GraphicsBuffer::CreateDynamicVertex: Failed to create dynamic vertex buffer '{}'.", debugName);
+            return nullptr;
+        }
+
+        Scope<GraphicsBuffer> buffer(new GraphicsBuffer());
+        buffer->m_Impl = CreateScope<Impl>();
+        buffer->m_Impl->Handle = handle;
+        buffer->m_Description.DebugName = debugName;
+        buffer->m_Description.Usage = BufferUsage::Vertex;
+        buffer->m_Description.SizeInBytes = sizeInBytes;
+        buffer->m_Description.Stride = stride;
+        buffer->m_Description.Dynamic = true;
         return buffer;
     }
 
@@ -145,5 +206,20 @@ namespace Life
         buffer->m_Description.Stride = 0;
         buffer->m_Description.CPUAccess = true;
         return buffer;
+    }
+
+    bool GraphicsBuffer::SetData(GraphicsDevice& device, const void* data, uint32_t sizeInBytes,
+                                 uint32_t destinationOffset)
+    {
+        if (!m_Impl || !m_Impl->Handle || !data || sizeInBytes == 0)
+            return false;
+
+        if (destinationOffset > m_Description.SizeInBytes)
+            return false;
+
+        if (sizeInBytes > (m_Description.SizeInBytes - destinationOffset))
+            return false;
+
+        return UploadBufferData(device, m_Impl->Handle.Get(), data, sizeInBytes, destinationOffset);
     }
 }

@@ -76,7 +76,11 @@ namespace Life
 
     void Renderer::SetScissor(int32_t x, int32_t y, uint32_t width, uint32_t height)
     {
-        m_Impl->PendingScissor = nvrhi::Rect(x, y, static_cast<int32_t>(x + width), static_cast<int32_t>(y + height));
+        m_Impl->PendingScissor = nvrhi::Rect(
+            x,
+            static_cast<int32_t>(x + width),
+            y,
+            static_cast<int32_t>(y + height));
         m_Impl->HasPendingScissor = true;
     }
 

@@ -45,6 +45,7 @@ namespace Life
         std::size_t GetOverlayCount() const noexcept { return m_Layers.size() - m_LayerInsertIndex; }
 
         void OnUpdate(float timestep);
+        void OnRender();
         void OnEvent(Event& event);
 
         auto begin() noexcept { return m_Layers.begin(); }

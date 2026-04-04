@@ -22,6 +22,7 @@ namespace Life
         uint32_t SizeInBytes = 0;
         uint32_t Stride = 0;
         bool CPUAccess = false;
+        bool Dynamic = false;
     };
 
     class GraphicsBuffer
@@ -46,12 +47,19 @@ namespace Life
                                                    uint32_t sizeInBytes, uint32_t stride,
                                                    const std::string& debugName = "VertexBuffer");
 
+        static Scope<GraphicsBuffer> CreateDynamicVertex(GraphicsDevice& device, uint32_t sizeInBytes,
+                                                         uint32_t stride,
+                                                         const std::string& debugName = "DynamicVertexBuffer");
+
         static Scope<GraphicsBuffer> CreateIndex(GraphicsDevice& device, const void* data,
                                                   uint32_t sizeInBytes, IndexFormat format,
                                                   const std::string& debugName = "IndexBuffer");
 
         static Scope<GraphicsBuffer> CreateConstant(GraphicsDevice& device, uint32_t sizeInBytes,
                                                      const std::string& debugName = "ConstantBuffer");
+
+        bool SetData(GraphicsDevice& device, const void* data, uint32_t sizeInBytes,
+                     uint32_t destinationOffset = 0);
 
     private:
         friend class Renderer;

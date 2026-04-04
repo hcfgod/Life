@@ -213,6 +213,8 @@ namespace Life
             AcquireSharedEngineSystems(specification.Concurrency);
             m_SharedSystemsAcquired = true;
             RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, m_LayerStack, m_InputSystem, GetJobSystem(), Async::GetAsyncIO(), *m_Runtime, *m_Window);
+            m_CameraManager = CreateScope<CameraManager>();
+            m_Services.Register<CameraManager>(*m_CameraManager);
             if (m_GraphicsDevice)
             {
                 m_Services.Register<GraphicsDevice>(*m_GraphicsDevice);
@@ -220,10 +222,12 @@ namespace Life
                 {
                     m_Renderer = CreateScope<Renderer>(*m_GraphicsDevice);
                     m_Services.Register<Renderer>(*m_Renderer);
+                    m_Renderer2D = CreateScope<Renderer2D>(*m_Renderer);
+                    m_Services.Register<Renderer2D>(*m_Renderer2D);
                 }
                 catch (const std::exception& e)
                 {
-                    LOG_CORE_WARN("Renderer creation failed ({}). Continuing without renderer.", e.what());
+                    LOG_CORE_WARN("Renderer service creation failed ({}). Continuing without renderer services.", e.what());
                 }
             }
             m_InputSystem.SyncConnectedGamepads();
@@ -299,6 +303,8 @@ namespace Life
             m_RegisteredAsActiveHost = false;
         }
 
+        m_Renderer2D.reset();
+        m_CameraManager.reset();
         m_Renderer.reset();
         m_GraphicsDevice.reset();
         m_Window.reset();
@@ -369,6 +375,9 @@ namespace Life
         m_Application->OnHostRunFrame(timestep);
         if (m_Running)
             m_LayerStack.OnUpdate(timestep);
+
+        if (frameStarted && m_Running)
+            m_LayerStack.OnRender();
 
         if (frameStarted && m_GraphicsDevice)
         {

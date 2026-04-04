@@ -115,13 +115,7 @@ namespace Life
         }
 
         // Create a binding layout for constant buffers and textures
-        nvrhi::BindingLayoutDesc bindingLayoutDesc;
-        bindingLayoutDesc.visibility = nvrhi::ShaderType::All;
-        bindingLayoutDesc.addItem(nvrhi::BindingLayoutItem::VolatileConstantBuffer(0));
-        bindingLayoutDesc.addItem(nvrhi::BindingLayoutItem::Texture_SRV(0));
-        bindingLayoutDesc.addItem(nvrhi::BindingLayoutItem::Sampler(0));
-
-        nvrhi::BindingLayoutHandle bindingLayout = nvrhiDevice->createBindingLayout(bindingLayoutDesc);
+        nvrhi::BindingLayoutHandle bindingLayout;
 
         // Build the pipeline description
         nvrhi::GraphicsPipelineDesc pipelineDesc;
@@ -135,9 +129,6 @@ namespace Life
         nvrhi::BlendState blendState;
         blendState.targets[0] = Internal::ToNvrhiBlendRenderTarget(desc.Blend);
         pipelineDesc.renderState.blendState = blendState;
-
-        if (bindingLayout)
-            pipelineDesc.addBindingLayout(bindingLayout);
 
         nvrhi::FramebufferInfoEx fbInfo = framebuffer->getFramebufferInfo();
         nvrhi::GraphicsPipelineHandle pipeline = nvrhiDevice->createGraphicsPipeline(pipelineDesc, fbInfo);

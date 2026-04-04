@@ -8,8 +8,10 @@
 #include "Core/Memory.h"
 #include "Core/ServiceRegistry.h"
 #include "Core/Window.h"
+#include "Graphics/CameraManager.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/Renderer.h"
+#include "Graphics/Renderer2D.h"
 
 namespace Life
 {
@@ -49,6 +51,10 @@ namespace Life
         const GraphicsDevice* GetGraphicsDevice() const { return m_GraphicsDevice.get(); }
         Renderer* GetRenderer() { return m_Renderer.get(); }
         const Renderer* GetRenderer() const { return m_Renderer.get(); }
+        CameraManager* GetCameraManager() { return m_CameraManager.get(); }
+        const CameraManager* GetCameraManager() const { return m_CameraManager.get(); }
+        Renderer2D* GetRenderer2D() { return m_Renderer2D.get(); }
+        const Renderer2D* GetRenderer2D() const { return m_Renderer2D.get(); }
 
     private:
         Scope<Application> m_Application;
@@ -56,6 +62,8 @@ namespace Life
         Scope<Window> m_Window;
         Scope<GraphicsDevice> m_GraphicsDevice;
         Scope<Renderer> m_Renderer;
+        Scope<CameraManager> m_CameraManager;
+        Scope<Renderer2D> m_Renderer2D;
         ApplicationContext m_Context;
         ApplicationEventRouter m_EventRouter;
         LayerStack m_LayerStack;

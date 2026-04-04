@@ -3,6 +3,7 @@
 #include "Engine.h"
 
 #include <nlohmann/json.hpp>
+#include <string>
 
 namespace RuntimeApp
 {
@@ -15,6 +16,7 @@ namespace RuntimeApp
         void OnAttach() override;
         void OnDetach() override;
         void OnUpdate(float timestep) override;
+        void OnRender() override;
         void OnEvent(Life::Event& event) override;
 
     private:
@@ -22,5 +24,8 @@ namespace RuntimeApp
         float m_ElapsedTime = 0.0f;
         bool m_HasLoggedRuntime = false;
         bool m_WasMovementInputActive = false;
+        bool m_IsUsingPerspectiveCamera = false;
+        std::string m_OrthographicCameraName = "Main2D";
+        std::string m_PerspectiveCameraName = "PreviewPerspective";
     };
 }

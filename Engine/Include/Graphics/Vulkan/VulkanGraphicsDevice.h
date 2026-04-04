@@ -52,7 +52,6 @@ namespace Life
         uint32_t m_GraphicsQueueFamily = 0;
         VkQueue m_PresentQueue = VK_NULL_HANDLE;
         uint32_t m_PresentQueueFamily = 0;
-        VkFormat m_SwapchainFormat = VK_FORMAT_UNDEFINED;
 
         uint32_t m_SwapchainWidth = 0;
         uint32_t m_SwapchainHeight = 0;
