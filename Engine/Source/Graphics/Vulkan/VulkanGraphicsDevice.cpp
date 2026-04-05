@@ -14,6 +14,9 @@
 namespace Life
 {
     void EnsureVulkanDispatchLoaderLinked() noexcept;
+    void InitializeVulkanDispatchLoader(VkInstance instance) noexcept;
+    void InitializeVulkanDispatchLoader(VkInstance instance, VkDevice device) noexcept;
+    bool DiagnoseVulkanHppDispatcher(VkInstance instance, VkDevice device, char* outBuf, size_t bufSize) noexcept;
 
     namespace
     {
@@ -44,6 +47,38 @@ namespace Life
         {
             static NvrhiMessageCallback callback;
             return callback;
+        }
+
+        void VerifySemaphoreCreation(VkDevice device, VkSemaphoreType semaphoreType, const char* name)
+        {
+            VkSemaphoreTypeCreateInfo semaphoreTypeInfo{};
+            semaphoreTypeInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+            semaphoreTypeInfo.semaphoreType = semaphoreType;
+            semaphoreTypeInfo.initialValue = 0;
+
+            VkSemaphoreCreateInfo semaphoreInfo{};
+            semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+            semaphoreInfo.pNext = semaphoreType == VK_SEMAPHORE_TYPE_BINARY ? nullptr : &semaphoreTypeInfo;
+
+            VkSemaphore semaphore = VK_NULL_HANDLE;
+            const VkResult result = vkCreateSemaphore(device, &semaphoreInfo, nullptr, &semaphore);
+            if (result != VK_SUCCESS)
+            {
+                throw Error(
+                    ErrorCode::GraphicsError,
+                    std::string("Failed Vulkan ") + name + " semaphore preflight: " + nvrhi::vulkan::resultToString(result),
+                    std::source_location::current(),
+                    ErrorSeverity::Critical);
+            }
+
+            if (semaphore != VK_NULL_HANDLE)
+                vkDestroySemaphore(device, semaphore, nullptr);
+        }
+
+        void VerifyVulkanDeviceForNvrhi(VkDevice device)
+        {
+            VerifySemaphoreCreation(device, VK_SEMAPHORE_TYPE_BINARY, "binary");
+            VerifySemaphoreCreation(device, VK_SEMAPHORE_TYPE_TIMELINE, "timeline");
         }
 
         bool ShouldIgnoreVulkanValidationMessage(const VkDebugUtilsMessengerCallbackDataEXT* callbackData)
@@ -160,6 +195,7 @@ namespace Life
         m_VkbInstance = instanceResult.value();
         m_Instance = m_VkbInstance.instance;
         m_DebugMessenger = m_VkbInstance.debug_messenger;
+        InitializeVulkanDispatchLoader(m_Instance);
 
         LOG_CORE_INFO("Vulkan instance created.");
     }
@@ -250,11 +286,23 @@ namespace Life
             m_PresentQueueFamily = m_VkbDevice.get_queue_index(vkb::QueueType::present).value();
         }
 
+        InitializeVulkanDispatchLoader(m_Instance, m_Device);
+
         LOG_CORE_INFO("Vulkan logical device created.");
     }
 
     void VulkanGraphicsDevice::CreateNvrhiDevice()
     {
+        VerifyVulkanDeviceForNvrhi(m_Device);
+
+        // Dispatcher diagnostic: test Vulkan-Hpp path from Engine-compiled code
+        {
+            char diagBuf[512]{};
+            bool diagOk = DiagnoseVulkanHppDispatcher(m_Instance, m_Device, diagBuf, sizeof(diagBuf));
+            LOG_CORE_INFO("{}", diagBuf);
+            LOG_CORE_INFO("Vulkan-Hpp dispatcher test from Engine code: {}", diagOk ? "PASSED" : "FAILED");
+        }
+
         // Collect enabled device extensions from vk-bootstrap as persistent C strings
         auto vkbDeviceExtensions = m_VkbPhysicalDevice.get_extensions();
         std::vector<const char*> deviceExtensionPtrs;

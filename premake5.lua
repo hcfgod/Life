@@ -292,9 +292,11 @@ function ConfigureCommonProject()
 
     filter "configurations:Release"
         optimize "On"
+        defines { "NDEBUG" }
 
     filter "configurations:Dist"
         optimize "Full"
+        defines { "NDEBUG" }
 
     filter {}
 end

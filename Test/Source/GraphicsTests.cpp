@@ -148,7 +148,7 @@ TEST_CASE("ApplicationHost registers a safe no-op ImGuiSystem service without gr
     host->Finalize();
 }
 
- TEST_CASE("Premake and Vulkan dispatcher configuration keep dispatcher storage Engine-owned")
+TEST_CASE("Premake and Vulkan dispatcher configuration keep dispatcher storage Engine-owned")
 {
     const std::filesystem::path repositoryRoot = FindRepositoryRoot();
     const std::string editorPremake = ReadTextFile(repositoryRoot / "Editor" / "premake5.lua");
@@ -166,6 +166,9 @@ TEST_CASE("ApplicationHost registers a safe no-op ImGuiSystem service without gr
 
     CHECK(engineDispatcherSource.find("VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE") != std::string::npos);
     CHECK(engineDispatcherSource.find("#if !defined(_WIN32)") == std::string::npos);
+
+    CHECK_MESSAGE(rootPremake.find("\"NDEBUG\"") != std::string::npos,
+        "Root premake5.lua must define NDEBUG for Release/Dist to match NVRHI CMake layout of DispatchLoaderDynamic");
 }
 
 TEST_CASE("ImGui docking vendoring is wired through repository bootstrap and premake")

@@ -338,6 +338,16 @@ if errorlevel 1 exit /b 1
 
 exit /b 0
 
+:nvrhi_install_stamp_ready
+set "NVRHI_STAMP_READY=0"
+if not defined NVRHI_INSTALL_DIR exit /b 0
+set "NVRHI_INSTALL_STAMP=%NVRHI_INSTALL_DIR%\life_nvrhi_dispatch_owner.txt"
+if not exist "%NVRHI_INSTALL_STAMP%" exit /b 0
+findstr /x /c:"engine_dispatch_owner_v5" "%NVRHI_INSTALL_STAMP%" >nul 2>&1
+if errorlevel 1 exit /b 0
+set "NVRHI_STAMP_READY=1"
+exit /b 0
+
 :nvrhi_install_ready
 set "NVRHI_READY=0"
 if not defined NVRHI_INSTALL_DIR exit /b 0
@@ -345,6 +355,9 @@ if not exist "%NVRHI_INSTALL_DIR%\include\nvrhi\nvrhi.h" exit /b 0
 if not exist "%NVRHI_INSTALL_DIR%\lib\nvrhi.lib" exit /b 0
 if not exist "%NVRHI_INSTALL_DIR%\lib\nvrhi_vk.lib" exit /b 0
 if not exist "%NVRHI_INSTALL_DIR%\lib\nvrhi_d3d12.lib" exit /b 0
+call :nvrhi_install_stamp_ready
+if errorlevel 1 exit /b 1
+if not "%NVRHI_STAMP_READY%"=="1" exit /b 0
 set "NVRHI_READY=1"
 exit /b 0
 
@@ -352,12 +365,19 @@ exit /b 0
 set "NVRHI_CONFIG=%~1"
 set "NVRHI_BUILD_DIR=Vendor\nvrhi\Build\windows\%TARGET_ARCH%\%NVRHI_CONFIG%"
 set "NVRHI_INSTALL_DIR=%CD%\Vendor\nvrhi\Install\windows\%TARGET_ARCH%\%NVRHI_CONFIG%"
+set "NVRHI_INSTALL_STAMP=%NVRHI_INSTALL_DIR%\life_nvrhi_dispatch_owner.txt"
 
 call :nvrhi_install_ready
 if errorlevel 1 exit /b 1
 if "%NVRHI_READY%"=="1" (
     echo [Setup] NVRHI %NVRHI_CONFIG% is already available. Skipping build.
     exit /b 0
+)
+
+if exist "%NVRHI_INSTALL_DIR%\lib\nvrhi_vk.lib" (
+    echo [Setup] Rebuilding NVRHI %NVRHI_CONFIG% to refresh Vulkan dispatcher ownership.
+    if exist "%NVRHI_BUILD_DIR%" rmdir /s /q "%NVRHI_BUILD_DIR%"
+    if exist "%NVRHI_INSTALL_DIR%" rmdir /s /q "%NVRHI_INSTALL_DIR%"
 )
 
 if /i "%TARGET_ARCH%"=="arm64" (
@@ -372,6 +392,8 @@ if errorlevel 1 exit /b 1
 
 "%CMAKE_CMD%" --build "%NVRHI_BUILD_DIR%" --config %NVRHI_CONFIG% --target install
 if errorlevel 1 exit /b 1
+
+> "%NVRHI_INSTALL_STAMP%" echo engine_dispatch_owner_v5
 
 exit /b 0
 
