@@ -84,7 +84,7 @@ Regular layers are intended for core runtime behavior such as:
 - scene-facing simulation or rendering work
 - application-specific runtime systems
 
-They are inserted before overlays and therefore render earlier and receive events later in reverse traversal only after overlays have had first inspection.
+They are inserted before overlays and therefore render earlier. In reverse-ordered event traversal, they are reached only after overlays have had first inspection.
 
 ### Overlays
 

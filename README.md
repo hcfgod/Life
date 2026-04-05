@@ -1,37 +1,42 @@
 # Life Engine
 
-Life is a custom C++ engine workspace focused on building a clean, professional engine foundation with explicit ownership, strong lifecycle boundaries, practical cross-platform tooling, and a host-owned runtime architecture.
+Life is a custom C++ 2D/3D engine workspace focused on building a clean, professional engine foundation with explicit ownership, strong lifecycle boundaries, practical cross-platform tooling, and a host-owned runtime architecture.
 
 ## What This Repository Is
 
-The repository is organized around three primary targets:
+The repository is organized around four primary targets:
 
-- `Engine` - the core engine library containing application lifecycle, services, layers, input, logging, crash diagnostics, platform abstractions, and the current rendering foundation.
-- `Runtime` - the executable app that consumes `Engine`; treat it as the current sandbox/runtime host and integration sample for engine development.
-- `Test` - the doctest-based validation target for engine behavior, including lifecycle, event-flow, and regression coverage.
+- `Engine` - the core engine library containing application lifecycle, services, layers, overlays, input, logging, crash diagnostics, platform abstractions, rendering systems, camera management, and tooling integration points.
+- `Runtime` - the executable app that consumes `Engine`; treat it as the current game/runtime sandbox and integration sample for engine development.
+- `Editor` - the dedicated editor application target built on the same engine architecture, with docking UI and an offscreen scene viewport path.
+- `Test` - the doctest-based validation target for engine behavior, including lifecycle, event-flow, graphics, tooling, and regression coverage.
 
-The current platform layer is SDL-backed, with the runtime owning SDL subsystem lifetime and event polling while window objects stay focused on window state and native handles.
+The current platform layer is SDL-backed, with the runtime owning SDL subsystem lifetime and event polling while window objects stay focused on window state and native handles. The active rendering/tooling path is Vulkan-backed through NVRHI, with higher-level engine services layered above the backend device.
 
 ## Current Engine Capabilities
 
-The workspace now includes a broader first-pass runtime foundation than the original core-only setup.
+The workspace now includes a broader custom engine foundation than the original core-only setup.
 
 - `ApplicationRunner` and `ApplicationHost` provide the authoritative loop, lifecycle sequencing, and host-owned service model.
 - `ServiceRegistry` is host-owned and exposed through application-facing accessors so runtime systems can be consumed without falling back to globals.
-- `LayerStack` is host-owned and integrated into update, render, and event routing.
-- `InputSystem` is host-owned and provides raw-state polling plus action-based input.
-- `GraphicsDevice` remains the backend abstraction, with `Renderer` as the general rendering service and `Renderer2D` as the first built-in higher-level renderer.
-- `Camera` and `CameraManager` provide named camera ownership, primary-camera selection, per-camera clear settings, aspect-ratio updates, and viewport handling.
+- `LayerStack` is host-owned and integrated into update, render, and event routing, with distinct layer and overlay ordering semantics.
+- `InputSystem` is host-owned and provides raw-state polling, action-based input, rebinding, and SDL-fed device state.
+- `GraphicsDevice` is the backend abstraction, with `Renderer` as the general rendering service and `Renderer2D` as the first built-in higher-level renderer.
+- `Camera` and `CameraManager` provide named camera ownership, orthographic and perspective projections, primary-camera selection, per-camera clear settings, aspect-ratio updates, and viewport handling.
+- `ImGuiSystem` is host-owned and provides the current tooling bridge for docking UI, input capture, and texture-backed editor panels.
+- `Runtime` demonstrates scene-facing rendering, input actions, multi-camera usage, overlays, and host-owned engine services in a normal app context.
+- `Editor` demonstrates a dedicated tooling app with docking panels, stats, hierarchy/inspector-style UI, and an offscreen scene viewport rendered through engine services.
 - Logging, crash diagnostics, structured error handling, and platform/runtime metadata are integrated as first-class engine systems rather than ad hoc utilities.
 
 ## Current Goals
 
-The current direction of the project is to establish a solid engine core before expanding outward. In practice that means:
+The current direction of the project is to keep turning the workspace into a solid custom 2D/3D engine rather than a narrow engine-core prototype. In practice that means:
 
 - keeping ownership and lifetime boundaries explicit
 - maintaining a clean application/runtime API
 - preserving deterministic event flow and shutdown behavior
-- growing rendering and input features on top of stable host-owned systems
+- growing rendering, tooling, and input features on top of stable host-owned systems
+- keeping runtime and editor applications as real consumers of the engine API
 - building reliable Windows, Linux, and macOS workflows
 - strengthening CI and test coverage as engine systems mature
 
@@ -179,7 +184,7 @@ To target Intel explicitly:
 
 ## What `Runtime` Is For
 
-`Runtime` is the current executable entrypoint for exercising the engine in a real app context. It is the place to wire up engine systems, validate runtime behavior, and evolve the public engine-facing API from a consumer's point of view.
+`Runtime` is the current executable entrypoint for exercising the engine in a real app context. It is the place to wire up engine systems, validate gameplay-facing runtime behavior, and evolve the public engine-facing API from a consumer's point of view.
 
 At the moment it serves as a practical integration sample for:
 
@@ -188,10 +193,25 @@ At the moment it serves as a practical integration sample for:
 - host-owned camera registration and switching
 - first-pass 2D rendering through `Renderer2D`
 - resize-driven camera aspect-ratio updates
+- runtime overlays and diagnostics logging
+
+## What `Editor` Is For
+
+`Editor` is the dedicated tooling-facing application for the engine.
+
+It exercises the same host-owned architecture as the runtime while focusing on editor-style workflows rather than gameplay/runtime presentation.
+
+At the moment it serves as a practical integration sample for:
+
+- host-owned `ImGuiSystem` initialization and docking UI
+- overlay-driven editor shell composition
+- offscreen scene viewport rendering into a texture-backed panel
+- camera inspection and editor-camera ownership through `CameraManager`
+- tooling input capture layered on top of the normal event and input pipeline
 
 ## What `Test` Is For
 
-`Test` exists to validate engine behavior independently of the runtime executable. It is the right place for fast checks of core systems such as events, application lifecycle, shutdown behavior, and regression coverage for engine refactors.
+`Test` exists to validate engine behavior independently of the runtime and editor executables. It is the right place for fast checks of core systems such as events, application lifecycle, shutdown behavior, graphics-service fallback behavior, tooling integration seams, and regression coverage for engine refactors.
 
 ## Tooling Notes
 
@@ -199,7 +219,7 @@ At the moment it serves as a practical integration sample for:
 - `Setup.bat` accepts `--arch=x64` and `--arch=arm64`; `Setup.sh` does the same for native Unix hosts.
 - On Linux arm64 hosts, `Setup.sh` bootstraps Premake from source when a preinstalled `premake5` is not available.
 - CI caches downloaded toolchains and reusable SDL build/install outputs to reduce repeated setup work.
-- On Windows, the `Runtime` build compiles the current `Renderer2D` GLSL shaders into SPIR-V output under the target `Assets/Shaders` folder when the Vulkan SDK is available.
+- On Windows, both `Runtime` and `Editor` compile the current `Renderer2D` GLSL shaders into SPIR-V output under their target `Assets/Shaders` folders when the Vulkan SDK is available.
 - Logging is configured through `ApplicationSpecification.Logging`, giving the engine a thread-safe, configurable logging surface backed by `spdlog` multi-threaded sinks.
 - Generated artifacts stay out of source control; the repository tracks source, scripts, configuration, and documentation rather than build outputs.
 
@@ -208,7 +228,9 @@ At the moment it serves as a practical integration sample for:
 - `Documents/README.md` - index and reading order for the implementation-facing documentation set.
 - `Documents/ApplicationArchitecture.md` - the canonical startup path, ownership model, service registry boundaries, and authoritative loop structure.
 - `Documents/EntryPointsAndBootstrap.md` - executable entry, SDL callback bootstrap, runner state, exception phases, and teardown boundaries.
+- `Documents/LayersAndOverlays.md` - the host-owned layer model, overlay ordering, traversal rules, and attach/detach semantics.
 - `Documents/Rendering.md` - rendering ownership, service boundaries, `GraphicsDevice`, `Renderer`, `Renderer2D`, cameras, and current Vulkan/NVRHI behavior.
+- `Documents/EditorAndTooling.md` - the dedicated editor app, host-owned `ImGuiSystem`, tooling event/frame integration, and the current scene viewport path.
 - `Documents/InputSystem.md` - host-owned input architecture, action assets, rebinding, and frame semantics.
 - `Documents/EventThreadingInvariants.md` - runtime ownership, event ordering, and thread-safety boundaries.
 - `Documents/Logging.md` - logging configuration, sink behavior, reconfiguration, and integration guidance.
@@ -222,6 +244,7 @@ At the moment it serves as a practical integration sample for:
 ```text
 Engine/    Core engine library
 Runtime/   Runtime executable / sandbox app
+Editor/    Editor executable / tooling app
 Test/      Engine tests
 Documents/ Engine architecture and integration documentation
 Scripts/   Setup, CI, bootstrap, and build helpers

@@ -35,9 +35,4 @@ project "Test"
     ConfigureVulkanLinking()
     ConfigureD3D12Linking()
 
-    filter "system:linux"
-        links { "Engine", "VkBootstrap" }
-
-    filter {}
-
     ConfigureCommonProject()

@@ -423,15 +423,15 @@ function ConfigureNVRHILinking()
 
     filter { "system:linux", "configurations:Debug" }
         libdirs { NVRHILibDir["Linux_Debug"] }
-        links { "nvrhi_vk", "nvrhi", "Engine" }
+        links { "nvrhi_vk", "nvrhi", "Engine", "ImGui", "VkBootstrap" }
 
     filter { "system:linux", "configurations:Release" }
         libdirs { NVRHILibDir["Linux_Release"] }
-        links { "nvrhi_vk", "nvrhi", "Engine" }
+        links { "nvrhi_vk", "nvrhi", "Engine", "ImGui", "VkBootstrap" }
 
     filter { "system:linux", "configurations:Dist" }
         libdirs { NVRHILibDir["Linux_Release"] }
-        links { "nvrhi_vk", "nvrhi", "Engine" }
+        links { "nvrhi_vk", "nvrhi", "Engine", "ImGui", "VkBootstrap" }
 
     filter { "system:macosx", "configurations:Debug" }
         libdirs { NVRHILibDir["MacOS_Debug"] }
