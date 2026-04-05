@@ -110,6 +110,7 @@ newoption
  IncludeDir["json"] = path.join(RootDir, "Vendor/json/include")
  IncludeDir["doctest"] = path.join(RootDir, "Vendor/doctest")
  IncludeDir["imgui"] = path.join(RootDir, "Vendor/imgui")
+ IncludeDir["stb_image"] = path.join(RootDir, "Vendor/stb_image")
  IncludeDir["VulkanHeaders"] = path.join(RootDir, "Vendor/nvrhi/thirdparty/Vulkan-Headers/include")
  IncludeDir["DirectXHeaders"] = path.join(RootDir, "Vendor/nvrhi/thirdparty/DirectX-Headers/include/directx")
  IncludeDir["vk_bootstrap"] = path.join(RootDir, "Vendor/vk-bootstrap/src")
@@ -212,6 +213,7 @@ function UseEngineIncludeDirs(extraIncludeDirs)
         IncludeDir["spdlog"],
         IncludeDir["json"],
         IncludeDir["imgui"],
+        IncludeDir["stb_image"],
         IncludeDir["VulkanHeaders"],
         IncludeDir["vk_bootstrap"]
     }
@@ -498,6 +500,7 @@ end
 
 group "Dependencies"
 include "Vendor/imgui"
+include "Vendor/stb_image"
 include "Vendor/vk-bootstrap"
 group ""
 

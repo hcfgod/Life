@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Assets/AssetBundle.h"
+#include "Assets/AssetDatabase.h"
+#include "Assets/AssetManager.h"
 #include "Core/Application.h"
 #include "Core/ApplicationEventRouter.h"
 #include "Core/Input/InputSystem.h"
@@ -58,6 +61,12 @@ namespace Life
         const ImGuiSystem* GetImGuiSystem() const { return m_ImGuiSystem.get(); }
         Renderer2D* GetRenderer2D() { return m_Renderer2D.get(); }
         const Renderer2D* GetRenderer2D() const { return m_Renderer2D.get(); }
+        Assets::AssetDatabase& GetAssetDatabase() { return m_AssetDatabase; }
+        const Assets::AssetDatabase& GetAssetDatabase() const { return m_AssetDatabase; }
+        Assets::AssetBundle& GetAssetBundle() { return m_AssetBundle; }
+        const Assets::AssetBundle& GetAssetBundle() const { return m_AssetBundle; }
+        Assets::AssetManager& GetAssetManager() { return m_AssetManager; }
+        const Assets::AssetManager& GetAssetManager() const { return m_AssetManager; }
 
     private:
         Scope<Application> m_Application;
@@ -72,6 +81,9 @@ namespace Life
         ApplicationEventRouter m_EventRouter;
         LayerStack m_LayerStack;
         InputSystem m_InputSystem;
+        Assets::AssetDatabase m_AssetDatabase;
+        Assets::AssetBundle m_AssetBundle;
+        Assets::AssetManager m_AssetManager;
         ServiceRegistry m_Services;
         bool m_Running = false;
         bool m_Initialized = false;

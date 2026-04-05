@@ -50,6 +50,9 @@ if errorlevel 1 goto :error
 call :ensure_imgui_premake
 if errorlevel 1 goto :error
 
+call :ensure_stb_image_premake
+if errorlevel 1 goto :error
+
 call :resolve_premake "%PREMAKE_ACTION_ARG%"
 if errorlevel 1 goto :error
 
@@ -158,6 +161,42 @@ if not exist "Vendor\imgui\" (
 >> "Vendor\imgui\premake5.lua" echo     ConfigureCommonProject()
 
 if not exist "Vendor\imgui\premake5.lua" exit /b 1
+
+exit /b 0
+
+:ensure_stb_image_premake
+if not exist "Vendor\stb_image\" (
+    echo [Setup] Vendor\stb_image was not found.
+    exit /b 1
+)
+
+> "Vendor\stb_image\premake5.lua" echo project "StbImage"
+>> "Vendor\stb_image\premake5.lua" echo     location "."
+>> "Vendor\stb_image\premake5.lua" echo     kind "StaticLib"
+>> "Vendor\stb_image\premake5.lua" echo.
+>> "Vendor\stb_image\premake5.lua" echo     SetupProject()
+>> "Vendor\stb_image\premake5.lua" echo.
+>> "Vendor\stb_image\premake5.lua" echo     files
+>> "Vendor\stb_image\premake5.lua" echo     {
+>> "Vendor\stb_image\premake5.lua" echo         "stb_image.h",
+>> "Vendor\stb_image\premake5.lua" echo         "stb_image_source.h",
+>> "Vendor\stb_image\premake5.lua" echo         "stb_image_impl.cpp"
+>> "Vendor\stb_image\premake5.lua" echo     }
+>> "Vendor\stb_image\premake5.lua" echo.
+>> "Vendor\stb_image\premake5.lua" echo     includedirs
+>> "Vendor\stb_image\premake5.lua" echo     {
+>> "Vendor\stb_image\premake5.lua" echo         "."
+>> "Vendor\stb_image\premake5.lua" echo     }
+>> "Vendor\stb_image\premake5.lua" echo.
+>> "Vendor\stb_image\premake5.lua" echo     externalincludedirs
+>> "Vendor\stb_image\premake5.lua" echo     {
+>> "Vendor\stb_image\premake5.lua" echo         IncludeDir["SDL3"]
+>> "Vendor\stb_image\premake5.lua" echo     }
+>> "Vendor\stb_image\premake5.lua" echo.
+>> "Vendor\stb_image\premake5.lua" echo     ConfigureSanitizers()
+>> "Vendor\stb_image\premake5.lua" echo     ConfigureCommonProject()
+
+if not exist "Vendor\stb_image\premake5.lua" exit /b 1
 
 exit /b 0
 

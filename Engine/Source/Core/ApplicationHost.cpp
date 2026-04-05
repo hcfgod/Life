@@ -1,4 +1,5 @@
 #include "Core/ApplicationHost.h"
+#include "Assets/AssetHotReloadManager.h"
 #include "Core/Concurrency/AsyncIO.h"
 #include "Core/Concurrency/JobSystem.h"
 #include "Core/CrashDiagnostics.h"
@@ -213,6 +214,9 @@ namespace Life
             AcquireSharedEngineSystems(specification.Concurrency);
             m_SharedSystemsAcquired = true;
             RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, m_LayerStack, m_InputSystem, GetJobSystem(), Async::GetAsyncIO(), *m_Runtime, *m_Window);
+            m_Services.Register<Assets::AssetDatabase>(m_AssetDatabase);
+            m_Services.Register<Assets::AssetBundle>(m_AssetBundle);
+            m_Services.Register<Assets::AssetManager>(m_AssetManager);
             m_CameraManager = CreateScope<CameraManager>();
             m_Services.Register<CameraManager>(*m_CameraManager);
             m_ImGuiSystem = CreateScope<ImGuiSystem>(*m_Window, m_GraphicsDevice.get());
@@ -235,6 +239,7 @@ namespace Life
             m_InputSystem.SyncConnectedGamepads();
             SetGlobalServiceRegistry(&m_Services);
             m_GlobalServicesRegistered = true;
+            Assets::AssetHotReloadManager::GetInstance().Enable(true);
 
             m_Context.Bind(
                 *m_Window,
@@ -252,6 +257,7 @@ namespace Life
         {
             if (m_GlobalServicesRegistered)
             {
+                Assets::AssetHotReloadManager::GetInstance().Enable(false);
                 SetGlobalServiceRegistry(nullptr);
                 m_GlobalServicesRegistered = false;
             }
@@ -289,6 +295,7 @@ namespace Life
 
         if (m_GlobalServicesRegistered)
         {
+            Assets::AssetHotReloadManager::GetInstance().Enable(false);
             SetGlobalServiceRegistry(nullptr);
             m_GlobalServicesRegistered = false;
         }

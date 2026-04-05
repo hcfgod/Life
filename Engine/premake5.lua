@@ -16,6 +16,7 @@ project "Engine"
     links
     {
         "ImGui",
+        "StbImage",
         "VkBootstrap"
     }
 

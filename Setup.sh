@@ -291,6 +291,43 @@ EOF
 
 ensure_imgui_premake
 
+ensure_stb_image_premake() {
+    if [ ! -d "$REPO_ROOT/Vendor/stb_image" ]; then
+        echo "[Setup] Vendor/stb_image was not found."
+        exit 1
+    fi
+
+    cat > "$REPO_ROOT/Vendor/stb_image/premake5.lua" <<'EOF'
+project "StbImage"
+    location "."
+    kind "StaticLib"
+
+    SetupProject()
+
+    files
+    {
+        "stb_image.h",
+        "stb_image_source.h",
+        "stb_image_impl.cpp"
+    }
+
+    includedirs
+    {
+        "."
+    }
+
+    externalincludedirs
+    {
+        IncludeDir["SDL3"]
+    }
+
+    ConfigureSanitizers()
+    ConfigureCommonProject()
+EOF
+}
+
+ensure_stb_image_premake
+
 resolve_cmake() {
     if command -v cmake >/dev/null 2>&1; then
         CMAKE_CMD="cmake"

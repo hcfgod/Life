@@ -1,4 +1,6 @@
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
+#include <cstdio>
+#include <exception>
 #include <vulkan/vulkan.hpp>
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
@@ -15,8 +17,15 @@ namespace Life
 
         PFN_vkGetInstanceProcAddr GetVulkanGetInstanceProcAddr() noexcept
         {
-            static VulkanHppDynamicLoader dynamicLoader;
-            return dynamicLoader.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+            try
+            {
+                static VulkanHppDynamicLoader dynamicLoader;
+                return dynamicLoader.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+            }
+            catch (...)
+            {
+                return nullptr;
+            }
         }
     }
 
@@ -25,7 +34,15 @@ namespace Life
         auto* dispatcher = &VULKAN_HPP_DEFAULT_DISPATCHER;
         (void)dispatcher;
         if (const PFN_vkGetInstanceProcAddr getInstanceProcAddr = GetVulkanGetInstanceProcAddr())
-            VULKAN_HPP_DEFAULT_DISPATCHER.init(getInstanceProcAddr);
+        {
+            try
+            {
+                VULKAN_HPP_DEFAULT_DISPATCHER.init(getInstanceProcAddr);
+            }
+            catch (...)
+            {
+            }
+        }
     }
 
     void InitializeVulkanDispatchLoader(VkInstance instance) noexcept
@@ -34,7 +51,15 @@ namespace Life
             return;
 
         if (const PFN_vkGetInstanceProcAddr getInstanceProcAddr = GetVulkanGetInstanceProcAddr())
-            VULKAN_HPP_DEFAULT_DISPATCHER.init(instance, getInstanceProcAddr);
+        {
+            try
+            {
+                VULKAN_HPP_DEFAULT_DISPATCHER.init(instance, getInstanceProcAddr);
+            }
+            catch (...)
+            {
+            }
+        }
     } 
 
     void InitializeVulkanDispatchLoader(VkInstance instance, VkDevice device) noexcept
@@ -43,33 +68,60 @@ namespace Life
             return;
 
         if (const PFN_vkGetInstanceProcAddr getInstanceProcAddr = GetVulkanGetInstanceProcAddr())
-            VULKAN_HPP_DEFAULT_DISPATCHER.init(instance, getInstanceProcAddr, device);
+        {
+            try
+            {
+                VULKAN_HPP_DEFAULT_DISPATCHER.init(instance, getInstanceProcAddr, device);
+            }
+            catch (...)
+            {
+            }
+        }
     }
 
     bool DiagnoseVulkanHppDispatcher(VkInstance instance, VkDevice device, char* outBuf, size_t bufSize) noexcept
     {
-        auto& d = VULKAN_HPP_DEFAULT_DISPATCHER;
-        std::snprintf(outBuf, bufSize,
-            "DispatcherDiag: addr=%p sizeof=%zu vkCreateSemaphore=%p vkDestroySemaphore=%p vkGetDeviceProcAddr=%p",
-            static_cast<void*>(&d),
-            sizeof(d),
-            reinterpret_cast<void*>(d.vkCreateSemaphore),
-            reinterpret_cast<void*>(d.vkDestroySemaphore),
-            reinterpret_cast<void*>(d.vkGetDeviceProcAddr));
+        (void)instance;
 
-        if (!d.vkCreateSemaphore || !d.vkDestroySemaphore)
+        try
+        {
+            auto& d = VULKAN_HPP_DEFAULT_DISPATCHER;
+            if (outBuf != nullptr && bufSize > 0)
+            {
+                std::snprintf(outBuf, bufSize,
+                    "DispatcherDiag: addr=%p sizeof=%zu vkCreateSemaphore=%p vkDestroySemaphore=%p vkGetDeviceProcAddr=%p",
+                    static_cast<void*>(&d),
+                    sizeof(d),
+                    reinterpret_cast<void*>(d.vkCreateSemaphore),
+                    reinterpret_cast<void*>(d.vkDestroySemaphore),
+                    reinterpret_cast<void*>(d.vkGetDeviceProcAddr));
+            }
+
+            if (!d.vkCreateSemaphore || !d.vkDestroySemaphore)
+                return false;
+
+            vk::Device vkDevice(device);
+            auto semaphoreTypeInfo = vk::SemaphoreTypeCreateInfo()
+                .setSemaphoreType(vk::SemaphoreType::eTimeline);
+            auto semaphoreInfo = vk::SemaphoreCreateInfo()
+                .setPNext(&semaphoreTypeInfo);
+
+            vk::Semaphore testSem = vkDevice.createSemaphore(semaphoreInfo, nullptr);
+            if (testSem)
+                vkDevice.destroySemaphore(testSem, nullptr);
+            return true;
+        }
+        catch (const std::exception& ex)
+        {
+            if (outBuf != nullptr && bufSize > 0)
+                std::snprintf(outBuf, bufSize, "DispatcherDiag: exception=%s", ex.what());
             return false;
-
-        // Mirror exactly what NVRHI Queue::Queue does, but from Engine-compiled code
-        vk::Device vkDevice(device);
-        auto semaphoreTypeInfo = vk::SemaphoreTypeCreateInfo()
-            .setSemaphoreType(vk::SemaphoreType::eTimeline);
-        auto semaphoreInfo = vk::SemaphoreCreateInfo()
-            .setPNext(&semaphoreTypeInfo);
-
-        vk::Semaphore testSem = vkDevice.createSemaphore(semaphoreInfo, nullptr);
-        if (testSem)
-            vkDevice.destroySemaphore(testSem, nullptr);
-        return true;
+        }
+        catch (...)
+        {
+            if (outBuf != nullptr && bufSize > 0)
+                std::snprintf(outBuf, bufSize, "DispatcherDiag: unknown exception");
+            return false;
+        }
     }
 }
