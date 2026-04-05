@@ -148,22 +148,24 @@ TEST_CASE("ApplicationHost registers a safe no-op ImGuiSystem service without gr
     host->Finalize();
 }
 
- TEST_CASE("Premake and Vulkan dispatcher configuration keep non-Windows dispatcher storage Engine-owned")
+ TEST_CASE("Premake and Vulkan dispatcher configuration keep dispatcher storage Engine-owned")
 {
     const std::filesystem::path repositoryRoot = FindRepositoryRoot();
     const std::string editorPremake = ReadTextFile(repositoryRoot / "Editor" / "premake5.lua");
     const std::string runtimePremake = ReadTextFile(repositoryRoot / "Runtime" / "premake5.lua");
     const std::string testPremake = ReadTextFile(repositoryRoot / "Test" / "premake5.lua");
     const std::string rootPremake = ReadTextFile(repositoryRoot / "premake5.lua");
+    const std::string setupBat = ReadTextFile(repositoryRoot / "Setup.bat");
     const std::string engineDispatcherSource = ReadTextFile(repositoryRoot / "Engine" / "Source" / "Graphics" / "Vulkan" / "VulkanDispatchLoader.cpp");
 
     CHECK(editorPremake.find("VulkanDispatchLoader.cpp") == std::string::npos);
     CHECK(runtimePremake.find("VulkanDispatchLoader.cpp") == std::string::npos);
     CHECK(testPremake.find("VulkanDispatchLoader.cpp") == std::string::npos);
     CHECK(rootPremake.find("\"nvrhi_vk\", \"nvrhi\", \"Engine\"") != std::string::npos);
+    CHECK(setupBat.find("NVRHI_SHARED_LIBRARY_BUILD") == std::string::npos);
 
     CHECK(engineDispatcherSource.find("VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE") != std::string::npos);
-    CHECK(engineDispatcherSource.find("#if !defined(_WIN32)") != std::string::npos);
+    CHECK(engineDispatcherSource.find("#if !defined(_WIN32)") == std::string::npos);
 }
 
 TEST_CASE("ImGui docking vendoring is wired through repository bootstrap and premake")
