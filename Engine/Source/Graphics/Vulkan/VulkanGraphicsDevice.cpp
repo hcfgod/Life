@@ -13,6 +13,8 @@
 
 namespace Life
 {
+    void EnsureVulkanDispatchLoaderLinked() noexcept;
+
     namespace
     {
         class NvrhiMessageCallback final : public nvrhi::IMessageCallback
@@ -79,6 +81,8 @@ namespace Life
     VulkanGraphicsDevice::VulkanGraphicsDevice(const GraphicsDeviceSpecification& spec, Window& window)
         : m_VSync(spec.VSync)
     {
+        EnsureVulkanDispatchLoaderLinked();
+
         if (!Platform::VulkanInterop::WindowSupportsVulkan(window))
         {
             throw Error(
