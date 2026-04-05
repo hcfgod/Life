@@ -148,21 +148,27 @@ TEST_CASE("ApplicationHost registers a safe no-op ImGuiSystem service without gr
     host->Finalize();
 }
 
-TEST_CASE("Premake and Vulkan dispatcher configuration keep dispatcher storage Engine-owned")
+TEST_CASE("Premake and Vulkan dispatcher configuration keep dispatcher storage at final link targets")
 {
     const std::filesystem::path repositoryRoot = FindRepositoryRoot();
+    const std::string editorPremake = ReadTextFile(repositoryRoot / "Editor" / "premake5.lua");
     const std::string runtimePremake = ReadTextFile(repositoryRoot / "Runtime" / "premake5.lua");
     const std::string testPremake = ReadTextFile(repositoryRoot / "Test" / "premake5.lua");
     const std::string rootPremake = ReadTextFile(repositoryRoot / "premake5.lua");
     const std::string engineDispatcherSource = ReadTextFile(repositoryRoot / "Engine" / "Source" / "Graphics" / "Vulkan" / "VulkanDispatchLoader.cpp");
+    const std::string editorDispatcherSource = ReadTextFile(repositoryRoot / "Editor" / "Source" / "Graphics" / "Vulkan" / "VulkanDispatchLoader.cpp");
     const std::string runtimeDispatcherSource = ReadTextFile(repositoryRoot / "Runtime" / "Source" / "Graphics" / "Vulkan" / "VulkanDispatchLoader.cpp");
-    const std::string testDispatcherSource = ReadTextFile(repositoryRoot / "Test" / "Source" / "Graphics" / "VulkanDispatchLoader.cpp");
+    const std::string testDispatcherSource = ReadTextFile(repositoryRoot / "Test" / "Source" / "Graphics" / "Vulkan" / "VulkanDispatchLoader.cpp");
 
+    CHECK(editorPremake.find("VulkanDispatchLoader.cpp") != std::string::npos);
     CHECK(runtimePremake.find("VulkanDispatchLoader.cpp") != std::string::npos);
     CHECK(testPremake.find("VulkanDispatchLoader.cpp") != std::string::npos);
     CHECK(rootPremake.find("\"nvrhi_vk\", \"nvrhi\"") != std::string::npos);
     
     CHECK(engineDispatcherSource.find("VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE") == std::string::npos);
+
+    CHECK(editorDispatcherSource.find("VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE") != std::string::npos);
+    CHECK(editorDispatcherSource.find("#if !defined(_WIN32)") != std::string::npos);
     
     CHECK(runtimeDispatcherSource.find("VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE") != std::string::npos);
     CHECK(runtimeDispatcherSource.find("#if !defined(_WIN32)") != std::string::npos);
