@@ -20,11 +20,6 @@ project "Test"
         "Include"
     }
 
-    filter "system:linux"
-        files { "../Engine/Source/Graphics/Vulkan/VulkanDispatchLoader.cpp" }
-
-    filter {}
-
     links
     {
         "Engine",

@@ -41,7 +41,7 @@ namespace Life
         Statistics Stats{};
         uint32_t QuadCount = 0;
         bool Initialized = false;
-        bool InitializationAttempted = false;
+        bool ReportedInitializationFailure = false;
         bool SceneActive = false;
     };
 
@@ -168,10 +168,8 @@ namespace Life
 
     void Renderer2D::InitializeResources()
     {
-        if (m_Impl->Initialized || m_Impl->InitializationAttempted)
+        if (m_Impl->Initialized)
             return;
-
-        m_Impl->InitializationAttempted = true;
 
         GraphicsDevice& device = m_Renderer.GetGraphicsDevice();
         const auto maxVertexCount =
@@ -188,14 +186,17 @@ namespace Life
             { "inColor", VertexAttributeSemantic::Color, TextureFormat::RGBA32_FLOAT }
         };
 
-        m_Impl->VertexBuffer = GraphicsBuffer::CreateDynamicVertex(device, vertexBufferSpecification);
+        if (!m_Impl->VertexBuffer)
+            m_Impl->VertexBuffer = GraphicsBuffer::CreateDynamicVertex(device, vertexBufferSpecification);
 
         const std::filesystem::path executablePath = PlatformDetection::GetExecutablePath();
         const std::filesystem::path shaderDirectory = executablePath.parent_path() / "Assets" / "Shaders";
+        const std::filesystem::path vertexShaderPath = shaderDirectory / "Renderer2D.vert.spv";
+        const std::filesystem::path pixelShaderPath = shaderDirectory / "Renderer2D.frag.spv";
         ShaderLibrary& shaderLibrary = m_Renderer.GetShaderLibrary();
 
         m_Impl->VertexShader = shaderLibrary.Get("Renderer2D.Vertex");
-        if (!m_Impl->VertexShader)
+        if (!m_Impl->VertexShader && std::filesystem::exists(vertexShaderPath))
         {
             ShaderDescription description;
             description.DebugName = "Renderer2DVertexShader";
@@ -203,11 +204,11 @@ namespace Life
             m_Impl->VertexShader = shaderLibrary.LoadFromFile(
                 "Renderer2D.Vertex",
                 description,
-                (shaderDirectory / "Renderer2D.vert.spv").string());
+                vertexShaderPath.string());
         }
 
         m_Impl->PixelShader = shaderLibrary.Get("Renderer2D.Pixel");
-        if (!m_Impl->PixelShader)
+        if (!m_Impl->PixelShader && std::filesystem::exists(pixelShaderPath))
         {
             ShaderDescription description;
             description.DebugName = "Renderer2DPixelShader";
@@ -215,7 +216,7 @@ namespace Life
             m_Impl->PixelShader = shaderLibrary.LoadFromFile(
                 "Renderer2D.Pixel",
                 description,
-                (shaderDirectory / "Renderer2D.frag.spv").string());
+                pixelShaderPath.string());
         }
 
         m_Impl->Initialized =
@@ -225,12 +226,20 @@ namespace Life
 
         if (!m_Impl->Initialized)
         {
-            LOG_CORE_ERROR(
-                "Renderer2D failed to initialize required resources (VertexBuffer={}, VertexShader={}, PixelShader={}).",
-                m_Impl->VertexBuffer != nullptr,
-                m_Impl->VertexShader != nullptr,
-                m_Impl->PixelShader != nullptr);
+            if (!m_Impl->ReportedInitializationFailure)
+            {
+                LOG_CORE_ERROR(
+                    "Renderer2D failed to initialize required resources (VertexBuffer={}, VertexShader={}, PixelShader={}).",
+                    m_Impl->VertexBuffer != nullptr,
+                    m_Impl->VertexShader != nullptr,
+                    m_Impl->PixelShader != nullptr);
+                m_Impl->ReportedInitializationFailure = true;
+            }
+
+            return;
         }
+
+        m_Impl->ReportedInitializationFailure = false;
     }
 
     void Renderer2D::EnsurePipeline()

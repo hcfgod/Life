@@ -38,6 +38,8 @@ namespace Life
         void CreateSwapchain();
         void DestroySwapchain();
         void RecreateSwapchain();
+        void CreateFrameSynchronization();
+        void DestroyFrameSynchronization() noexcept;
         void CreateNvrhiDevice();
         void CreateSwapchainImages();
         void CreateCommandList();

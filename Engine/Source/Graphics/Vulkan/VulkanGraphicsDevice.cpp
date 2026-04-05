@@ -94,6 +94,7 @@ namespace Life
         CreateLogicalDevice();
         CreateNvrhiDevice();
         CreateSwapchain();
+        CreateFrameSynchronization();
         CreateSwapchainImages();
         CreateCommandList();
 
@@ -113,16 +114,7 @@ namespace Life
             m_NvrhiDevice = nullptr;
         }
 
-        for (uint32_t i = 0; i < MaxFramesInFlight; ++i)
-        {
-            if (m_ImageAvailableSemaphores.size() > i && m_ImageAvailableSemaphores[i] != VK_NULL_HANDLE)
-                vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
-            if (m_RenderFinishedSemaphores.size() > i && m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
-                vkDestroySemaphore(m_Device, m_RenderFinishedSemaphores[i], nullptr);
-            if (m_InFlightFences.size() > i && m_InFlightFences[i] != VK_NULL_HANDLE)
-                vkDestroyFence(m_Device, m_InFlightFences[i], nullptr);
-        }
-
+        DestroyFrameSynchronization();
         DestroySwapchain();
 
         if (m_Surface != VK_NULL_HANDLE)
@@ -331,6 +323,16 @@ namespace Life
 
         m_SwapchainImages = imagesResult.value();
 
+        LOG_CORE_INFO("Vulkan swapchain created ({}x{}, {} images).", m_SwapchainWidth, m_SwapchainHeight, m_SwapchainImages.size());
+    }
+
+    void VulkanGraphicsDevice::CreateFrameSynchronization()
+    {
+        if (m_Device == VK_NULL_HANDLE)
+            return;
+
+        DestroyFrameSynchronization();
+
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
@@ -338,9 +340,9 @@ namespace Life
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        m_ImageAvailableSemaphores.resize(MaxFramesInFlight);
-        m_RenderFinishedSemaphores.resize(MaxFramesInFlight);
-        m_InFlightFences.resize(MaxFramesInFlight);
+        m_ImageAvailableSemaphores.assign(MaxFramesInFlight, VK_NULL_HANDLE);
+        m_RenderFinishedSemaphores.assign(MaxFramesInFlight, VK_NULL_HANDLE);
+        m_InFlightFences.assign(MaxFramesInFlight, VK_NULL_HANDLE);
 
         for (uint32_t i = 0; i < MaxFramesInFlight; ++i)
         {
@@ -348,12 +350,54 @@ namespace Life
             vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]);
             vkCreateFence(m_Device, &fenceInfo, nullptr, &m_InFlightFences[i]);
         }
+    }
 
-        LOG_CORE_INFO("Vulkan swapchain created ({}x{}, {} images).", m_SwapchainWidth, m_SwapchainHeight, m_SwapchainImages.size());
+    void VulkanGraphicsDevice::DestroyFrameSynchronization() noexcept
+    {
+        if (m_Device == VK_NULL_HANDLE)
+        {
+            m_ImageAvailableSemaphores.clear();
+            m_RenderFinishedSemaphores.clear();
+            m_InFlightFences.clear();
+            return;
+        }
+
+        for (VkSemaphore& semaphore : m_ImageAvailableSemaphores)
+        {
+            if (semaphore != VK_NULL_HANDLE)
+            {
+                vkDestroySemaphore(m_Device, semaphore, nullptr);
+                semaphore = VK_NULL_HANDLE;
+            }
+        }
+
+        for (VkSemaphore& semaphore : m_RenderFinishedSemaphores)
+        {
+            if (semaphore != VK_NULL_HANDLE)
+            {
+                vkDestroySemaphore(m_Device, semaphore, nullptr);
+                semaphore = VK_NULL_HANDLE;
+            }
+        }
+
+        for (VkFence& fence : m_InFlightFences)
+        {
+            if (fence != VK_NULL_HANDLE)
+            {
+                vkDestroyFence(m_Device, fence, nullptr);
+                fence = VK_NULL_HANDLE;
+            }
+        }
+
+        m_ImageAvailableSemaphores.clear();
+        m_RenderFinishedSemaphores.clear();
+        m_InFlightFences.clear();
     }
 
     void VulkanGraphicsDevice::DestroySwapchain()
     {
+        m_SwapchainImages.clear();
+
         if (m_Swapchain != VK_NULL_HANDLE && m_Device != VK_NULL_HANDLE)
         {
             vkDestroySwapchainKHR(m_Device, m_Swapchain, nullptr);
@@ -487,6 +531,8 @@ namespace Life
     {
         vkDeviceWaitIdle(m_Device);
 
+        m_FrameActive = false;
+        m_CurrentImageIndex = 0;
         m_CommandList = nullptr;
         m_NvrhiSwapchainTextures.clear();
 
@@ -506,6 +552,7 @@ namespace Life
         if (width == m_SwapchainWidth && height == m_SwapchainHeight)
             return;
 
+        LOG_CORE_INFO("Vulkan swapchain resize requested from {}x{} to {}x{}.", m_SwapchainWidth, m_SwapchainHeight, width, height);
         RecreateSwapchain();
     }
 }

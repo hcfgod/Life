@@ -2,6 +2,7 @@
 
 #include "Core/Application.h"
 #include "Core/LayerStack.h"
+#include "Graphics/GraphicsDevice.h"
 
 namespace Life
 {
@@ -23,6 +24,17 @@ namespace Life
             return;
 
         EventDispatcher dispatcher(event);
+        dispatcher.Dispatch<WindowResizeEvent>([&application](WindowResizeEvent& resizeEvent)
+        {
+            if (GraphicsDevice* graphicsDevice = application.TryGetService<GraphicsDevice>())
+                graphicsDevice->Resize(resizeEvent.GetWidth(), resizeEvent.GetHeight());
+
+            return EventDispatchResult::Unhandled;
+        });
+
+        if (event.IsPropagationStopped())
+            return;
+
         dispatcher.Dispatch<WindowCloseEvent>([&application](WindowCloseEvent& closeEvent)
         {
             if (closeEvent.IsHandled())

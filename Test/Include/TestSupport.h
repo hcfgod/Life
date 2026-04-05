@@ -75,6 +75,76 @@ namespace Life::Tests
         std::vector<Life::Scope<Life::Event>> QueuedEvents;
     };
 
+    class FakeGraphicsDevice final : public Life::GraphicsDevice
+    {
+    public:
+        bool BeginFrame() override
+        {
+            ++BeginFrameCallCount;
+            FrameActive = true;
+            return BeginFrameResult;
+        }
+
+        void Present() override
+        {
+            ++PresentCallCount;
+            FrameActive = false;
+        }
+
+        nvrhi::ITexture* GetCurrentBackBuffer() override
+        {
+            return CurrentBackBuffer;
+        }
+
+        nvrhi::IDevice* GetNvrhiDevice() override
+        {
+            return Device;
+        }
+
+        nvrhi::ICommandList* GetCurrentCommandList() override
+        {
+            return FrameActive ? CommandList : nullptr;
+        }
+
+        uint32_t GetBackBufferWidth() const override
+        {
+            return BackBufferWidth;
+        }
+
+        uint32_t GetBackBufferHeight() const override
+        {
+            return BackBufferHeight;
+        }
+
+        Life::GraphicsBackend GetBackend() const override
+        {
+            return Backend;
+        }
+
+        void Resize(uint32_t width, uint32_t height) override
+        {
+            ++ResizeCallCount;
+            LastResizeWidth = width;
+            LastResizeHeight = height;
+            BackBufferWidth = width;
+            BackBufferHeight = height;
+        }
+
+        Life::GraphicsBackend Backend = Life::GraphicsBackend::None;
+        nvrhi::IDevice* Device = nullptr;
+        nvrhi::ITexture* CurrentBackBuffer = nullptr;
+        nvrhi::ICommandList* CommandList = nullptr;
+        uint32_t BackBufferWidth = 0;
+        uint32_t BackBufferHeight = 0;
+        uint32_t LastResizeWidth = 0;
+        uint32_t LastResizeHeight = 0;
+        int BeginFrameCallCount = 0;
+        int PresentCallCount = 0;
+        int ResizeCallCount = 0;
+        bool BeginFrameResult = false;
+        bool FrameActive = false;
+    };
+
     class TestApplication final : public Life::Application
     {
     public:

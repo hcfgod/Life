@@ -26,6 +26,10 @@ namespace Life
     struct Renderer::Impl
     {
         nvrhi::FramebufferHandle CurrentFramebuffer;
+        nvrhi::ITexture* CachedBackBuffer = nullptr;
+        nvrhi::IDevice* CachedDevice = nullptr;
+        uint32_t CachedBackBufferWidth = 0;
+        uint32_t CachedBackBufferHeight = 0;
         nvrhi::Viewport PendingViewport = nvrhi::Viewport();
         nvrhi::Rect PendingScissor = nvrhi::Rect();
         bool HasPendingViewport = false;
@@ -46,7 +50,13 @@ namespace Life
         {
             m_ShaderLibrary.Clear();
             if (m_Impl)
+            {
                 m_Impl->CurrentFramebuffer = nullptr;
+                m_Impl->CachedBackBuffer = nullptr;
+                m_Impl->CachedDevice = nullptr;
+                m_Impl->CachedBackBufferWidth = 0;
+                m_Impl->CachedBackBufferHeight = 0;
+            }
             LOG_CORE_INFO("Renderer destroyed.");
         }
         catch (const std::exception& exception)
@@ -241,10 +251,25 @@ namespace Life
     {
         nvrhi::IDevice* nvrhiDevice = m_GraphicsDevice.GetNvrhiDevice();
         nvrhi::ITexture* backBuffer = m_GraphicsDevice.GetCurrentBackBuffer();
+        const uint32_t backBufferWidth = m_GraphicsDevice.GetBackBufferWidth();
+        const uint32_t backBufferHeight = m_GraphicsDevice.GetBackBufferHeight();
 
         if (!nvrhiDevice || !backBuffer)
         {
             m_Impl->CurrentFramebuffer = nullptr;
+            m_Impl->CachedBackBuffer = nullptr;
+            m_Impl->CachedDevice = nullptr;
+            m_Impl->CachedBackBufferWidth = 0;
+            m_Impl->CachedBackBufferHeight = 0;
+            return;
+        }
+
+        if (m_Impl->CurrentFramebuffer
+            && m_Impl->CachedBackBuffer == backBuffer
+            && m_Impl->CachedDevice == nvrhiDevice
+            && m_Impl->CachedBackBufferWidth == backBufferWidth
+            && m_Impl->CachedBackBufferHeight == backBufferHeight)
+        {
             return;
         }
 
@@ -252,5 +277,18 @@ namespace Life
         fbDesc.addColorAttachment(backBuffer);
 
         m_Impl->CurrentFramebuffer = nvrhiDevice->createFramebuffer(fbDesc);
+        if (!m_Impl->CurrentFramebuffer)
+        {
+            m_Impl->CachedBackBuffer = nullptr;
+            m_Impl->CachedDevice = nullptr;
+            m_Impl->CachedBackBufferWidth = 0;
+            m_Impl->CachedBackBufferHeight = 0;
+            return;
+        }
+
+        m_Impl->CachedBackBuffer = backBuffer;
+        m_Impl->CachedDevice = nvrhiDevice;
+        m_Impl->CachedBackBufferWidth = backBufferWidth;
+        m_Impl->CachedBackBufferHeight = backBufferHeight;
     }
 }
