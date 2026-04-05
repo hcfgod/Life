@@ -154,12 +154,21 @@ TEST_CASE("Premake and Vulkan dispatcher configuration keep dispatcher storage E
     const std::string runtimePremake = ReadTextFile(repositoryRoot / "Runtime" / "premake5.lua");
     const std::string testPremake = ReadTextFile(repositoryRoot / "Test" / "premake5.lua");
     const std::string rootPremake = ReadTextFile(repositoryRoot / "premake5.lua");
-    const std::string dispatcherSource = ReadTextFile(repositoryRoot / "Engine" / "Source" / "Graphics" / "Vulkan" / "VulkanDispatchLoader.cpp");
+    const std::string engineDispatcherSource = ReadTextFile(repositoryRoot / "Engine" / "Source" / "Graphics" / "Vulkan" / "VulkanDispatchLoader.cpp");
+    const std::string runtimeDispatcherSource = ReadTextFile(repositoryRoot / "Runtime" / "Source" / "Graphics" / "Vulkan" / "VulkanDispatchLoader.cpp");
+    const std::string testDispatcherSource = ReadTextFile(repositoryRoot / "Test" / "Source" / "Graphics" / "VulkanDispatchLoader.cpp");
 
-    CHECK(runtimePremake.find("VulkanDispatchLoader.cpp") == std::string::npos);
-    CHECK(testPremake.find("VulkanDispatchLoader.cpp") == std::string::npos);
+    CHECK(runtimePremake.find("VulkanDispatchLoader.cpp") != std::string::npos);
+    CHECK(testPremake.find("VulkanDispatchLoader.cpp") != std::string::npos);
     CHECK(rootPremake.find("\"nvrhi_vk\", \"nvrhi\"") != std::string::npos);
-    CHECK(dispatcherSource.find("VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE") != std::string::npos);
+    
+    CHECK(engineDispatcherSource.find("VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE") == std::string::npos);
+    
+    CHECK(runtimeDispatcherSource.find("VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE") != std::string::npos);
+    CHECK(runtimeDispatcherSource.find("#if !defined(_WIN32)") != std::string::npos);
+    
+    CHECK(testDispatcherSource.find("VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE") != std::string::npos);
+    CHECK(testDispatcherSource.find("#if !defined(_WIN32)") != std::string::npos);
 }
 
 TEST_CASE("ImGui docking vendoring is wired through repository bootstrap and premake")
