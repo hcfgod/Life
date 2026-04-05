@@ -418,6 +418,7 @@ function ConfigureNVRHILinking()
         links { "nvrhi", "nvrhi_vk", "nvrhi_d3d12" }
 
     filter { "system:windows", "configurations:Dist" }
+    
         libdirs { NVRHILibDir["Windows_Release"] }
         links { "nvrhi", "nvrhi_vk", "nvrhi_d3d12" }
 
