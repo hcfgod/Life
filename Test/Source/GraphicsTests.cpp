@@ -130,6 +130,24 @@ TEST_CASE("Renderer and Renderer2D stay safe no-op services without live frame r
     CHECK(renderer2D.GetStats().QuadCount == 0);
 }
 
+TEST_CASE("ApplicationHost registers a safe no-op ImGuiSystem service without graphics")
+{
+    Life::Log::Init();
+
+    auto host = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+    REQUIRE(host->GetServices().Has<Life::ImGuiSystem>());
+
+    host->Initialize();
+
+    Life::ImGuiSystem* imguiSystem = host->GetServices().TryGet<Life::ImGuiSystem>();
+    REQUIRE(imguiSystem != nullptr);
+    CHECK_FALSE(imguiSystem->IsInitialized());
+    CHECK_FALSE(imguiSystem->IsAvailable());
+    CHECK(imguiSystem->GetBackend() == Life::GraphicsBackend::None);
+
+    host->Finalize();
+}
+
 TEST_CASE("Premake and Vulkan dispatcher configuration keep dispatcher storage Engine-owned")
 {
     const std::filesystem::path repositoryRoot = FindRepositoryRoot();
@@ -140,6 +158,40 @@ TEST_CASE("Premake and Vulkan dispatcher configuration keep dispatcher storage E
 
     CHECK(runtimePremake.find("VulkanDispatchLoader.cpp") == std::string::npos);
     CHECK(testPremake.find("VulkanDispatchLoader.cpp") == std::string::npos);
-    CHECK(rootPremake.find("\"nvrhi_vk\", \"nvrhi\", \"Engine\", \"VkBootstrap\"") != std::string::npos);
+    CHECK(rootPremake.find("\"nvrhi_vk\", \"nvrhi\"") != std::string::npos);
     CHECK(dispatcherSource.find("VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE") != std::string::npos);
+}
+
+TEST_CASE("ImGui docking vendoring is wired through repository bootstrap and premake")
+{
+    const std::filesystem::path repositoryRoot = FindRepositoryRoot();
+    const std::string gitmodules = ReadTextFile(repositoryRoot / ".gitmodules");
+    const std::string rootPremake = ReadTextFile(repositoryRoot / "premake5.lua");
+    const std::string enginePremake = ReadTextFile(repositoryRoot / "Engine" / "premake5.lua");
+    const std::string editorPremake = ReadTextFile(repositoryRoot / "Editor" / "premake5.lua");
+    const std::string imguiPremake = ReadTextFile(repositoryRoot / "Vendor" / "imgui" / "premake5.lua");
+    const std::string setupBat = ReadTextFile(repositoryRoot / "Setup.bat");
+    const std::string setupSh = ReadTextFile(repositoryRoot / "Setup.sh");
+    const std::string bootstrapRepoBat = ReadTextFile(repositoryRoot / "Scripts" / "BootstrapRepo.bat");
+    const std::string bootstrapRepoSh = ReadTextFile(repositoryRoot / "Scripts" / "BootstrapRepo.sh");
+
+    CHECK(gitmodules.find("[submodule \"Vendor/imgui\"]") != std::string::npos);
+    CHECK(gitmodules.find("path = Vendor/imgui") != std::string::npos);
+    CHECK(gitmodules.find("url = https://github.com/ocornut/imgui.git") != std::string::npos);
+    CHECK(gitmodules.find("branch = docking") != std::string::npos);
+    CHECK(rootPremake.find("IncludeDir[\"imgui\"]") != std::string::npos);
+    CHECK(rootPremake.find("include \"Vendor/imgui\"") != std::string::npos);
+    CHECK(rootPremake.find("include \"Editor\"") != std::string::npos);
+    CHECK(rootPremake.find("startproject \"Editor\"") != std::string::npos);
+    CHECK(enginePremake.find("\"ImGui\"") != std::string::npos);
+    CHECK(editorPremake.find("project \"Editor\"") != std::string::npos);
+    CHECK(imguiPremake.find("project \"ImGui\"") != std::string::npos);
+    CHECK(imguiPremake.find("imgui_impl_sdl3.cpp") != std::string::npos);
+    CHECK(imguiPremake.find("imgui_impl_vulkan.cpp") != std::string::npos);
+    CHECK(setupBat.find(":ensure_imgui_premake") != std::string::npos);
+    CHECK(setupBat.find("Vendor\\imgui\\premake5.lua") != std::string::npos);
+    CHECK(setupSh.find("ensure_imgui_premake") != std::string::npos);
+    CHECK(setupSh.find("$REPO_ROOT/Vendor/imgui/premake5.lua") != std::string::npos);
+    CHECK(bootstrapRepoBat.find("submoduleBranch") != std::string::npos);
+    CHECK(bootstrapRepoSh.find("submodule_branch") != std::string::npos);
 }

@@ -3,6 +3,7 @@
 #include "Core/Input/InputSystem.h"
 #include "Core/Log.h"
 #include "Core/ServiceRegistry.h"
+#include "Graphics/ImGuiSystem.h"
 #include "Platform/SDL/SDLEvent.h"
 
 #include <SDL3/SDL.h>
@@ -143,6 +144,9 @@ namespace Life
                 SDL_Event sdlEvent;
                 if (!SDL_PollEvent(&sdlEvent))
                     return nullptr;
+
+                if (ImGuiSystem* imguiSystem = GetServices().TryGet<ImGuiSystem>())
+                    imguiSystem->OnSdlEvent(sdlEvent);
 
                 if (InputSystem* inputSystem = GetServices().TryGet<InputSystem>())
                     inputSystem->OnSdlEvent(sdlEvent);

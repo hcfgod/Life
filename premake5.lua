@@ -73,7 +73,7 @@ local function Trim(value)
          "Dist"
     }
 
-    startproject "Runtime"
+    startproject "Editor"
 
     filter "action:vs*"
         buildoptions { "/utf-8" }
@@ -109,6 +109,7 @@ newoption
  IncludeDir["spdlog"] = path.join(RootDir, "Vendor/spdlog/include")
  IncludeDir["json"] = path.join(RootDir, "Vendor/json/include")
  IncludeDir["doctest"] = path.join(RootDir, "Vendor/doctest")
+ IncludeDir["imgui"] = path.join(RootDir, "Vendor/imgui")
  IncludeDir["VulkanHeaders"] = path.join(RootDir, "Vendor/nvrhi/thirdparty/Vulkan-Headers/include")
  IncludeDir["DirectXHeaders"] = path.join(RootDir, "Vendor/nvrhi/thirdparty/DirectX-Headers/include/directx")
  IncludeDir["vk_bootstrap"] = path.join(RootDir, "Vendor/vk-bootstrap/src")
@@ -210,6 +211,7 @@ function UseEngineIncludeDirs(extraIncludeDirs)
         IncludeDir["glm"],
         IncludeDir["spdlog"],
         IncludeDir["json"],
+        IncludeDir["imgui"],
         IncludeDir["VulkanHeaders"],
         IncludeDir["vk_bootstrap"]
     }
@@ -421,15 +423,15 @@ function ConfigureNVRHILinking()
 
     filter { "system:linux", "configurations:Debug" }
         libdirs { NVRHILibDir["Linux_Debug"] }
-        links { "nvrhi_vk", "nvrhi", "Engine", "VkBootstrap" }
+        links { "nvrhi_vk", "nvrhi" }
 
     filter { "system:linux", "configurations:Release" }
         libdirs { NVRHILibDir["Linux_Release"] }
-        links { "nvrhi_vk", "nvrhi", "Engine", "VkBootstrap" }
+        links { "nvrhi_vk", "nvrhi" }
 
     filter { "system:linux", "configurations:Dist" }
         libdirs { NVRHILibDir["Linux_Release"] }
-        links { "nvrhi_vk", "nvrhi", "Engine", "VkBootstrap" }
+        links { "nvrhi_vk", "nvrhi" }
 
     filter { "system:macosx", "configurations:Debug" }
         libdirs { NVRHILibDir["MacOS_Debug"] }
@@ -492,9 +494,11 @@ function ConfigureApplicationEntrypoints()
 end
 
 group "Dependencies"
+include "Vendor/imgui"
 include "Vendor/vk-bootstrap"
 group ""
 
 include "Engine"
+include "Editor"
 include "Runtime"
 include "Test"

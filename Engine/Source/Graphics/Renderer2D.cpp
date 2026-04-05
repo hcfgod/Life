@@ -62,11 +62,7 @@ namespace Life
         if (!m_Impl->Initialized)
             return;
 
-        const FramebufferExtent framebufferExtent
-        {
-            m_Renderer.GetGraphicsDevice().GetBackBufferWidth(),
-            m_Renderer.GetGraphicsDevice().GetBackBufferHeight()
-        };
+        const FramebufferExtent framebufferExtent = m_Renderer.GetFramebufferExtent();
         const Viewport viewport = camera.GetPixelViewport(framebufferExtent);
 
         RenderCommand::SetViewport(m_Renderer, viewport.X, viewport.Y, viewport.Width, viewport.Height);

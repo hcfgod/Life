@@ -1,4 +1,4 @@
-project "Runtime"
+project "Editor"
     location "."
     kind "ConsoleApp"
 

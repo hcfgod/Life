@@ -10,6 +10,7 @@
 #include "Core/Window.h"
 #include "Graphics/CameraManager.h"
 #include "Graphics/GraphicsDevice.h"
+#include "Graphics/ImGuiSystem.h"
 #include "Graphics/Renderer.h"
 #include "Graphics/Renderer2D.h"
 
@@ -53,6 +54,8 @@ namespace Life
         const Renderer* GetRenderer() const { return m_Renderer.get(); }
         CameraManager* GetCameraManager() { return m_CameraManager.get(); }
         const CameraManager* GetCameraManager() const { return m_CameraManager.get(); }
+        ImGuiSystem* GetImGuiSystem() { return m_ImGuiSystem.get(); }
+        const ImGuiSystem* GetImGuiSystem() const { return m_ImGuiSystem.get(); }
         Renderer2D* GetRenderer2D() { return m_Renderer2D.get(); }
         const Renderer2D* GetRenderer2D() const { return m_Renderer2D.get(); }
 
@@ -63,6 +66,7 @@ namespace Life
         Scope<GraphicsDevice> m_GraphicsDevice;
         Scope<Renderer> m_Renderer;
         Scope<CameraManager> m_CameraManager;
+        Scope<ImGuiSystem> m_ImGuiSystem;
         Scope<Renderer2D> m_Renderer2D;
         ApplicationContext m_Context;
         ApplicationEventRouter m_EventRouter;

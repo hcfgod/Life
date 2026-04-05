@@ -23,13 +23,15 @@ register_declared_submodules() {
         submodules_found=1
         submodule_url_key=${submodule_key%.path}.url
         submodule_url=$(git config --file .gitmodules --get "$submodule_url_key" 2>/dev/null || true)
+        submodule_branch_key=${submodule_key%.path}.branch
+        submodule_branch=$(git config --file .gitmodules --get "$submodule_branch_key" 2>/dev/null || true)
 
         if [ -z "$submodule_url" ]; then
             echo "[Bootstrap] Skipping $submodule_path because no submodule URL is declared."
             continue
         fi
 
-        ensure_submodule "$submodule_path" "$submodule_url"
+        ensure_submodule "$submodule_path" "$submodule_url" "$submodule_branch"
     done <<EOF
 $(git config --file .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null || true)
 EOF
@@ -42,6 +44,7 @@ EOF
 ensure_submodule() {
     submodule_path="$1"
     submodule_url="$2"
+    submodule_branch="$3"
 
     if [ -f .gitmodules ] && git config --file .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null | grep -F " $submodule_path" >/dev/null 2>&1; then
         if git submodule status -- "$submodule_path" >/dev/null 2>&1; then
@@ -60,7 +63,11 @@ ensure_submodule() {
     fi
 
     echo "[Bootstrap] Adding $submodule_path..."
-    git submodule add --force "$submodule_url" "$submodule_path"
+    if [ -n "$submodule_branch" ]; then
+        git submodule add --force -b "$submodule_branch" "$submodule_url" "$submodule_path"
+    else
+        git submodule add --force "$submodule_url" "$submodule_path"
+    fi
 }
 
 register_declared_submodules

@@ -310,6 +310,7 @@ namespace Life
         m_Swapchain = swapchain.swapchain;
         m_SwapchainWidth = swapchain.extent.width;
         m_SwapchainHeight = swapchain.extent.height;
+        m_SwapchainImageFormat = swapchain.image_format;
 
         auto imagesResult = swapchain.get_images();
         if (!imagesResult)
@@ -397,6 +398,7 @@ namespace Life
     void VulkanGraphicsDevice::DestroySwapchain()
     {
         m_SwapchainImages.clear();
+        m_SwapchainImageFormat = VK_FORMAT_UNDEFINED;
 
         if (m_Swapchain != VK_NULL_HANDLE && m_Device != VK_NULL_HANDLE)
         {

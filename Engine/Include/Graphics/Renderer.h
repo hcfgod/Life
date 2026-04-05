@@ -20,6 +20,7 @@ namespace nvrhi
 namespace Life
 {
     class GraphicsDevice;
+    class TextureResource;
 
     struct RendererStats
     {
@@ -67,6 +68,10 @@ namespace Life
                            GraphicsBuffer& vertexBuffer,
                            GraphicsBuffer& indexBuffer,
                            const IndexedDrawParameters& drawParameters = {});
+
+        void SetRenderTarget(TextureResource* colorTarget);
+        TextureResource* GetRenderTarget() const noexcept;
+        FramebufferExtent GetFramebufferExtent() const;
 
         Scope<GraphicsPipeline> CreatePipeline(const GraphicsPipelineDescription& desc);
 

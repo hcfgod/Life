@@ -21,6 +21,7 @@
 #include "Core/Window.h"
 #include "Graphics/Camera.h"
 #include "Graphics/CameraManager.h"
+#include "Graphics/ImGuiSystem.h"
 #include "Graphics/RenderCommand.h"
 #include "Graphics/Renderer.h"
 #include "Graphics/Renderer2D.h"

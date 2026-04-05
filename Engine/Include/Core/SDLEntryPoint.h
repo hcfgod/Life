@@ -2,6 +2,7 @@
 
 #include "Core/ApplicationRunner.h"
 #include "Core/Log.h"
+#include "Graphics/ImGuiSystem.h"
 #include "Platform/SDL/SDLEvent.h"
 #include "Core/Error.h"
 
@@ -88,6 +89,8 @@ inline SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
             Life::TranslateSDLEvent(queuedEvent),
             [queuedEvent](Life::ApplicationHost& host) mutable
             {
+                if (Life::ImGuiSystem* imguiSystem = host.GetServices().TryGet<Life::ImGuiSystem>())
+                    imguiSystem->OnSdlEvent(queuedEvent);
                 host.GetInputSystem().OnSdlEvent(queuedEvent);
             });
         return state->Host->IsRunning() ? SDL_APP_CONTINUE : SDL_APP_SUCCESS;

@@ -1,7 +1,6 @@
 #include "Engine.h"
-
- #include "Runtime/GameLayer.h"
- #include "Runtime/RuntimeDiagnosticsOverlay.h"
+#include "Runtime/GameLayer.h"
+#include "Runtime/RuntimeDiagnosticsOverlay.h"
 
 class RuntimeApplication final : public Life::Application
 {

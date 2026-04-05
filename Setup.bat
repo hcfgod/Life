@@ -47,6 +47,9 @@ if errorlevel 1 goto :error
 call :ensure_vk_bootstrap_premake
 if errorlevel 1 goto :error
 
+call :ensure_imgui_premake
+if errorlevel 1 goto :error
+
 call :resolve_premake "%PREMAKE_ACTION_ARG%"
 if errorlevel 1 goto :error
 
@@ -106,6 +109,55 @@ if not exist "Vendor\vk-bootstrap\" (
 >> "Vendor\vk-bootstrap\premake5.lua" echo     ConfigureCommonProject()
 
 if not exist "Vendor\vk-bootstrap\premake5.lua" exit /b 1
+
+exit /b 0
+
+:ensure_imgui_premake
+if not exist "Vendor\imgui\" (
+    echo [Setup] Vendor\imgui was not found after submodule sync.
+    exit /b 1
+)
+
+> "Vendor\imgui\premake5.lua" echo project "ImGui"
+>> "Vendor\imgui\premake5.lua" echo     location "."
+>> "Vendor\imgui\premake5.lua" echo     kind "StaticLib"
+>> "Vendor\imgui\premake5.lua" echo.
+>> "Vendor\imgui\premake5.lua" echo     SetupProject()
+>> "Vendor\imgui\premake5.lua" echo.
+>> "Vendor\imgui\premake5.lua" echo     files
+>> "Vendor\imgui\premake5.lua" echo     {
+>> "Vendor\imgui\premake5.lua" echo         "imgui.h",
+>> "Vendor\imgui\premake5.lua" echo         "imgui_internal.h",
+>> "Vendor\imgui\premake5.lua" echo         "imconfig.h",
+>> "Vendor\imgui\premake5.lua" echo         "imstb_rectpack.h",
+>> "Vendor\imgui\premake5.lua" echo         "imstb_textedit.h",
+>> "Vendor\imgui\premake5.lua" echo         "imstb_truetype.h",
+>> "Vendor\imgui\premake5.lua" echo         "imgui.cpp",
+>> "Vendor\imgui\premake5.lua" echo         "imgui_draw.cpp",
+>> "Vendor\imgui\premake5.lua" echo         "imgui_tables.cpp",
+>> "Vendor\imgui\premake5.lua" echo         "imgui_widgets.cpp",
+>> "Vendor\imgui\premake5.lua" echo         "backends/imgui_impl_sdl3.h",
+>> "Vendor\imgui\premake5.lua" echo         "backends/imgui_impl_sdl3.cpp",
+>> "Vendor\imgui\premake5.lua" echo         "backends/imgui_impl_vulkan.h",
+>> "Vendor\imgui\premake5.lua" echo         "backends/imgui_impl_vulkan.cpp"
+>> "Vendor\imgui\premake5.lua" echo     }
+>> "Vendor\imgui\premake5.lua" echo.
+>> "Vendor\imgui\premake5.lua" echo     includedirs
+>> "Vendor\imgui\premake5.lua" echo     {
+>> "Vendor\imgui\premake5.lua" echo         ".",
+>> "Vendor\imgui\premake5.lua" echo         "backends"
+>> "Vendor\imgui\premake5.lua" echo     }
+>> "Vendor\imgui\premake5.lua" echo.
+>> "Vendor\imgui\premake5.lua" echo     externalincludedirs
+>> "Vendor\imgui\premake5.lua" echo     {
+>> "Vendor\imgui\premake5.lua" echo         IncludeDir["SDL3"],
+>> "Vendor\imgui\premake5.lua" echo         IncludeDir["VulkanHeaders"]
+>> "Vendor\imgui\premake5.lua" echo     }
+>> "Vendor\imgui\premake5.lua" echo.
+>> "Vendor\imgui\premake5.lua" echo     ConfigureSanitizers()
+>> "Vendor\imgui\premake5.lua" echo     ConfigureCommonProject()
+
+if not exist "Vendor\imgui\premake5.lua" exit /b 1
 
 exit /b 0
 

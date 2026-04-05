@@ -2,6 +2,7 @@
 #include "Graphics/Renderer.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/GraphicsTypesInternal.h"
+#include "Graphics/TextureResource.h"
 #include "Core/Log.h"
 
 #include <nvrhi/nvrhi.h>
@@ -26,10 +27,11 @@ namespace Life
     struct Renderer::Impl
     {
         nvrhi::FramebufferHandle CurrentFramebuffer;
-        nvrhi::ITexture* CachedBackBuffer = nullptr;
+        TextureResource* ActiveColorTarget = nullptr;
+        nvrhi::ITexture* CachedColorTarget = nullptr;
         nvrhi::IDevice* CachedDevice = nullptr;
-        uint32_t CachedBackBufferWidth = 0;
-        uint32_t CachedBackBufferHeight = 0;
+        uint32_t CachedFramebufferWidth = 0;
+        uint32_t CachedFramebufferHeight = 0;
         nvrhi::Viewport PendingViewport = nvrhi::Viewport();
         nvrhi::Rect PendingScissor = nvrhi::Rect();
         bool HasPendingViewport = false;
@@ -52,10 +54,11 @@ namespace Life
             if (m_Impl)
             {
                 m_Impl->CurrentFramebuffer = nullptr;
-                m_Impl->CachedBackBuffer = nullptr;
+                m_Impl->ActiveColorTarget = nullptr;
+                m_Impl->CachedColorTarget = nullptr;
                 m_Impl->CachedDevice = nullptr;
-                m_Impl->CachedBackBufferWidth = 0;
-                m_Impl->CachedBackBufferHeight = 0;
+                m_Impl->CachedFramebufferWidth = 0;
+                m_Impl->CachedFramebufferHeight = 0;
             }
             LOG_CORE_INFO("Renderer destroyed.");
         }
@@ -94,14 +97,16 @@ namespace Life
 
     void Renderer::Clear(float r, float g, float b, float a)
     {
-        nvrhi::ITexture* backBuffer = m_GraphicsDevice.GetCurrentBackBuffer();
+        nvrhi::ITexture* colorTarget = m_Impl->ActiveColorTarget != nullptr
+            ? m_Impl->ActiveColorTarget->GetNativeHandle()
+            : m_GraphicsDevice.GetCurrentBackBuffer();
         nvrhi::ICommandList* commandList = m_GraphicsDevice.GetCurrentCommandList();
 
-        if (!backBuffer || !commandList)
+        if (!colorTarget || !commandList)
             return;
 
         nvrhi::Color clearColor(r, g, b, a);
-        commandList->clearTextureFloat(backBuffer, nvrhi::AllSubresources, clearColor);
+        commandList->clearTextureFloat(colorTarget, nvrhi::AllSubresources, clearColor);
     }
 
     void Renderer::SetViewport(float x, float y, float width, float height)
@@ -156,9 +161,10 @@ namespace Life
         }
         else
         {
+            const FramebufferExtent framebufferExtent = GetFramebufferExtent();
             state.viewport.addViewportAndScissorRect(nvrhi::Viewport(
-                static_cast<float>(m_GraphicsDevice.GetBackBufferWidth()),
-                static_cast<float>(m_GraphicsDevice.GetBackBufferHeight())));
+                static_cast<float>(framebufferExtent.Width),
+                static_cast<float>(framebufferExtent.Height)));
         }
 
         commandList->setGraphicsState(state);
@@ -214,9 +220,10 @@ namespace Life
         }
         else
         {
+            const FramebufferExtent framebufferExtent = GetFramebufferExtent();
             state.viewport.addViewportAndScissorRect(nvrhi::Viewport(
-                static_cast<float>(m_GraphicsDevice.GetBackBufferWidth()),
-                static_cast<float>(m_GraphicsDevice.GetBackBufferHeight())));
+                static_cast<float>(framebufferExtent.Width),
+                static_cast<float>(framebufferExtent.Height)));
         }
 
         commandList->setGraphicsState(state);
@@ -228,6 +235,42 @@ namespace Life
 
         m_Stats.DrawCalls++;
         m_Stats.IndicesSubmitted += drawParameters.IndexCount;
+    }
+
+    void Renderer::SetRenderTarget(TextureResource* colorTarget)
+    {
+        if (m_Impl->ActiveColorTarget == colorTarget)
+            return;
+
+        m_Impl->ActiveColorTarget = colorTarget;
+        m_Impl->CurrentFramebuffer = nullptr;
+        m_Impl->CachedColorTarget = nullptr;
+        m_Impl->CachedDevice = nullptr;
+        m_Impl->CachedFramebufferWidth = 0;
+        m_Impl->CachedFramebufferHeight = 0;
+    }
+
+    TextureResource* Renderer::GetRenderTarget() const noexcept
+    {
+        return m_Impl->ActiveColorTarget;
+    }
+
+    FramebufferExtent Renderer::GetFramebufferExtent() const
+    {
+        if (m_Impl->ActiveColorTarget != nullptr)
+        {
+            return FramebufferExtent
+            {
+                m_Impl->ActiveColorTarget->GetWidth(),
+                m_Impl->ActiveColorTarget->GetHeight()
+            };
+        }
+
+        return FramebufferExtent
+        {
+            m_GraphicsDevice.GetBackBufferWidth(),
+            m_GraphicsDevice.GetBackBufferHeight()
+        };
     }
 
     Scope<GraphicsPipeline> Renderer::CreatePipeline(const GraphicsPipelineDescription& desc)
@@ -250,45 +293,46 @@ namespace Life
     void Renderer::EnsureFramebuffer()
     {
         nvrhi::IDevice* nvrhiDevice = m_GraphicsDevice.GetNvrhiDevice();
-        nvrhi::ITexture* backBuffer = m_GraphicsDevice.GetCurrentBackBuffer();
-        const uint32_t backBufferWidth = m_GraphicsDevice.GetBackBufferWidth();
-        const uint32_t backBufferHeight = m_GraphicsDevice.GetBackBufferHeight();
+        nvrhi::ITexture* colorTarget = m_Impl->ActiveColorTarget != nullptr
+            ? m_Impl->ActiveColorTarget->GetNativeHandle()
+            : m_GraphicsDevice.GetCurrentBackBuffer();
+        const FramebufferExtent framebufferExtent = GetFramebufferExtent();
 
-        if (!nvrhiDevice || !backBuffer)
+        if (!nvrhiDevice || !colorTarget)
         {
             m_Impl->CurrentFramebuffer = nullptr;
-            m_Impl->CachedBackBuffer = nullptr;
+            m_Impl->CachedColorTarget = nullptr;
             m_Impl->CachedDevice = nullptr;
-            m_Impl->CachedBackBufferWidth = 0;
-            m_Impl->CachedBackBufferHeight = 0;
+            m_Impl->CachedFramebufferWidth = 0;
+            m_Impl->CachedFramebufferHeight = 0;
             return;
         }
 
         if (m_Impl->CurrentFramebuffer
-            && m_Impl->CachedBackBuffer == backBuffer
+            && m_Impl->CachedColorTarget == colorTarget
             && m_Impl->CachedDevice == nvrhiDevice
-            && m_Impl->CachedBackBufferWidth == backBufferWidth
-            && m_Impl->CachedBackBufferHeight == backBufferHeight)
+            && m_Impl->CachedFramebufferWidth == framebufferExtent.Width
+            && m_Impl->CachedFramebufferHeight == framebufferExtent.Height)
         {
             return;
         }
 
         nvrhi::FramebufferDesc fbDesc;
-        fbDesc.addColorAttachment(backBuffer);
+        fbDesc.addColorAttachment(colorTarget);
 
         m_Impl->CurrentFramebuffer = nvrhiDevice->createFramebuffer(fbDesc);
         if (!m_Impl->CurrentFramebuffer)
         {
-            m_Impl->CachedBackBuffer = nullptr;
+            m_Impl->CachedColorTarget = nullptr;
             m_Impl->CachedDevice = nullptr;
-            m_Impl->CachedBackBufferWidth = 0;
-            m_Impl->CachedBackBufferHeight = 0;
+            m_Impl->CachedFramebufferWidth = 0;
+            m_Impl->CachedFramebufferHeight = 0;
             return;
         }
 
-        m_Impl->CachedBackBuffer = backBuffer;
+        m_Impl->CachedColorTarget = colorTarget;
         m_Impl->CachedDevice = nvrhiDevice;
-        m_Impl->CachedBackBufferWidth = backBufferWidth;
-        m_Impl->CachedBackBufferHeight = backBufferHeight;
+        m_Impl->CachedFramebufferWidth = framebufferExtent.Width;
+        m_Impl->CachedFramebufferHeight = framebufferExtent.Height;
     }
 }

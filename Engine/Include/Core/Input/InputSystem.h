@@ -34,6 +34,10 @@ namespace Life
         void UpdateActions();
         void SyncConnectedGamepads();
         void EndFrame();
+        void SetKeyboardInputBlocked(bool blocked);
+        void SetMouseInputBlocked(bool blocked);
+        bool IsKeyboardInputBlocked() const noexcept { return m_KeyboardInputBlocked; }
+        bool IsMouseInputBlocked() const noexcept { return m_MouseInputBlocked; }
 
         void SetProjectActionAsset(Ref<InputActionAsset> asset);
         const Ref<InputActionAsset>& GetProjectActionAsset() const { return m_ProjectActionAsset; }
@@ -55,8 +59,8 @@ namespace Life
         bool WasMouseButtonReleasedThisFrame(MouseButtonCode button) const;
 
         const InputVector2& GetMousePosition() const { return m_MousePosition; }
-        const InputVector2& GetMouseDelta() const { return m_MouseDelta; }
-        const InputVector2& GetMouseWheelDelta() const { return m_MouseWheelDelta; }
+        const InputVector2& GetMouseDelta() const { return m_MouseInputBlocked ? m_ZeroVector : m_MouseDelta; }
+        const InputVector2& GetMouseWheelDelta() const { return m_MouseInputBlocked ? m_ZeroVector : m_MouseWheelDelta; }
         void NotifyMouseWarped();
 
         int GetGamepadCount() const;
@@ -118,10 +122,13 @@ namespace Life
         std::array<uint8_t, MaxMouseButtons> m_MousePressedThisFrame{};
         std::array<uint8_t, MaxMouseButtons> m_MouseReleasedThisFrame{};
 
+        InputVector2 m_ZeroVector{};
         InputVector2 m_MousePosition{};
         InputVector2 m_MouseDelta{};
         InputVector2 m_MouseWheelDelta{};
         uint8_t m_PendingSyntheticMouseMotionEvents = 0;
+        bool m_KeyboardInputBlocked = false;
+        bool m_MouseInputBlocked = false;
 
         std::array<PerGamepadState, MaxGamepads> m_Gamepads{};
 

@@ -2,6 +2,7 @@
 
 #include "Core/Application.h"
 #include "Core/LayerStack.h"
+#include "Graphics/ImGuiSystem.h"
 #include "Graphics/GraphicsDevice.h"
 
 namespace Life
@@ -11,6 +12,13 @@ namespace Life
         application.OnEvent(event);
         if (event.IsPropagationStopped())
             return;
+
+        if (ImGuiSystem* imguiSystem = application.TryGetService<ImGuiSystem>())
+        {
+            imguiSystem->CaptureEvent(event);
+            if (event.IsPropagationStopped())
+                return;
+        }
 
         if (LayerStack* layerStack = application.TryGetService<LayerStack>())
         {

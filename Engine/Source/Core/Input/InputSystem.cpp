@@ -90,6 +90,36 @@ namespace Life
             ++m_PendingSyntheticMouseMotionEvents;
     }
 
+    void InputSystem::SetKeyboardInputBlocked(bool blocked)
+    {
+        if (m_KeyboardInputBlocked == blocked)
+            return;
+
+        m_KeyboardInputBlocked = blocked;
+        if (blocked)
+        {
+            m_KeyDown.reset();
+            m_KeyPressedThisFrame.reset();
+            m_KeyReleasedThisFrame.reset();
+        }
+    }
+
+    void InputSystem::SetMouseInputBlocked(bool blocked)
+    {
+        if (m_MouseInputBlocked == blocked)
+            return;
+
+        m_MouseInputBlocked = blocked;
+        if (blocked)
+        {
+            m_MouseDown.fill(0);
+            m_MousePressedThisFrame.fill(0);
+            m_MouseReleasedThisFrame.fill(0);
+            m_MouseDelta = {};
+            m_MouseWheelDelta = {};
+        }
+    }
+
     void InputSystem::OnSdlEvent(const SDL_Event& event)
     {
         if (m_RebindingSession && m_RebindingSession->IsActive() && m_RebindingSession->TryConsumeEvent(event))
@@ -99,19 +129,30 @@ namespace Life
         {
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP:
+            if (m_KeyboardInputBlocked)
+                break;
             OnKey(ToKeyCode(event.key.scancode), event.key.down, event.key.repeat);
             break;
 
         case SDL_EVENT_MOUSE_MOTION:
+            if (m_MouseInputBlocked)
+            {
+                m_MousePosition = { event.motion.x, event.motion.y };
+                break;
+            }
             OnMouseMotion(event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel);
             break;
 
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
+            if (m_MouseInputBlocked)
+                break;
             OnMouseButton(ToMouseButtonCode(event.button.button), event.button.down);
             break;
 
         case SDL_EVENT_MOUSE_WHEEL:
+            if (m_MouseInputBlocked)
+                break;
             OnMouseWheel(event.wheel.x, event.wheel.y);
             break;
 
@@ -186,6 +227,9 @@ namespace Life
 
     bool InputSystem::IsKeyDown(KeyCode keyCode) const
     {
+        if (m_KeyboardInputBlocked)
+            return false;
+
         const uint16_t keyValue = keyCode.GetValue();
         if (keyValue == 0 || keyValue >= InputCodeLimits::KeyCount)
             return false;
@@ -194,6 +238,9 @@ namespace Life
 
     bool InputSystem::WasKeyPressedThisFrame(KeyCode keyCode) const
     {
+        if (m_KeyboardInputBlocked)
+            return false;
+
         const uint16_t keyValue = keyCode.GetValue();
         if (keyValue == 0 || keyValue >= InputCodeLimits::KeyCount)
             return false;
@@ -202,6 +249,9 @@ namespace Life
 
     bool InputSystem::WasKeyReleasedThisFrame(KeyCode keyCode) const
     {
+        if (m_KeyboardInputBlocked)
+            return false;
+
         const uint16_t keyValue = keyCode.GetValue();
         if (keyValue == 0 || keyValue >= InputCodeLimits::KeyCount)
             return false;
@@ -210,6 +260,9 @@ namespace Life
 
     bool InputSystem::IsMouseButtonDown(MouseButtonCode button) const
     {
+        if (m_MouseInputBlocked)
+            return false;
+
         const uint8_t buttonValue = button.GetValue();
         if (buttonValue == 0 || buttonValue >= MaxMouseButtons)
             return false;
@@ -218,6 +271,9 @@ namespace Life
 
     bool InputSystem::WasMouseButtonPressedThisFrame(MouseButtonCode button) const
     {
+        if (m_MouseInputBlocked)
+            return false;
+
         const uint8_t buttonValue = button.GetValue();
         if (buttonValue == 0 || buttonValue >= MaxMouseButtons)
             return false;
@@ -226,6 +282,9 @@ namespace Life
 
     bool InputSystem::WasMouseButtonReleasedThisFrame(MouseButtonCode button) const
     {
+        if (m_MouseInputBlocked)
+            return false;
+
         const uint8_t buttonValue = button.GetValue();
         if (buttonValue == 0 || buttonValue >= MaxMouseButtons)
             return false;

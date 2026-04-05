@@ -28,6 +28,16 @@ namespace Life
         uint32_t GetBackBufferHeight() const override { return m_SwapchainHeight; }
         GraphicsBackend GetBackend() const override { return GraphicsBackend::Vulkan; }
 
+        VkInstance GetInstance() const noexcept { return m_Instance; }
+        VkPhysicalDevice GetPhysicalDevice() const noexcept { return m_PhysicalDevice; }
+        VkDevice GetDevice() const noexcept { return m_Device; }
+        VkQueue GetGraphicsQueue() const noexcept { return m_GraphicsQueue; }
+        uint32_t GetGraphicsQueueFamilyIndex() const noexcept { return m_GraphicsQueueFamily; }
+        VkFormat GetSwapchainImageFormat() const noexcept { return m_SwapchainImageFormat; }
+        uint32_t GetSwapchainImageCount() const noexcept { return static_cast<uint32_t>(m_SwapchainImages.size()); }
+        uint32_t GetFramesInFlight() const noexcept { return MaxFramesInFlight; }
+        uint32_t GetApiVersion() const noexcept { return m_VkbInstance.api_version; }
+
         void Resize(uint32_t width, uint32_t height) override;
 
     private:
@@ -57,6 +67,7 @@ namespace Life
 
         uint32_t m_SwapchainWidth = 0;
         uint32_t m_SwapchainHeight = 0;
+        VkFormat m_SwapchainImageFormat = VK_FORMAT_UNDEFINED;
         uint32_t m_CurrentImageIndex = 0;
         bool m_VSync = true;
 

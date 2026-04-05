@@ -241,6 +241,56 @@ EOF
 
 ensure_vk_bootstrap_premake
 
+ensure_imgui_premake() {
+    if [ ! -d "$REPO_ROOT/Vendor/imgui" ]; then
+        echo "[Setup] Vendor/imgui was not found after submodule sync."
+        exit 1
+    fi
+
+    cat > "$REPO_ROOT/Vendor/imgui/premake5.lua" <<'EOF'
+project "ImGui"
+    location "."
+    kind "StaticLib"
+
+    SetupProject()
+
+    files
+    {
+        "imgui.h",
+        "imgui_internal.h",
+        "imconfig.h",
+        "imstb_rectpack.h",
+        "imstb_textedit.h",
+        "imstb_truetype.h",
+        "imgui.cpp",
+        "imgui_draw.cpp",
+        "imgui_tables.cpp",
+        "imgui_widgets.cpp",
+        "backends/imgui_impl_sdl3.h",
+        "backends/imgui_impl_sdl3.cpp",
+        "backends/imgui_impl_vulkan.h",
+        "backends/imgui_impl_vulkan.cpp"
+    }
+
+    includedirs
+    {
+        ".",
+        "backends"
+    }
+
+    externalincludedirs
+    {
+        IncludeDir["SDL3"],
+        IncludeDir["VulkanHeaders"]
+    }
+
+    ConfigureSanitizers()
+    ConfigureCommonProject()
+EOF
+}
+
+ensure_imgui_premake
+
 resolve_cmake() {
     if command -v cmake >/dev/null 2>&1; then
         CMAKE_CMD="cmake"

@@ -215,6 +215,8 @@ namespace Life
             RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, m_LayerStack, m_InputSystem, GetJobSystem(), Async::GetAsyncIO(), *m_Runtime, *m_Window);
             m_CameraManager = CreateScope<CameraManager>();
             m_Services.Register<CameraManager>(*m_CameraManager);
+            m_ImGuiSystem = CreateScope<ImGuiSystem>(*m_Window, m_GraphicsDevice.get());
+            m_Services.Register<ImGuiSystem>(*m_ImGuiSystem);
             if (m_GraphicsDevice)
             {
                 m_Services.Register<GraphicsDevice>(*m_GraphicsDevice);
@@ -303,6 +305,7 @@ namespace Life
             m_RegisteredAsActiveHost = false;
         }
 
+        m_ImGuiSystem.reset();
         m_Renderer2D.reset();
         m_CameraManager.reset();
         m_Renderer.reset();
@@ -320,6 +323,9 @@ namespace Life
         m_Running = true;
         try
         {
+            if (m_ImGuiSystem)
+                m_ImGuiSystem->Initialize();
+
             m_Application->OnHostInitialize();
             m_Initialized = true;
         }
@@ -327,6 +333,8 @@ namespace Life
         {
             m_Running = false;
             m_Initialized = false;
+            if (m_ImGuiSystem)
+                m_ImGuiSystem->Shutdown();
             try
             {
                 m_LayerStack.Clear();
@@ -363,6 +371,8 @@ namespace Life
             InputSystem& Input;
         } inputFrameFinalizer(m_InputSystem);
 
+        m_InputSystem.SetKeyboardInputBlocked(m_ImGuiSystem && m_ImGuiSystem->WantsKeyboardCapture());
+        m_InputSystem.SetMouseInputBlocked(m_ImGuiSystem && m_ImGuiSystem->WantsMouseCapture());
         m_InputSystem.UpdateActions();
 
         bool frameStarted = false;
@@ -372,12 +382,21 @@ namespace Life
             catch (const std::exception& e) { LOG_CORE_ERROR("BeginFrame failed: {}", e.what()); }
         }
 
+        if (frameStarted && m_ImGuiSystem)
+            m_ImGuiSystem->BeginFrame();
+
         m_Application->OnHostRunFrame(timestep);
         if (m_Running)
             m_LayerStack.OnUpdate(timestep);
 
         if (frameStarted && m_Running)
             m_LayerStack.OnRender();
+
+        m_InputSystem.SetKeyboardInputBlocked(m_ImGuiSystem && m_ImGuiSystem->WantsKeyboardCapture());
+        m_InputSystem.SetMouseInputBlocked(m_ImGuiSystem && m_ImGuiSystem->WantsMouseCapture());
+
+        if (frameStarted && m_Running && m_ImGuiSystem)
+            m_ImGuiSystem->Render();
 
         if (frameStarted && m_GraphicsDevice)
         {
@@ -416,6 +435,17 @@ namespace Life
         try
         {
             m_LayerStack.Clear();
+        }
+        catch (...)
+        {
+            if (finalizationFailure == nullptr)
+                finalizationFailure = std::current_exception();
+        }
+
+        try
+        {
+            if (m_ImGuiSystem)
+                m_ImGuiSystem->Shutdown();
         }
         catch (...)
         {

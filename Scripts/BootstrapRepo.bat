@@ -34,12 +34,15 @@ for /f "usebackq tokens=1,*" %%A in (`git config --file .gitmodules --get-regexp
     set "submoduleKey=%%~A"
     set "submodulePath=%%~B"
     set "submoduleUrl="
+    set "submoduleBranch="
     call set "submoduleUrlKey=%%submoduleKey:.path=.url%%"
+    call set "submoduleBranchKey=%%submoduleKey:.path=.branch%%"
     for /f "usebackq delims=" %%U in (`git config --file .gitmodules --get "!submoduleUrlKey!" 2^>nul`) do set "submoduleUrl=%%~U"
+    for /f "usebackq delims=" %%B in (`git config --file .gitmodules --get "!submoduleBranchKey!" 2^>nul`) do set "submoduleBranch=%%~B"
     if not defined submoduleUrl (
         echo [Bootstrap] Skipping !submodulePath! because no submodule URL is declared.
     ) else (
-        call :ensure_submodule "!submodulePath!" "!submoduleUrl!"
+        call :ensure_submodule "!submodulePath!" "!submoduleUrl!" "!submoduleBranch!"
         if errorlevel 1 exit /b 1
     )
 )
@@ -53,6 +56,7 @@ exit /b 0
 :ensure_submodule
 set "submodulePath=%~1"
 set "submoduleUrl=%~2"
+set "submoduleBranch=%~3"
 
 if exist .gitmodules (
     findstr /i /c:"path = %submodulePath%" .gitmodules >nul
@@ -75,8 +79,11 @@ if exist "%submodulePath%" (
     )
 )
 
+set "submoduleAddArgs="
+if defined submoduleBranch set "submoduleAddArgs=-b %submoduleBranch%"
+
 echo [Bootstrap] Adding %submodulePath%...
-git submodule add --force "%submoduleUrl%" "%submodulePath%"
+git submodule add --force %submoduleAddArgs% "%submoduleUrl%" "%submodulePath%"
 if errorlevel 1 exit /b 1
 
 exit /b 0
