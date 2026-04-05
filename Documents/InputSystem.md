@@ -320,9 +320,16 @@ The input system is stateful and frame-oriented.
 The event system is message-oriented and routed through `ApplicationEventRouter`, which currently dispatches events in this order:
 
 1. `Application::OnEvent(...)`
-2. `LayerStack`
-3. `EventBus`
-4. built-in engine handlers
+2. `ImGuiSystem::CaptureEvent(...)` when the service is present and available
+3. `LayerStack`
+4. `EventBus`
+5. built-in engine handlers
+
+That distinction matters in practice:
+
+- raw SDL events are forwarded into `InputSystem` before engine-event translation
+- engine events later flow through application, tooling capture, layers, the event bus, and built-in handlers
+- `ImGuiSystem` can stop propagation for keyboard and mouse events in the engine-event route without replacing the stateful input model
 
 Use the input system when you need stable polling semantics, named gameplay actions, or device state.
 

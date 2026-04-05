@@ -23,6 +23,7 @@ project "Editor"
     links
     {
         "Engine",
+        "ImGui",
         "VkBootstrap"
     }
 

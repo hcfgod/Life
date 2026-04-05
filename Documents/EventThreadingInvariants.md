@@ -71,11 +71,12 @@ This distinction is important. An event may be marked handled without stopping l
 `ApplicationEventRouter::Route(...)` currently processes an event in this order:
 
 1. `application.OnEvent(event)`
-2. `LayerStack::OnEvent(event)` when the service is present
-3. `EventBus` subscriber dispatch
-4. built-in engine handlers such as `WindowCloseEvent` shutdown
+2. `ImGuiSystem::CaptureEvent(event)` when the service is present and available
+3. `LayerStack::OnEvent(event)` when the service is present
+4. `EventBus` subscriber dispatch
+5. built-in engine handlers such as graphics-device resize forwarding and `WindowCloseEvent` shutdown
 
-If propagation is stopped after application callbacks, layer dispatch, or event-bus subscribers, routing returns immediately and built-in handlers do not run.
+If propagation is stopped after application callbacks, ImGui capture, layer dispatch, or event-bus subscribers, routing returns immediately and built-in handlers do not run.
 
 The built-in window-close handler is therefore a true fallback. It only requests shutdown if earlier stages neither stopped propagation nor already marked the close event handled.
 
@@ -84,8 +85,9 @@ This ordering is intentional.
 Practical implications:
 
 - application overrides get first chance to inspect or mark an event handled
-- layers observe the event after application-level inspection and before the event bus
-- subscribed systems observe the event after application and layer inspection
+- tooling capture can stop keyboard and mouse events before they mutate gameplay-facing state further down the route
+- layers observe the event after application-level inspection and after tooling capture, but before the event bus
+- subscribed systems observe the event after application, tooling, and layer inspection
 - built-in shutdown remains available as a fallback rather than pre-empting application logic
 
 ## EventBus Semantics

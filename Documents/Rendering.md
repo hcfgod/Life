@@ -17,6 +17,7 @@ During host construction, the engine:
 - registers `GraphicsDevice` only when device creation succeeds
 - creates and registers `Renderer` and `Renderer2D` only when rendering services can be constructed successfully
 - always creates and registers `CameraManager` as a host-owned service
+- always creates and registers `ImGuiSystem` as a host-owned tooling service, even when graphics are unavailable
 - keeps the rest of the runtime running even if graphics initialization fails
 
 This means rendering is an optional capability at host startup rather than a hard requirement for the entire application process.
@@ -109,13 +110,15 @@ The host owns the frame envelope.
 
 1. update input actions
 2. call `GraphicsDevice::BeginFrame()` when a device exists
-3. invoke `Application::OnUpdate(...)` through `OnHostRunFrame(...)`
-4. run `LayerStack::OnUpdate(...)` if the application is still running
-5. run `LayerStack::OnRender()` when a frame was successfully started and the application is still running
-6. call `GraphicsDevice::Present()` when a frame was successfully started
-7. end the input frame before returning
+3. call `ImGuiSystem::BeginFrame()` when a graphics frame started and ImGui is available
+4. invoke `Application::OnUpdate(...)` through `OnHostRunFrame(...)`
+5. run `LayerStack::OnUpdate(...)` if the application is still running
+6. run `LayerStack::OnRender()` when a frame was successfully started and the application is still running
+7. call `ImGuiSystem::Render()` when a graphics frame started, the application is still running, and ImGui is available
+8. call `GraphicsDevice::Present()` when a frame was successfully started
+9. end the input frame before returning
 
-Application and layer code render inside that host-owned frame window. They do not start or end frames themselves.
+Application, layer, and tooling code render inside that host-owned frame window. They do not start or end frames themselves.
 
 ## Validity of Per-Frame Objects
 
@@ -159,7 +162,7 @@ The current `Renderer2D` shaders live in:
 - `Assets/Shaders/Renderer2D.vert`
 - `Assets/Shaders/Renderer2D.frag`
 
-On Windows builds, `Runtime/premake5.lua` adds post-build commands that compile those GLSL sources into SPIR-V output under the target runtime directory:
+On Windows builds, both `Runtime/premake5.lua` and `Editor/premake5.lua` add post-build commands that compile those GLSL sources into SPIR-V output under the target application directory:
 
 - `<target>/Assets/Shaders/Renderer2D.vert.spv`
 - `<target>/Assets/Shaders/Renderer2D.frag.spv`
@@ -167,6 +170,20 @@ On Windows builds, `Runtime/premake5.lua` adds post-build commands that compile 
 At runtime, `Renderer2D` loads those compiled shader binaries relative to the executable directory from `Assets/Shaders`.
 
 If the vertex buffer or shader loads fail, `Renderer2D` logs initialization failure and remains unable to render until the process is restarted with a valid runtime asset layout.
+
+## ImGui and Tooling Integration
+
+`ImGuiSystem` is host-owned and intentionally optional in the same way the rest of the rendering stack is optional.
+
+Current behavior:
+
+- the host constructs and registers `ImGuiSystem` even when no graphics device exists
+- initialization succeeds only when Dear ImGui is present in the build, the window exposes an SDL handle, and the active graphics backend has renderer support
+- SDL events are forwarded into `ImGuiSystem::OnSdlEvent(...)` before engine-event translation
+- engine events later pass through `ImGuiSystem::CaptureEvent(...)`, which can stop propagation for keyboard and mouse input when the UI wants capture
+- editor tooling can render offscreen into a `TextureResource`, transition it for shader read access, and display it through `ImGuiSystem::GetTextureHandle(...)`
+
+At the moment, the active renderer backend implementation is Vulkan. D3D12 remains a reserved seam rather than a complete tooling path here.
 
 ## Failure Behavior
 

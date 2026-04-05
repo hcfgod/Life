@@ -23,6 +23,7 @@ project "Runtime"
     links
     {
         "Engine",
+        "ImGui",
         "VkBootstrap"
     }
 

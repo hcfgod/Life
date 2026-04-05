@@ -23,6 +23,7 @@ project "Test"
     links
     {
         "Engine",
+        "ImGui",
         "VkBootstrap"
     }
 

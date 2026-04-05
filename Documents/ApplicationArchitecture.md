@@ -54,7 +54,7 @@ It owns:
 - the authoritative `ServiceRegistry`
 - the host-owned `LayerStack` and `InputSystem`
 - the host-owned `CameraManager`
-- optional graphics services including `GraphicsDevice`, `Renderer`, and `Renderer2D`
+- optional graphics and tooling services including `GraphicsDevice`, `Renderer`, `Renderer2D`, and `ImGuiSystem`
 
 The host also becomes the point where application specification values become operational. In practice that means logging is configured here, crash diagnostics are re-bound to application-specific settings here, and platform detection is initialized here before the window is created.
 
@@ -209,10 +209,10 @@ At a high level, the normal lifecycle is:
 6. the platform window is created
 7. graphics-device creation is attempted and may fail without aborting the rest of the runtime
 8. shared engine systems such as the job system and async I/O are acquired
-9. core services are registered, then host-owned camera and optional rendering services are registered
+9. core services are registered, then host-owned camera, tooling, and optional rendering services are registered
 10. the context is bound to the host-owned state and service registry
 11. `ApplicationHost::Initialize()` enters the running phase, invokes application initialization, and marks the host initialized only after initialization completes successfully
-12. each runner iteration dispatches queued events, polls runtime events if needed, updates input actions, and runs one host-owned frame update
+12. each runner iteration dispatches queued events, polls runtime events if needed, updates input actions, begins graphics and ImGui frames when available, and runs one host-owned frame update
 13. shutdown clears the running state
 14. finalization invokes host/application teardown, clears layers, resets optional rendering services, and releases shared systems
 
@@ -225,11 +225,12 @@ The runner and runtime collect events, but `ApplicationHost::HandleEvent(...)` d
 Within the application-facing pipeline, the current ordering is:
 
 1. `Application::OnEvent(...)`
-2. `LayerStack::OnEvent(...)` when the service is present
-3. event-bus subscribers
-4. built-in engine handlers such as window-close shutdown
+2. `ImGuiSystem::CaptureEvent(...)` when the service is present and available
+3. `LayerStack::OnEvent(...)` when the service is present
+4. event-bus subscribers
+5. built-in engine handlers such as resize forwarding and window-close shutdown
 
-This ordering gives application code first inspection rights while still preserving built-in behavior when earlier stages neither stop propagation nor mark the event handled.
+This ordering gives application code first inspection rights while still preserving tooling capture, layer-level reactions, and built-in behavior when earlier stages neither stop propagation nor mark the event handled.
 
 ## External Event Pump Mode
 
