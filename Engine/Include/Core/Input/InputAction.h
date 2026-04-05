@@ -231,12 +231,17 @@ namespace Life
         std::unordered_map<std::string, InputActionMap*> m_MapByName;
     };
 
+    struct InputActionAssetLoadOptions
+    {
+        std::string DebugName;
+    };
+
     class InputActionAssetSerializer final
     {
     public:
         static Result<Ref<InputActionAsset>> LoadFromFile(const std::string& path);
         static Result<void> LoadInto(InputActionAsset& outAsset, const std::string& path);
-        static Result<void> LoadIntoFromString(InputActionAsset& outAsset, const std::string& jsonText, const std::string& debugName);
+        static Result<void> LoadIntoFromString(InputActionAsset& outAsset, const std::string& jsonText, const InputActionAssetLoadOptions& options = {});
         static Result<void> SaveToFile(const InputActionAsset& asset, const std::string& path);
     };
 

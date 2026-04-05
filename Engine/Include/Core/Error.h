@@ -221,9 +221,33 @@ namespace Life
         Error(ErrorCode code, std::string message, 
               const std::source_location& location,
               ErrorSeverity severity = ErrorSeverity::Error);
-        Error(const Error&) = default;
+        Error(const Error& other)
+            : std::exception(other)
+            , m_Code(other.m_Code)
+            , m_Message(other.m_Message)
+            , m_Location(other.m_Location)
+            , m_Severity(other.m_Severity)
+            , m_Context(other.m_Context)
+            , m_SystemErrorCode(other.m_SystemErrorCode)
+            , m_WhatBuffer(other.m_WhatBuffer)
+        {
+        }
         Error(Error&&) noexcept = default;
-        Error& operator=(const Error&) = default;
+        Error& operator=(const Error& other)
+        {
+            if (this == &other)
+                return *this;
+
+            std::exception::operator=(other);
+            m_Code = other.m_Code;
+            m_Message = other.m_Message;
+            m_Location = other.m_Location;
+            m_Severity = other.m_Severity;
+            m_Context = other.m_Context;
+            m_SystemErrorCode = other.m_SystemErrorCode;
+            m_WhatBuffer = other.m_WhatBuffer;
+            return *this;
+        }
         Error& operator=(Error&&) noexcept = default;
         ~Error() override = default;
         

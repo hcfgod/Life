@@ -101,7 +101,7 @@ namespace Life
 
         void CloseAllGamepads() noexcept;
         void OnKey(KeyCode keyCode, bool down, bool repeat);
-        void OnMouseMotion(float x, float y, float deltaX, float deltaY);
+        void OnMouseMotion(const InputVector2& position, const InputVector2& delta);
         void OnMouseButton(MouseButtonCode button, bool down);
         void OnMouseWheel(float offsetX, float offsetY);
         void OnGamepadAdded(GamepadId which);

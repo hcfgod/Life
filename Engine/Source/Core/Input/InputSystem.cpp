@@ -5,8 +5,26 @@
 
 #include <SDL3/SDL.h>
 
+#include <limits>
+
 namespace Life
 {
+    namespace
+    {
+        bool TryConvertSdlGamepadId(SDL_JoystickID sdlGamepadId, GamepadId& outGamepadId)
+        {
+            constexpr SDL_JoystickID MaxGamepadId = static_cast<SDL_JoystickID>(std::numeric_limits<GamepadId>::max());
+            if (sdlGamepadId > MaxGamepadId)
+            {
+                LOG_CORE_WARN("Ignoring SDL gamepad id {} because it exceeds the supported GamepadId range.", static_cast<unsigned int>(sdlGamepadId));
+                return false;
+            }
+
+            outGamepadId = static_cast<GamepadId>(sdlGamepadId);
+            return true;
+        }
+    }
+
     InputSystem::~InputSystem()
     {
         CloseAllGamepads();
@@ -140,7 +158,7 @@ namespace Life
                 m_MousePosition = { event.motion.x, event.motion.y };
                 break;
             }
-            OnMouseMotion(event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel);
+            OnMouseMotion({ event.motion.x, event.motion.y }, { event.motion.xrel, event.motion.yrel });
             break;
 
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -157,21 +175,37 @@ namespace Life
             break;
 
         case SDL_EVENT_GAMEPAD_ADDED:
-            OnGamepadAdded(event.gdevice.which);
+        {
+            GamepadId gamepadId = 0;
+            if (TryConvertSdlGamepadId(event.gdevice.which, gamepadId))
+                OnGamepadAdded(gamepadId);
             break;
+        }
 
         case SDL_EVENT_GAMEPAD_REMOVED:
-            OnGamepadRemoved(event.gdevice.which);
+        {
+            GamepadId gamepadId = 0;
+            if (TryConvertSdlGamepadId(event.gdevice.which, gamepadId))
+                OnGamepadRemoved(gamepadId);
             break;
+        }
 
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
-            OnGamepadAxis(event.gaxis.which, ToGamepadAxisCode(static_cast<SDL_GamepadAxis>(event.gaxis.axis)), event.gaxis.value);
+        {
+            GamepadId gamepadId = 0;
+            if (TryConvertSdlGamepadId(event.gaxis.which, gamepadId))
+                OnGamepadAxis(gamepadId, ToGamepadAxisCode(static_cast<SDL_GamepadAxis>(event.gaxis.axis)), event.gaxis.value);
             break;
+        }
 
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
         case SDL_EVENT_GAMEPAD_BUTTON_UP:
-            OnGamepadButton(event.gbutton.which, ToGamepadButtonCode(static_cast<SDL_GamepadButton>(event.gbutton.button)), event.gbutton.down);
+        {
+            GamepadId gamepadId = 0;
+            if (TryConvertSdlGamepadId(event.gbutton.which, gamepadId))
+                OnGamepadButton(gamepadId, ToGamepadButtonCode(static_cast<SDL_GamepadButton>(event.gbutton.button)), event.gbutton.down);
             break;
+        }
 
         default:
             break;
@@ -201,7 +235,11 @@ namespace Life
         }
 
         for (int index = 0; index < discoveredGamepadCount; ++index)
-            OnGamepadAdded(discoveredGamepads[index]);
+        {
+            GamepadId gamepadId = 0;
+            if (TryConvertSdlGamepadId(discoveredGamepads[index], gamepadId))
+                OnGamepadAdded(gamepadId);
+        }
 
         SDL_free(discoveredGamepads);
     }
@@ -439,16 +477,16 @@ namespace Life
         }
     }
 
-    void InputSystem::OnMouseMotion(float x, float y, float deltaX, float deltaY)
+    void InputSystem::OnMouseMotion(const InputVector2& position, const InputVector2& delta)
     {
-        m_MousePosition = { x, y };
+        m_MousePosition = position;
         if (m_PendingSyntheticMouseMotionEvents > 0)
         {
             --m_PendingSyntheticMouseMotionEvents;
             return;
         }
 
-        m_MouseDelta += InputVector2{ deltaX, deltaY };
+        m_MouseDelta += delta;
     }
 
     void InputSystem::OnMouseButton(MouseButtonCode button, bool down)

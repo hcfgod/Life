@@ -3,32 +3,22 @@
 
 namespace Life
 {
-    VertexAttribute::VertexAttribute(std::string name, VertexAttributeSemantic semantic, TextureFormat format,
-                                     uint32_t offset, uint32_t bufferIndex)
-        : Name(std::move(name))
-        , Semantic(semantic)
-        , Format(format)
-        , Offset(offset)
-        , BufferIndex(bufferIndex)
-    {
-    }
-
     uint32_t GetFormatSizeBytes(TextureFormat format)
     {
         switch (format)
         {
         case TextureFormat::R8_UNORM:         return 1;
-        case TextureFormat::Depth16:          return 2;
+        case TextureFormat::Depth16:
         case TextureFormat::R16_FLOAT:        return 2;
-        case TextureFormat::R32_FLOAT:        return 4;
-        case TextureFormat::RG16_FLOAT:       return 4;
-        case TextureFormat::Depth24Stencil8:  return 4;
-        case TextureFormat::RGBA8_UNORM:      return 4;
-        case TextureFormat::RGBA8_SRGB:       return 4;
-        case TextureFormat::BGRA8_UNORM:      return 4;
-        case TextureFormat::BGRA8_SRGB:       return 4;
+        case TextureFormat::R32_FLOAT:
+        case TextureFormat::RG16_FLOAT:
+        case TextureFormat::Depth24Stencil8:
+        case TextureFormat::RGBA8_UNORM:
+        case TextureFormat::RGBA8_SRGB:
+        case TextureFormat::BGRA8_UNORM:
+        case TextureFormat::BGRA8_SRGB:
         case TextureFormat::Depth32F:         return 4;
-        case TextureFormat::RG32_FLOAT:       return 8;
+        case TextureFormat::RG32_FLOAT:
         case TextureFormat::RGBA16_FLOAT:     return 8;
         case TextureFormat::RGBA32_FLOAT:     return 16;
         default:                              return 0;

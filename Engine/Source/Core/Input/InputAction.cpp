@@ -216,7 +216,7 @@ namespace Life
             if (assetPath.empty())
                 return Result<void>(ErrorCode::InvalidArgument, "Input action asset path is empty.");
 
-            const Result<void> saveResult = InputActionAssetSerializer::SaveToFile(asset, assetPath);
+            Result<void> saveResult = InputActionAssetSerializer::SaveToFile(asset, assetPath);
             if (saveResult.IsSuccess())
                 return Result<void>();
 
@@ -353,7 +353,7 @@ namespace Life
 
     void InputAction::AddBinding(InputBinding binding)
     {
-        m_Bindings.push_back(std::move(binding));
+        m_Bindings.push_back(binding);
     }
 
     bool InputAction::SetBinding(std::size_t index, InputBinding binding)
@@ -361,7 +361,7 @@ namespace Life
         if (index >= m_Bindings.size())
             return false;
 
-        m_Bindings[index] = std::move(binding);
+        m_Bindings[index] = binding;
         return true;
     }
 
@@ -709,10 +709,10 @@ namespace Life
 
         std::stringstream buffer;
         buffer << file.rdbuf();
-        return LoadIntoFromString(outAsset, buffer.str(), path);
+        return LoadIntoFromString(outAsset, buffer.str(), InputActionAssetLoadOptions{ path });
     }
 
-    Result<void> InputActionAssetSerializer::LoadIntoFromString(InputActionAsset& outAsset, const std::string& jsonText, const std::string& debugName)
+    Result<void> InputActionAssetSerializer::LoadIntoFromString(InputActionAsset& outAsset, const std::string& jsonText, const InputActionAssetLoadOptions& options)
     {
         json root;
         try
@@ -819,7 +819,7 @@ namespace Life
                     }
                     else
                     {
-                        LOG_CORE_WARN("InputActionAssetSerializer: unknown binding type '{}' in '{}::{}' ({})", bindingType, mapName, actionName, debugName);
+                        LOG_CORE_WARN("InputActionAssetSerializer: unknown binding type '{}' in '{}::{}' ({})", bindingType, mapName, actionName, options.DebugName);
                     }
                 }
             }

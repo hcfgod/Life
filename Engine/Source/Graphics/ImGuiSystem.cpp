@@ -117,7 +117,7 @@ namespace Life
                 initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &m_ColorAttachmentFormat;
                 initInfo.PipelineInfoForViewports = initInfo.PipelineInfoMain;
                 initInfo.CheckVkResultFn = &CheckVkResult;
-                initInfo.MinAllocationSize = 1024 * 1024;
+                initInfo.MinAllocationSize = static_cast<VkDeviceSize>(1024) * static_cast<VkDeviceSize>(1024);
 
                 if (!ImGui_ImplVulkan_Init(&initInfo))
                 {
@@ -312,20 +312,15 @@ namespace Life
 
         Scope<ImGuiRendererBackend> CreateRendererBackend(GraphicsDevice& graphicsDevice)
         {
-            switch (graphicsDevice.GetBackend())
+            if (graphicsDevice.GetBackend() == GraphicsBackend::Vulkan)
             {
-            case GraphicsBackend::Vulkan:
 #if LIFE_HAS_IMGUI_VULKAN
                 if (auto* vulkanGraphicsDevice = dynamic_cast<VulkanGraphicsDevice*>(&graphicsDevice))
                     return CreateScope<ImGuiVulkanBackend>(*vulkanGraphicsDevice);
 #endif
-                return nullptr;
-            case GraphicsBackend::D3D12:
-                return nullptr;
-            case GraphicsBackend::None:
-            default:
-                return nullptr;
             }
+
+            return nullptr;
         }
 
         bool InitializePlatformBackend(GraphicsBackend backend, SDL_Window* window)

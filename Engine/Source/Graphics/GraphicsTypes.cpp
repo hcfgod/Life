@@ -68,7 +68,6 @@ namespace Life::Internal
         {
         case CullMode::None:   return nvrhi::RasterCullMode::None;
         case CullMode::Front:  return nvrhi::RasterCullMode::Front;
-        case CullMode::Back:   return nvrhi::RasterCullMode::Back;
         default:               return nvrhi::RasterCullMode::Back;
         }
     }

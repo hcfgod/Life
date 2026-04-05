@@ -30,10 +30,6 @@ namespace Life
         TextureFormat Format = TextureFormat::RGBA32_FLOAT;
         uint32_t Offset = 0;
         uint32_t BufferIndex = 0;
-
-        VertexAttribute() = default;
-        VertexAttribute(std::string name, VertexAttributeSemantic semantic, TextureFormat format,
-                        uint32_t offset = 0, uint32_t bufferIndex = 0);
     };
 
     class VertexLayout
