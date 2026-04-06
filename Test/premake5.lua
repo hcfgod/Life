@@ -23,6 +23,7 @@ project "Test"
     links
     {
         "Engine",
+        "StbImage",
         "ImGui",
         "VkBootstrap"
     }
