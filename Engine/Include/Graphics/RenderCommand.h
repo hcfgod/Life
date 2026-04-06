@@ -9,6 +9,7 @@ namespace Life
     class GraphicsBuffer;
     class GraphicsPipeline;
     class Renderer;
+    class TextureResource;
 
     class RenderCommand
     {
@@ -22,7 +23,8 @@ namespace Life
         static void Draw(Renderer& renderer,
                          GraphicsPipeline& pipeline,
                          GraphicsBuffer& vertexBuffer,
-                         uint32_t vertexCount);
+                         uint32_t vertexCount,
+                         TextureResource* texture = nullptr);
 
         static void DrawIndexed(Renderer& renderer,
                                 GraphicsPipeline& pipeline,

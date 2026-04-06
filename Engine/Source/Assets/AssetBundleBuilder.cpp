@@ -171,7 +171,7 @@ namespace Life::Assets
             return Result<void>(rootResult.GetError());
         }
 
-        const std::filesystem::path root = rootResult.GetValue();
+        const std::filesystem::path& root = rootResult.GetValue();
         const std::filesystem::path outDir = root / "Build" / "AssetBundle";
         return BuildAtOutputDirectory(outDir, settings);
     }
@@ -199,7 +199,7 @@ namespace Life::Assets
             return Result<void>(rootResult.GetError());
         }
 
-        const std::filesystem::path projectRoot = rootResult.GetValue();
+        const std::filesystem::path& projectRoot = rootResult.GetValue();
         const std::filesystem::path assetsRoot = projectRoot / "Assets";
         if (!std::filesystem::exists(assetsRoot))
         {
@@ -263,7 +263,7 @@ namespace Life::Assets
         };
 
         std::vector<uint8_t> data;
-        data.reserve(8 * 1024 * 1024);
+        data.reserve(static_cast<std::vector<uint8_t>::size_type>(8u) * 1024u * 1024u);
 
         std::vector<OutEntry> entries;
         entries.reserve(records.size());

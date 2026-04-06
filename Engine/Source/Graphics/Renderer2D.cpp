@@ -10,6 +10,7 @@
 #include "Graphics/Renderer.h"
 #include "Graphics/Shader.h"
 #include "Graphics/ShaderLibrary.h"
+#include "Graphics/TextureResource.h"
 #include "Graphics/VertexLayout.h"
 #include "Platform/PlatformDetection.h"
 
@@ -26,7 +27,20 @@ namespace Life
         {
             glm::vec4 Position;
             glm::vec4 Color;
+            glm::vec2 TexCoord;
         };
+
+        Scope<TextureResource> CreateSolidTexture(GraphicsDevice& device, const char* debugName,
+                                                  const std::array<uint8_t, 4>& pixel)
+        {
+            TextureDescription desc;
+            desc.DebugName = debugName;
+            desc.Width = 1;
+            desc.Height = 1;
+            desc.MipLevels = 1;
+            desc.Format = TextureFormat::RGBA8_UNORM;
+            return TextureResource::Create2D(device, desc, pixel.data());
+        }
     }
 
     struct Renderer2D::Impl
@@ -39,6 +53,9 @@ namespace Life
         std::vector<QuadVertex> Vertices;
         glm::mat4 ViewProjection{ 1.0f };
         Statistics Stats{};
+        TextureResource* BatchTexture = nullptr;
+        Scope<TextureResource> WhiteTexture;
+        Scope<TextureResource> ErrorTexture;
         uint32_t QuadCount = 0;
         bool Initialized = false;
         bool ReportedInitializationFailure = false;
@@ -90,6 +107,7 @@ namespace Life
         m_Impl->ViewProjection = viewProjection;
         m_Impl->Vertices.clear();
         m_Impl->QuadCount = 0;
+        m_Impl->BatchTexture = nullptr;
         m_Impl->SceneActive = true;
     }
 
@@ -121,12 +139,14 @@ namespace Life
         RenderCommand::Draw(m_Renderer,
                             *m_Impl->Pipeline,
                             *m_Impl->VertexBuffer,
-                            m_Impl->QuadCount * VerticesPerQuad);
+                            m_Impl->QuadCount * VerticesPerQuad,
+                            m_Impl->BatchTexture);
 
         m_Impl->Stats.DrawCalls++;
         m_Impl->Stats.QuadCount += m_Impl->QuadCount;
         m_Impl->Vertices.clear();
         m_Impl->QuadCount = 0;
+        m_Impl->BatchTexture = nullptr;
     }
 
     void Renderer2D::DrawQuad(const glm::vec2& position, const glm::vec2& size, const glm::vec4& color)
@@ -136,11 +156,29 @@ namespace Life
 
     void Renderer2D::DrawQuad(const glm::vec3& position, const glm::vec2& size, const glm::vec4& color)
     {
-        DrawRotatedQuad(position, size, 0.0f, color);
+        DrawRotatedQuad(position, size, 0.0f, m_Impl->WhiteTexture.get(), color);
+    }
+
+    void Renderer2D::DrawQuad(const glm::vec2& position, const glm::vec2& size, TextureResource* texture,
+                              const glm::vec4& color)
+    {
+        DrawQuad(glm::vec3(position, 0.0f), size, texture, color);
+    }
+
+    void Renderer2D::DrawQuad(const glm::vec3& position, const glm::vec2& size, TextureResource* texture,
+                              const glm::vec4& color)
+    {
+        DrawRotatedQuad(position, size, 0.0f, texture, color);
     }
 
     void Renderer2D::DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
                                      const glm::vec4& color)
+    {
+        DrawRotatedQuad(position, size, rotationRadians, m_Impl->WhiteTexture.get(), color);
+    }
+
+    void Renderer2D::DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
+                                     TextureResource* texture, const glm::vec4& color)
     {
         if (!m_Impl->SceneActive)
             return;
@@ -149,7 +187,7 @@ namespace Life
             * glm::rotate(glm::mat4(1.0f), rotationRadians, glm::vec3(0.0f, 0.0f, 1.0f))
             * glm::scale(glm::mat4(1.0f), glm::vec3(size, 1.0f));
 
-        PushQuad(transform, color);
+        PushQuad(transform, color, { 0.0f, 0.0f }, { 1.0f, 1.0f }, texture);
     }
 
     const Renderer2D::Statistics& Renderer2D::GetStats() const noexcept
@@ -179,11 +217,18 @@ namespace Life
         m_Impl->Layout = VertexLayout
         {
             { "inPosition", VertexAttributeSemantic::Position, TextureFormat::RGBA32_FLOAT },
-            { "inColor", VertexAttributeSemantic::Color, TextureFormat::RGBA32_FLOAT }
+            { "inColor", VertexAttributeSemantic::Color, TextureFormat::RGBA32_FLOAT },
+            { "inTexCoord", VertexAttributeSemantic::TexCoord0, TextureFormat::RG32_FLOAT }
         };
 
         if (!m_Impl->VertexBuffer)
             m_Impl->VertexBuffer = GraphicsBuffer::CreateDynamicVertex(device, vertexBufferSpecification);
+
+        if (!m_Impl->WhiteTexture)
+            m_Impl->WhiteTexture = CreateSolidTexture(device, "Renderer2DWhiteTexture", { 255, 255, 255, 255 });
+
+        if (!m_Impl->ErrorTexture)
+            m_Impl->ErrorTexture = CreateSolidTexture(device, "Renderer2DErrorTexture", { 255, 0, 255, 255 });
 
         const std::filesystem::path executablePath = PlatformDetection::GetExecutablePath();
         const std::filesystem::path shaderDirectory = executablePath.parent_path() / "Assets" / "Shaders";
@@ -218,17 +263,21 @@ namespace Life
         m_Impl->Initialized =
             m_Impl->VertexBuffer != nullptr &&
             m_Impl->VertexShader != nullptr &&
-            m_Impl->PixelShader != nullptr;
+            m_Impl->PixelShader != nullptr &&
+            m_Impl->WhiteTexture != nullptr &&
+            m_Impl->ErrorTexture != nullptr;
 
         if (!m_Impl->Initialized)
         {
             if (!m_Impl->ReportedInitializationFailure)
             {
                 LOG_CORE_ERROR(
-                    "Renderer2D failed to initialize required resources (VertexBuffer={}, VertexShader={}, PixelShader={}).",
+                    "Renderer2D failed to initialize required resources (VertexBuffer={}, VertexShader={}, PixelShader={}, WhiteTexture={}, ErrorTexture={}).",
                     m_Impl->VertexBuffer != nullptr,
                     m_Impl->VertexShader != nullptr,
-                    m_Impl->PixelShader != nullptr);
+                    m_Impl->PixelShader != nullptr,
+                    m_Impl->WhiteTexture != nullptr,
+                    m_Impl->ErrorTexture != nullptr);
                 m_Impl->ReportedInitializationFailure = true;
             }
 
@@ -257,14 +306,26 @@ namespace Life
         pipelineDescription.Blend.DstColorFactor = BlendFactor::InvSrcAlpha;
         pipelineDescription.Blend.SrcAlphaFactor = BlendFactor::One;
         pipelineDescription.Blend.DstAlphaFactor = BlendFactor::InvSrcAlpha;
+        pipelineDescription.UseTextureBinding = true;
 
         m_Impl->Pipeline = m_Renderer.CreatePipeline(pipelineDescription);
     }
 
-    void Renderer2D::PushQuad(const glm::mat4& transform, const glm::vec4& color)
+    void Renderer2D::PushQuad(const glm::mat4& transform, const glm::vec4& color,
+                              const glm::vec2& uvMin, const glm::vec2& uvMax, TextureResource* texture)
     {
-        if (m_Impl->QuadCount >= MaxQuads)
+        TextureResource* resolvedTexture = texture != nullptr ? texture : m_Impl->ErrorTexture.get();
+        if (resolvedTexture == nullptr)
+            return;
+
+        if ((m_Impl->BatchTexture != nullptr && m_Impl->BatchTexture != resolvedTexture) || m_Impl->QuadCount >= MaxQuads)
             Flush();
+
+        if (m_Impl->QuadCount != 0 && m_Impl->BatchTexture != resolvedTexture)
+            return;
+
+        if (m_Impl->BatchTexture == nullptr)
+            m_Impl->BatchTexture = resolvedTexture;
 
         const std::array<glm::vec4, VerticesPerQuad> quadPositions =
         {
@@ -276,11 +337,22 @@ namespace Life
             glm::vec4(-0.5f, -0.5f, 0.0f, 1.0f)
         };
 
-        for (const glm::vec4& basePosition : quadPositions)
+        const std::array<glm::vec2, VerticesPerQuad> quadTexCoords =
+        {
+            glm::vec2(uvMin.x, uvMax.y),
+            glm::vec2(uvMax.x, uvMax.y),
+            glm::vec2(uvMax.x, uvMin.y),
+            glm::vec2(uvMax.x, uvMin.y),
+            glm::vec2(uvMin.x, uvMin.y),
+            glm::vec2(uvMin.x, uvMax.y)
+        };
+
+        for (size_t vertexIndex = 0; vertexIndex < quadPositions.size(); ++vertexIndex)
         {
             QuadVertex vertex;
-            vertex.Position = m_Impl->ViewProjection * transform * basePosition;
+            vertex.Position = m_Impl->ViewProjection * transform * quadPositions[vertexIndex];
             vertex.Color = color;
+            vertex.TexCoord = quadTexCoords[vertexIndex];
             m_Impl->Vertices.push_back(vertex);
         }
 

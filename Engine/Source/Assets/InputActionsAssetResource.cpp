@@ -11,14 +11,15 @@
 
 #include <fstream>
 #include <sstream>
+#include <string_view>
 
 namespace Life::Assets
 {
-    static std::shared_ptr<Life::InputActionAsset> DeserializeInputActions(const std::string& jsonText, const std::string& debugName)
+    static std::shared_ptr<Life::InputActionAsset> DeserializeInputActions(const std::string& jsonText, std::string_view debugName)
     {
         auto asset = std::make_shared<Life::InputActionAsset>();
         InputActionAssetLoadOptions opts;
-        opts.DebugName = debugName;
+        opts.DebugName.assign(debugName.begin(), debugName.end());
         const auto result = InputActionAssetSerializer::LoadIntoFromString(*asset, jsonText, opts);
         if (result.IsFailure())
         {
@@ -104,7 +105,7 @@ namespace Life::Assets
 
     InputActionsAssetResource::Ptr InputActionsAssetResource::LoadBlocking(const std::string& key, Settings settings)
     {
-        auto future = LoadAsync(key, std::move(settings));
+        auto future = LoadAsync(key, settings);
         future.wait();
         return future.get();
     }

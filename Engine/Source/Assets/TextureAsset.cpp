@@ -18,6 +18,50 @@
 
 namespace Life::Assets
 {
+    namespace
+    {
+        TextureFilterMode ToTextureFilterMode(TextureFilter filter) noexcept
+        {
+            switch (filter)
+            {
+            case TextureFilter::Nearest:
+                return TextureFilterMode::Nearest;
+            case TextureFilter::NearestMipmapNearest:
+                return TextureFilterMode::NearestMipmapNearest;
+            case TextureFilter::LinearMipmapLinear:
+                return TextureFilterMode::LinearMipmapLinear;
+            case TextureFilter::Linear:
+            default:
+                return TextureFilterMode::Linear;
+            }
+        }
+
+        TextureWrapMode ToTextureWrapMode(TextureWrap wrap) noexcept
+        {
+            switch (wrap)
+            {
+            case TextureWrap::ClampToEdge:
+                return TextureWrapMode::ClampToEdge;
+            case TextureWrap::MirroredRepeat:
+                return TextureWrapMode::MirroredRepeat;
+            case TextureWrap::Repeat:
+            default:
+                return TextureWrapMode::Repeat;
+            }
+        }
+
+        TextureSamplerDescription ToTextureSamplerDescription(const TextureSpecification& specification) noexcept
+        {
+            TextureSamplerDescription samplerDescription;
+            samplerDescription.MinFilter = ToTextureFilterMode(specification.MinFilter);
+            samplerDescription.MagFilter = ToTextureFilterMode(specification.MagFilter);
+            samplerDescription.WrapU = ToTextureWrapMode(specification.WrapU);
+            samplerDescription.WrapV = ToTextureWrapMode(specification.WrapV);
+            samplerDescription.WrapW = TextureWrapMode::Repeat;
+            return samplerDescription;
+        }
+    }
+
     std::future<TextureAsset::Ptr> TextureAsset::LoadAsync(const std::string& assetPath, const TextureSpecification& specification)
     {
         const uint64_t generation = AssetLoadCoordinator::GetGeneration();
@@ -128,6 +172,7 @@ namespace Life::Assets
             desc.Height = decoded.Height;
             desc.Format = TextureFormat::RGBA8_UNORM;
             desc.MipLevels = 1;
+            desc.Sampler = ToTextureSamplerDescription(specification);
 
             auto texture = TextureResource::Create2D(*device, desc, decoded.Pixels.data());
             if (!texture || !texture->IsValid())
@@ -150,6 +195,13 @@ namespace Life::Assets
         auto future = LoadAsync(assetPath, specification);
         future.wait();
         return future.get();
+    }
+
+    void TextureAsset::ApplySpecification(const TextureSpecification& spec)
+    {
+        m_Specification = spec;
+        if (m_Texture)
+            m_Texture->SetSamplerDescription(ToTextureSamplerDescription(spec));
     }
 
     bool TextureAsset::Reload()
@@ -186,6 +238,7 @@ namespace Life::Assets
         desc.Height = decoded.Height;
         desc.Format = TextureFormat::RGBA8_UNORM;
         desc.MipLevels = 1;
+        desc.Sampler = ToTextureSamplerDescription(m_Specification);
 
         auto newTexture = TextureResource::Create2D(*device, desc, decoded.Pixels.data());
         if (!newTexture || !newTexture->IsValid())

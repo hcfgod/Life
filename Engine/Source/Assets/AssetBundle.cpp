@@ -169,7 +169,7 @@ namespace Life::Assets
             return Result<void>(rootResult.GetError());
         }
 
-        const std::filesystem::path root = rootResult.GetValue();
+        const std::filesystem::path& root = rootResult.GetValue();
         const std::filesystem::path manifest = root / "Build" / "AssetBundle" / "AssetBundleManifest.json";
         return LoadFromManifestFile(manifest);
     }

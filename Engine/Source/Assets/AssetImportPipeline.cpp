@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <numeric>
@@ -172,7 +173,7 @@ namespace Life::Assets::AssetImportPipeline
 
         struct PreparedImport
         {
-            enum class Status { NeedsCommit, UpToDate, MissingOnDisk, Error, Skipped };
+            enum class Status : std::uint8_t { NeedsCommit, UpToDate, MissingOnDisk, Error, Skipped };
             Status ImportStatus = Status::Skipped;
             std::string Key;
             std::string ErrorMessage;
@@ -259,7 +260,7 @@ namespace Life::Assets::AssetImportPipeline
                     prep.ErrorMessage = resolvedPathResult.GetError().GetErrorMessage();
                     return;
                 }
-                const std::filesystem::path resolvedPath = resolvedPathResult.GetValue();
+                const std::filesystem::path& resolvedPath = resolvedPathResult.GetValue();
 
                 if (!std::filesystem::exists(resolvedPath))
                 {
@@ -477,7 +478,7 @@ namespace Life::Assets::AssetImportPipeline
             return Result<AssetImportStatistics>(rootResult.GetError());
         }
 
-        const std::filesystem::path projectRoot = rootResult.GetValue();
+        const std::filesystem::path& projectRoot = rootResult.GetValue();
         const auto discoveryStart = std::chrono::steady_clock::now();
         const auto jobsResult = DiscoverKnownAssets(projectRoot);
         const auto discoveryEnd = std::chrono::steady_clock::now();
@@ -515,7 +516,7 @@ namespace Life::Assets::AssetImportPipeline
             return Result<AssetImportStatistics>(rootResult.GetError());
         }
 
-        const std::filesystem::path projectRoot = rootResult.GetValue();
+        const std::filesystem::path& projectRoot = rootResult.GetValue();
         const auto discoveryStart = std::chrono::steady_clock::now();
         const auto jobsResult = DiscoverKnownAssets(projectRoot);
         const auto discoveryEnd = std::chrono::steady_clock::now();

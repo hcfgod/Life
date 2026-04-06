@@ -20,6 +20,21 @@ namespace RuntimeApp
     {
         CacheServices();
 
+        if (auto* assetManager = GetApplication().TryGetService<Life::Assets::AssetManager>())
+        {
+            if (auto* assetDatabase = GetApplication().TryGetService<Life::Assets::AssetDatabase>())
+            {
+                m_CheckerTextureAsset = assetManager->GetOrLoad<Life::Assets::TextureAsset>(m_CheckerTextureKey, *assetDatabase);
+                if (!m_CheckerTextureAsset)
+                    LOG_WARN("Runtime failed to load textured quad asset '{}'. Falling back to error texture.", m_CheckerTextureKey);
+                else
+                {
+                    m_CheckerTextureAsset->SetFilterModes(Life::TextureFilterMode::Nearest, Life::TextureFilterMode::Nearest);
+                    m_CheckerTextureAsset->SetWrapModes(Life::TextureWrapMode::Repeat, Life::TextureWrapMode::Repeat);
+                }
+            }
+        }
+
         LOG_INFO("Runtime boot config: {}", m_StartupConfig.dump());
         if (m_CameraManager)
         {
@@ -75,6 +90,8 @@ namespace RuntimeApp
             cameraManager.DestroyCamera(m_OrthographicCameraName);
             cameraManager.DestroyCamera(m_PerspectiveCameraName);
         }
+
+        m_CheckerTextureAsset.reset();
 
         ResetServices();
 
@@ -136,8 +153,9 @@ namespace RuntimeApp
             Life::Renderer2D& renderer2D = m_Renderer2D->get();
             if (Life::Camera* activeCamera = cameraManager.GetPrimaryCamera())
             {
+                Life::TextureResource* checkerTexture = m_CheckerTextureAsset ? m_CheckerTextureAsset->GetTexture() : nullptr;
                 renderer2D.BeginScene(*activeCamera);
-                renderer2D.DrawQuad({ 0.0f, 0.0f, 0.0f }, { 3.5f, 3.5f }, { 0.20f, 0.55f, 0.95f, 1.0f });
+                renderer2D.DrawQuad({ 0.0f, 0.0f, 0.0f }, { 3.5f, 3.5f }, checkerTexture, { 1.0f, 1.0f, 1.0f, 1.0f });
                 renderer2D.DrawRotatedQuad(
                     { std::sin(m_ElapsedTime) * 1.75f, std::cos(m_ElapsedTime * 0.75f) * 1.25f, -0.5f },
                     { 1.35f, 1.35f },

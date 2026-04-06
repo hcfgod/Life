@@ -12,6 +12,7 @@ namespace Life
     class GraphicsBuffer;
     class GraphicsPipeline;
     class Renderer;
+    class TextureResource;
 
     class Renderer2D
     {
@@ -35,8 +36,14 @@ namespace Life
 
         void DrawQuad(const glm::vec2& position, const glm::vec2& size, const glm::vec4& color);
         void DrawQuad(const glm::vec3& position, const glm::vec2& size, const glm::vec4& color);
+        void DrawQuad(const glm::vec2& position, const glm::vec2& size, TextureResource* texture,
+                      const glm::vec4& color = glm::vec4(1.0f));
+        void DrawQuad(const glm::vec3& position, const glm::vec2& size, TextureResource* texture,
+                      const glm::vec4& color = glm::vec4(1.0f));
         void DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
                              const glm::vec4& color);
+        void DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
+                             TextureResource* texture, const glm::vec4& color = glm::vec4(1.0f));
 
         const Statistics& GetStats() const noexcept;
         void ResetStats() noexcept;
@@ -44,7 +51,8 @@ namespace Life
     private:
         void InitializeResources();
         void EnsurePipeline();
-        void PushQuad(const glm::mat4& transform, const glm::vec4& color);
+        void PushQuad(const glm::mat4& transform, const glm::vec4& color,
+                      const glm::vec2& uvMin, const glm::vec2& uvMax, TextureResource* texture);
 
         Renderer& m_Renderer;
 

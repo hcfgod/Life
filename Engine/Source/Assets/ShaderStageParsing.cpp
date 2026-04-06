@@ -4,12 +4,13 @@
 
 namespace Life::Assets
 {
-    Result<ParsedShaderStages> ParseCombinedGlsl(
-        const std::string& key,
-        const std::string& resolvedPath,
-        const std::string& fileText,
-        const std::string& nameOverride)
+    Result<ParsedShaderStages> ParseCombinedGlsl(const ParseCombinedGlslInput& input)
     {
+        const std::string_view key = input.Key;
+        const std::string_view resolvedPath = input.ResolvedPath;
+        const std::string_view fileText = input.FileText;
+        const std::string_view nameOverride = input.NameOverride;
+
         // Format:
         //   #type vertex
         //   ...
@@ -25,7 +26,7 @@ namespace Life::Assets
         if (vPos == std::string::npos || fPos == std::string::npos)
         {
             return Result<ParsedShaderStages>(ErrorCode::ResourceFormatNotSupported,
-                "Shader file must contain '#type vertex' and '#type fragment': " + resolvedPath);
+                "Shader file must contain '#type vertex' and '#type fragment': " + std::string(resolvedPath));
         }
 
         auto readStageBody = [&](const size_t tagPos, const size_t nextTagPos) -> std::string {
@@ -36,18 +37,20 @@ namespace Life::Assets
             {
                 return {};
             }
-            return fileText.substr(bodyStart, bodyEnd - bodyStart);
+            return std::string(fileText.substr(bodyStart, bodyEnd - bodyStart));
         };
 
         ParsedShaderStages out;
         if (!nameOverride.empty())
         {
-            out.Name = nameOverride;
+            out.Name.assign(nameOverride.begin(), nameOverride.end());
         }
         else
         {
             const auto slash = key.find_last_of("/\\");
-            const std::string fileName = (slash == std::string::npos) ? key : key.substr(slash + 1);
+            const std::string fileName = (slash == std::string::npos)
+                ? std::string(key)
+                : std::string(key.substr(slash + 1));
             const auto dot = fileName.find_last_of('.');
             out.Name = (dot == std::string::npos) ? fileName : fileName.substr(0, dot);
         }
@@ -65,7 +68,7 @@ namespace Life::Assets
 
         if (out.Vertex.empty() || out.Fragment.empty())
         {
-            return Result<ParsedShaderStages>(ErrorCode::ResourceCorrupted, "Shader stage source was empty: " + resolvedPath);
+            return Result<ParsedShaderStages>(ErrorCode::ResourceCorrupted, "Shader stage source was empty: " + std::string(resolvedPath));
         }
 
         return out;

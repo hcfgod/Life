@@ -41,6 +41,7 @@ namespace Life
             }
             catch (...)
             {
+                return;
             }
         }
     }
@@ -58,6 +59,7 @@ namespace Life
             }
             catch (...)
             {
+                return;
             }
         }
     } 
@@ -75,6 +77,7 @@ namespace Life
             }
             catch (...)
             {
+                return;
             }
         }
     }

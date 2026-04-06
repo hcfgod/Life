@@ -5,6 +5,7 @@
 #include "stb_image.h"
 
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <mutex>
@@ -224,7 +225,7 @@ namespace Life::Assets
             if (in.is_open())
             {
                 std::vector<uint8_t> header;
-                header.resize(64u * 1024u);
+                header.resize(static_cast<std::vector<uint8_t>::size_type>(64u) * 1024u);
                 in.read(reinterpret_cast<char*>(header.data()), static_cast<std::streamsize>(header.size()));
                 const std::streamsize got = in.gcount();
                 if (got > 0)
@@ -380,7 +381,7 @@ namespace Life::Assets
             if (v < 0) v = 0;
             if (v > maxValue) v = maxValue;
             const float f = static_cast<float>(v) / static_cast<float>(maxValue);
-            const int out = static_cast<int>(f * 255.0f + 0.5f);
+            const int out = static_cast<int>(std::lround(static_cast<double>(f) * 255.0));
             return static_cast<uint8_t>(out < 0 ? 0 : (out > 255 ? 255 : out));
         };
 
@@ -435,7 +436,7 @@ namespace Life::Assets
             if (v < 0) v = 0;
             if (v > maxValue) v = maxValue;
             const float f = static_cast<float>(v) / static_cast<float>(maxValue);
-            const int out = static_cast<int>(f * 255.0f + 0.5f);
+            const int out = static_cast<int>(std::lround(static_cast<double>(f) * 255.0));
             return static_cast<uint8_t>(out < 0 ? 0 : (out > 255 ? 255 : out));
         };
 

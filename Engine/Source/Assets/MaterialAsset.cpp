@@ -151,7 +151,7 @@ namespace Life::Assets
 
     MaterialAsset::Ptr MaterialAsset::LoadBlocking(const std::string& key, Settings settings)
     {
-        auto future = LoadAsync(key, std::move(settings));
+        auto future = LoadAsync(key, settings);
         future.wait();
         return future.get();
     }

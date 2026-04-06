@@ -102,7 +102,7 @@ namespace Life::Assets
                 std::filesystem::create_directories(metaFsPath.parent_path());
             }
 
-            const std::string guid = GenerateGuid();
+            std::string guid = GenerateGuid();
             nlohmann::json j = extraMeta;
             j["guid"] = guid;
 
@@ -188,7 +188,7 @@ namespace Life::Assets
             LOG_CORE_WARN("Assets::ForceRegenerateGuid: failed to read existing meta '{}': {}", metaPath, e.what());
         }
 
-        const std::string newGuid = GenerateGuid();
+        std::string newGuid = GenerateGuid();
         j["guid"] = newGuid;
 
         try

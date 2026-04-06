@@ -37,6 +37,13 @@ namespace Life::Assets
         std::vector<AssetRegistryCacheEntry> Entries;
     };
 
+    struct AssetRegistryCacheExpectedState
+    {
+        uint32_t DatabaseJsonVersion = 0;
+        uint64_t SourceSizeBytes = 0;
+        int64_t SourceLastWriteTimeTicks = 0;
+    };
+
     // -----------------------------------------------------------------------------
     // AssetRegistryCache
     // Fast binary cache for the asset database manifest.
@@ -47,9 +54,7 @@ namespace Life::Assets
         static std::filesystem::path GetCacheFilePath(const std::filesystem::path& databaseFilePath);
 
         static Result<AssetRegistryCacheSnapshot> LoadFromFile(const std::filesystem::path& cacheFilePath,
-                                                                uint32_t expectedDatabaseJsonVersion,
-                                                                uint64_t expectedSourceSizeBytes,
-                                                                int64_t expectedSourceLastWriteTimeTicks);
+                                                               const AssetRegistryCacheExpectedState& expectedState);
 
         static Result<void> SaveToFile(const std::filesystem::path& cacheFilePath,
                                         const AssetRegistryCacheSnapshot& snapshot);

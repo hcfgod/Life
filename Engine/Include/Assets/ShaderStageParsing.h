@@ -3,6 +3,7 @@
 #include "Core/Error.h"
 
 #include <string>
+#include <string_view>
 
 namespace Life::Assets
 {
@@ -17,12 +18,16 @@ namespace Life::Assets
         std::string Fragment;
     };
 
+    struct ParseCombinedGlslInput
+    {
+        std::string_view Key;
+        std::string_view ResolvedPath;
+        std::string_view FileText;
+        std::string_view NameOverride;
+    };
+
     // Parse a combined GLSL file with "#type vertex" and "#type fragment" markers.
-    [[nodiscard]] Result<ParsedShaderStages> ParseCombinedGlsl(
-        const std::string& key,
-        const std::string& resolvedPath,
-        const std::string& fileText,
-        const std::string& nameOverride = {});
+    [[nodiscard]] Result<ParsedShaderStages> ParseCombinedGlsl(const ParseCombinedGlslInput& input);
 
     // Optionally validate/reflect stages for the active graphics API.
     [[nodiscard]] Result<ParsedShaderStages> PrepareShaderStagesForActiveGraphicsAPI(

@@ -3,6 +3,7 @@
 #include "Engine.h"
 #include "Graphics/TextureResource.h"
 
+#include <memory>
 #include <string>
 
 namespace EditorApp
@@ -39,6 +40,8 @@ namespace EditorApp
         uint32_t m_ViewportWidth = 0;
         uint32_t m_ViewportHeight = 0;
         std::string m_EditorCameraName = "EditorSceneCamera";
+        std::string m_CheckerTextureKey = "Assets/Textures/Renderer2DChecker.ppm";
+        std::shared_ptr<Life::Assets::TextureAsset> m_CheckerTextureAsset;
         Life::Scope<Life::TextureResource> m_SceneColorTarget;
         void* m_SceneTextureHandle = nullptr;
     };

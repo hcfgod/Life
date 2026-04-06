@@ -3,6 +3,7 @@
 #include "Graphics/Renderer.h"
 #include "Graphics/GraphicsBuffer.h"
 #include "Graphics/GraphicsPipeline.h"
+#include "Graphics/TextureResource.h"
 
 namespace Life
 {
@@ -24,9 +25,10 @@ namespace Life
     void RenderCommand::Draw(Renderer& renderer,
                              GraphicsPipeline& pipeline,
                              GraphicsBuffer& vertexBuffer,
-                             uint32_t vertexCount)
+                             uint32_t vertexCount,
+                             TextureResource* texture)
     {
-        renderer.Submit(pipeline, vertexBuffer, vertexCount);
+        renderer.Submit(pipeline, vertexBuffer, vertexCount, texture);
     }
 
     void RenderCommand::DrawIndexed(Renderer& renderer,

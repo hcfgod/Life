@@ -8,11 +8,86 @@
 #include <nvrhi/nvrhi.h>
 
 #include <cstdio>
+#include <unordered_map>
 
 namespace Life
 {
     namespace
     {
+        bool UsesLinearFiltering(TextureFilterMode mode) noexcept
+        {
+            return mode == TextureFilterMode::Linear || mode == TextureFilterMode::LinearMipmapLinear;
+        }
+
+        bool UsesMipFiltering(TextureFilterMode mode) noexcept
+        {
+            return mode == TextureFilterMode::NearestMipmapNearest || mode == TextureFilterMode::LinearMipmapLinear;
+        }
+
+        nvrhi::SamplerAddressMode ToNvrhiSamplerAddressMode(TextureWrapMode mode) noexcept
+        {
+            switch (mode)
+            {
+            case TextureWrapMode::ClampToEdge:
+                return nvrhi::SamplerAddressMode::ClampToEdge;
+            case TextureWrapMode::MirroredRepeat:
+                return nvrhi::SamplerAddressMode::MirroredRepeat;
+            case TextureWrapMode::Repeat:
+            default:
+                return nvrhi::SamplerAddressMode::Repeat;
+            }
+        }
+
+        nvrhi::SamplerDesc ToNvrhiSamplerDesc(const TextureSamplerDescription& samplerDescription) noexcept
+        {
+            nvrhi::SamplerDesc samplerDesc;
+            samplerDesc.setMinFilter(UsesLinearFiltering(samplerDescription.MinFilter));
+            samplerDesc.setMagFilter(UsesLinearFiltering(samplerDescription.MagFilter));
+            samplerDesc.setMipFilter(UsesMipFiltering(samplerDescription.MinFilter));
+            samplerDesc.setAddressU(ToNvrhiSamplerAddressMode(samplerDescription.WrapU));
+            samplerDesc.setAddressV(ToNvrhiSamplerAddressMode(samplerDescription.WrapV));
+            samplerDesc.setAddressW(ToNvrhiSamplerAddressMode(samplerDescription.WrapW));
+            return samplerDesc;
+        }
+
+        struct TextureSamplerDescriptionHasher
+        {
+            size_t operator()(const TextureSamplerDescription& samplerDescription) const noexcept
+            {
+                size_t hash = std::hash<uint8_t>{}(static_cast<uint8_t>(samplerDescription.MinFilter));
+                hash ^= std::hash<uint8_t>{}(static_cast<uint8_t>(samplerDescription.MagFilter)) << 1;
+                hash ^= std::hash<uint8_t>{}(static_cast<uint8_t>(samplerDescription.WrapU)) << 2;
+                hash ^= std::hash<uint8_t>{}(static_cast<uint8_t>(samplerDescription.WrapV)) << 3;
+                hash ^= std::hash<uint8_t>{}(static_cast<uint8_t>(samplerDescription.WrapW)) << 4;
+                return hash;
+            }
+        };
+
+        struct TextureBindingCacheKey
+        {
+            nvrhi::IBindingLayout* Layout = nullptr;
+            nvrhi::ITexture* Texture = nullptr;
+            TextureSamplerDescription SamplerDescription{};
+
+            bool operator==(const TextureBindingCacheKey& other) const noexcept
+            {
+                return Layout == other.Layout &&
+                       Texture == other.Texture &&
+                       SamplerDescription == other.SamplerDescription;
+            }
+        };
+
+        struct TextureBindingCacheKeyHasher
+        {
+            size_t operator()(const TextureBindingCacheKey& key) const noexcept
+            {
+                const size_t layoutHash = std::hash<nvrhi::IBindingLayout*>{}(key.Layout);
+                const size_t textureHash = std::hash<nvrhi::ITexture*>{}(key.Texture);
+                const size_t samplerHash = TextureSamplerDescriptionHasher{}(key.SamplerDescription);
+                return layoutHash ^ (textureHash << 1) ^ (samplerHash << 2);
+            }
+        };
+
         void ReportRendererTeardownException(const std::exception& exception) noexcept
         {
             std::fprintf(stderr, "Renderer teardown suppressed an exception: %s\n", exception.what());
@@ -30,6 +105,8 @@ namespace Life
         TextureResource* ActiveColorTarget = nullptr;
         nvrhi::ITexture* CachedColorTarget = nullptr;
         nvrhi::IDevice* CachedDevice = nullptr;
+        std::unordered_map<TextureSamplerDescription, nvrhi::SamplerHandle, TextureSamplerDescriptionHasher> TextureSamplers;
+        std::unordered_map<TextureBindingCacheKey, nvrhi::BindingSetHandle, TextureBindingCacheKeyHasher> TextureBindingSets;
         uint32_t CachedFramebufferWidth = 0;
         uint32_t CachedFramebufferHeight = 0;
         nvrhi::Viewport PendingViewport = nvrhi::Viewport();
@@ -57,6 +134,8 @@ namespace Life
                 m_Impl->ActiveColorTarget = nullptr;
                 m_Impl->CachedColorTarget = nullptr;
                 m_Impl->CachedDevice = nullptr;
+                m_Impl->TextureSamplers.clear();
+                m_Impl->TextureBindingSets.clear();
                 m_Impl->CachedFramebufferWidth = 0;
                 m_Impl->CachedFramebufferHeight = 0;
             }
@@ -127,7 +206,8 @@ namespace Life
 
     void Renderer::Submit(GraphicsPipeline& pipeline,
                           GraphicsBuffer& vertexBuffer,
-                          uint32_t vertexCount)
+                          uint32_t vertexCount,
+                          TextureResource* texture)
     {
         nvrhi::ICommandList* commandList = m_GraphicsDevice.GetCurrentCommandList();
         if (!commandList)
@@ -165,6 +245,73 @@ namespace Life
             state.viewport.addViewportAndScissorRect(nvrhi::Viewport(
                 static_cast<float>(framebufferExtent.Width),
                 static_cast<float>(framebufferExtent.Height)));
+        }
+
+        if (pipeline.GetDescription().UseTextureBinding)
+        {
+            if (texture == nullptr || !texture->IsValid())
+            {
+                LOG_CORE_WARN("Renderer::Submit: Textured pipeline '{}' received no valid texture.",
+                              pipeline.GetDescription().DebugName);
+                return;
+            }
+
+            nvrhi::IDevice* nvrhiDevice = m_GraphicsDevice.GetNvrhiDevice();
+            if (!nvrhiDevice)
+                return;
+
+            nvrhi::IBindingLayout* bindingLayout = pipeline.GetNativeBindingLayoutHandle();
+            if (!bindingLayout)
+            {
+                LOG_CORE_ERROR("Renderer::Submit: Textured pipeline '{}' has no binding layout.",
+                               pipeline.GetDescription().DebugName);
+                return;
+            }
+
+            nvrhi::ITexture* nativeTexture = texture->GetNativeHandle();
+            if (!nativeTexture)
+            {
+                LOG_CORE_WARN("Renderer::Submit: Textured pipeline '{}' received a texture with no native handle.",
+                              pipeline.GetDescription().DebugName);
+                return;
+            }
+
+            const TextureSamplerDescription& samplerDescription = texture->GetSamplerDescription();
+            auto samplerIt = m_Impl->TextureSamplers.find(samplerDescription);
+            if (samplerIt == m_Impl->TextureSamplers.end())
+            {
+                nvrhi::SamplerHandle sampler = nvrhiDevice->createSampler(ToNvrhiSamplerDesc(samplerDescription));
+                if (!sampler)
+                {
+                    LOG_CORE_ERROR("Renderer::Submit: Failed to create texture sampler for pipeline '{}'.",
+                                   pipeline.GetDescription().DebugName);
+                    return;
+                }
+
+                samplerIt = m_Impl->TextureSamplers.emplace(samplerDescription, std::move(sampler)).first;
+            }
+
+            const TextureBindingCacheKey cacheKey{ bindingLayout, nativeTexture, samplerDescription };
+            auto bindingSetIt = m_Impl->TextureBindingSets.find(cacheKey);
+            if (bindingSetIt == m_Impl->TextureBindingSets.end())
+            {
+                nvrhi::BindingSetDesc bindingSetDesc;
+                bindingSetDesc.trackLiveness = true;
+                bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(0, nativeTexture));
+                bindingSetDesc.addItem(nvrhi::BindingSetItem::Sampler(0, samplerIt->second.Get()));
+
+                nvrhi::BindingSetHandle bindingSet = nvrhiDevice->createBindingSet(bindingSetDesc, bindingLayout);
+                if (!bindingSet)
+                {
+                    LOG_CORE_ERROR("Renderer::Submit: Failed to create texture binding set for pipeline '{}'.",
+                                   pipeline.GetDescription().DebugName);
+                    return;
+                }
+
+                bindingSetIt = m_Impl->TextureBindingSets.emplace(cacheKey, std::move(bindingSet)).first;
+            }
+
+            state.addBindingSet(bindingSetIt->second.Get());
         }
 
         commandList->setGraphicsState(state);

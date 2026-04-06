@@ -3,6 +3,7 @@
 #include "Engine.h"
 
 #include <functional>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
@@ -29,11 +30,13 @@ namespace RuntimeApp
         std::optional<std::reference_wrapper<Life::InputSystem>> m_InputSystem;
         std::optional<std::reference_wrapper<Life::CameraManager>> m_CameraManager;
         std::optional<std::reference_wrapper<Life::Renderer2D>> m_Renderer2D;
+        std::shared_ptr<Life::Assets::TextureAsset> m_CheckerTextureAsset;
         float m_ElapsedTime = 0.0f;
         bool m_HasLoggedRuntime = false;
         bool m_WasMovementInputActive = false;
         bool m_IsUsingPerspectiveCamera = false;
         std::string m_OrthographicCameraName = "Main2D";
         std::string m_PerspectiveCameraName = "PreviewPerspective";
+        std::string m_CheckerTextureKey = "Assets/Textures/Renderer2DChecker.ppm";
     };
 }

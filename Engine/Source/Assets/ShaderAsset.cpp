@@ -15,7 +15,7 @@
 
 namespace Life::Assets
 {
-    std::future<ShaderAsset::Ptr> ShaderAsset::LoadAsync(const std::string& key, Settings settings)
+    std::future<ShaderAsset::Ptr> ShaderAsset::LoadAsync(const std::string& key, const Settings& settings)
     {
         const uint64_t generation = AssetLoadCoordinator::GetGeneration();
 
@@ -90,7 +90,8 @@ namespace Life::Assets
 
             AssetLoadProgress::SetProgress(key, 0.30f, "Parsing...");
 
-            const auto parsedResult = ParseCombinedGlsl(key, resolvedPath, fileText, settings.Name);
+            const ParseCombinedGlslInput parseInput{ key, resolvedPath, fileText, settings.Name };
+            const auto parsedResult = ParseCombinedGlsl(parseInput);
             if (parsedResult.IsFailure())
             {
                 AssetLoadProgress::ClearProgress(key);
@@ -122,9 +123,9 @@ namespace Life::Assets
         });
     }
 
-    ShaderAsset::Ptr ShaderAsset::LoadBlocking(const std::string& key, Settings settings)
+    ShaderAsset::Ptr ShaderAsset::LoadBlocking(const std::string& key, const Settings& settings)
     {
-        auto future = LoadAsync(key, std::move(settings));
+        auto future = LoadAsync(key, settings);
         future.wait();
         return future.get();
     }
@@ -153,7 +154,8 @@ namespace Life::Assets
         ss << in.rdbuf();
         const std::string fileText = ss.str();
 
-        const auto parsedResult = ParseCombinedGlsl(key, resolvedPath, fileText, m_Settings.Name);
+        const ParseCombinedGlslInput parseInput{ key, resolvedPath, fileText, m_Settings.Name };
+        const auto parsedResult = ParseCombinedGlsl(parseInput);
         if (parsedResult.IsFailure())
         {
             LOG_CORE_ERROR("ShaderAsset::Reload: parse failed for '{}': {}", resolvedPath, parsedResult.GetError().GetErrorMessage());

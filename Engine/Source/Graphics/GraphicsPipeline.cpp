@@ -116,6 +116,27 @@ namespace Life
 
         // Create a binding layout for constant buffers and textures
         nvrhi::BindingLayoutHandle bindingLayout;
+        if (desc.UseTextureBinding)
+        {
+            nvrhi::BindingLayoutDesc bindingLayoutDesc;
+            bindingLayoutDesc.visibility = nvrhi::ShaderType::Pixel;
+            bindingLayoutDesc.registerSpace = 0;
+            bindingLayoutDesc.registerSpaceIsDescriptorSet = true;
+            bindingLayoutDesc.addItem(nvrhi::BindingLayoutItem::Texture_SRV(0));
+            bindingLayoutDesc.addItem(nvrhi::BindingLayoutItem::Sampler(0));
+
+            nvrhi::VulkanBindingOffsets bindingOffsets;
+            bindingOffsets.shaderResource = 0;
+            bindingOffsets.sampler = 1;
+            bindingLayoutDesc.bindingOffsets = bindingOffsets;
+
+            bindingLayout = nvrhiDevice->createBindingLayout(bindingLayoutDesc);
+            if (!bindingLayout)
+            {
+                LOG_CORE_ERROR("GraphicsPipeline::Create: Failed to create binding layout for '{}'.", desc.DebugName);
+                return nullptr;
+            }
+        }
 
         // Build the pipeline description
         nvrhi::GraphicsPipelineDesc pipelineDesc;
@@ -125,6 +146,8 @@ namespace Life
         pipelineDesc.primType = Internal::ToNvrhiPrimitiveType(desc.Topology);
         pipelineDesc.renderState.rasterState = Internal::ToNvrhiRasterState(desc.Rasterizer);
         pipelineDesc.renderState.depthStencilState = Internal::ToNvrhiDepthStencilState(desc.DepthStencil);
+        if (bindingLayout)
+            pipelineDesc.addBindingLayout(bindingLayout);
 
         nvrhi::BlendState blendState;
         blendState.targets[0] = Internal::ToNvrhiBlendRenderTarget(desc.Blend);

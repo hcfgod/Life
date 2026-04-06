@@ -99,9 +99,7 @@ namespace Life::Assets
     }
 
     Result<AssetRegistryCacheSnapshot> AssetRegistryCache::LoadFromFile(const std::filesystem::path& cacheFilePath,
-                                                                        uint32_t expectedDatabaseJsonVersion,
-                                                                        uint64_t expectedSourceSizeBytes,
-                                                                        int64_t expectedSourceLastWriteTimeTicks)
+                                                                        const AssetRegistryCacheExpectedState& expectedState)
     {
         if (cacheFilePath.empty())
         {
@@ -146,7 +144,7 @@ namespace Life::Assets
         {
             return Result<AssetRegistryCacheSnapshot>(readDbVersion.GetError());
         }
-        if (snapshot.DatabaseJsonVersion != expectedDatabaseJsonVersion)
+        if (snapshot.DatabaseJsonVersion != expectedState.DatabaseJsonVersion)
         {
             return Result<AssetRegistryCacheSnapshot>(ErrorCode::ResourceVersionMismatch, "AssetRegistryCache: database version mismatch");
         }
@@ -156,7 +154,7 @@ namespace Life::Assets
         {
             return Result<AssetRegistryCacheSnapshot>(readSourceSize.GetError());
         }
-        if (snapshot.SourceSizeBytes != expectedSourceSizeBytes)
+        if (snapshot.SourceSizeBytes != expectedState.SourceSizeBytes)
         {
             return Result<AssetRegistryCacheSnapshot>(ErrorCode::ResourceVersionMismatch, "AssetRegistryCache: source size mismatch");
         }
@@ -166,7 +164,7 @@ namespace Life::Assets
         {
             return Result<AssetRegistryCacheSnapshot>(readSourceTime.GetError());
         }
-        if (snapshot.SourceLastWriteTimeTicks != expectedSourceLastWriteTimeTicks)
+        if (snapshot.SourceLastWriteTimeTicks != expectedState.SourceLastWriteTimeTicks)
         {
             return Result<AssetRegistryCacheSnapshot>(ErrorCode::ResourceVersionMismatch, "AssetRegistryCache: source timestamp mismatch");
         }

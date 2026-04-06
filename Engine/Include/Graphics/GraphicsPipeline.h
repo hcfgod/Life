@@ -33,6 +33,7 @@ namespace Life
         BlendState Blend;
         std::vector<TextureFormat> RenderTargetFormats;
         TextureFormat DepthFormat = TextureFormat::Unknown;
+        bool UseTextureBinding = false;
     };
 
     class GraphicsPipeline

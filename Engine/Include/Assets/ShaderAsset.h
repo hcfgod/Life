@@ -25,8 +25,8 @@ namespace Life::Assets
             std::string Name;
         };
 
-        static std::future<Ptr> LoadAsync(const std::string& key, Settings settings = {});
-        static Ptr LoadBlocking(const std::string& key, Settings settings = {});
+        static std::future<Ptr> LoadAsync(const std::string& key, const Settings& settings = {});
+        static Ptr LoadBlocking(const std::string& key, const Settings& settings = {});
 
         const ParsedShaderStages& GetStages() const { return m_Stages; }
         const std::string& GetName() const { return m_Stages.Name; }

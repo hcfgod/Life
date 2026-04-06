@@ -22,6 +22,20 @@ namespace EditorApp
     {
         m_LayoutInitialized = false;
         EnsureEditorCamera();
+        if (auto* assetManager = GetApplication().TryGetService<Life::Assets::AssetManager>())
+        {
+            if (auto* assetDatabase = GetApplication().TryGetService<Life::Assets::AssetDatabase>())
+            {
+                m_CheckerTextureAsset = assetManager->GetOrLoad<Life::Assets::TextureAsset>(m_CheckerTextureKey, *assetDatabase);
+                if (!m_CheckerTextureAsset)
+                    LOG_WARN("Editor failed to load textured quad asset '{}'. Falling back to error texture.", m_CheckerTextureKey);
+                else
+                {
+                    m_CheckerTextureAsset->SetFilterModes(Life::TextureFilterMode::Nearest, Life::TextureFilterMode::Nearest);
+                    m_CheckerTextureAsset->SetWrapModes(Life::TextureWrapMode::Repeat, Life::TextureWrapMode::Repeat);
+                }
+            }
+        }
         LOG_INFO("Editor shell overlay attached.");
     }
 
@@ -37,6 +51,7 @@ namespace EditorApp
         }
 
         m_OwnsCamera = false;
+        m_CheckerTextureAsset.reset();
         LOG_INFO("Editor shell overlay detached.");
     }
 
@@ -352,8 +367,9 @@ namespace EditorApp
         }
 
         renderer->SetRenderTarget(m_SceneColorTarget.get());
+        Life::TextureResource* checkerTexture = m_CheckerTextureAsset ? m_CheckerTextureAsset->GetTexture() : nullptr;
         renderer2D->BeginScene(*editorCamera);
-        renderer2D->DrawQuad({ 0.0f, 0.0f, 0.0f }, { 3.5f, 3.5f }, { 0.20f, 0.55f, 0.95f, 1.0f });
+        renderer2D->DrawQuad({ 0.0f, 0.0f, 0.0f }, { 3.5f, 3.5f }, checkerTexture, { 1.0f, 1.0f, 1.0f, 1.0f });
         renderer2D->DrawRotatedQuad(
             { std::sin(m_ElapsedTime) * 1.75f, std::cos(m_ElapsedTime * 0.75f) * 1.25f, -0.5f },
             { 1.35f, 1.35f },

@@ -47,13 +47,12 @@ namespace Life::Assets
 
     static AssetRegistryCacheSnapshot BuildRegistryCacheSnapshot(
         const std::unordered_map<std::string, AssetDatabase::Record>& records,
-        uint64_t sourceSizeBytes,
-        int64_t sourceLastWriteTimeTicks)
+        const AssetRegistryCacheExpectedState& expectedState)
     {
         AssetRegistryCacheSnapshot snapshot{};
-        snapshot.DatabaseJsonVersion = kAssetDatabaseJsonVersion;
-        snapshot.SourceSizeBytes = sourceSizeBytes;
-        snapshot.SourceLastWriteTimeTicks = sourceLastWriteTimeTicks;
+        snapshot.DatabaseJsonVersion = expectedState.DatabaseJsonVersion;
+        snapshot.SourceSizeBytes = expectedState.SourceSizeBytes;
+        snapshot.SourceLastWriteTimeTicks = expectedState.SourceLastWriteTimeTicks;
         snapshot.Entries.reserve(records.size());
 
         std::vector<const AssetDatabase::Record*> sortedRecords;
@@ -189,7 +188,7 @@ namespace Life::Assets
         {
             return Result<Record>(resolvedPathResult.GetError());
         }
-        const std::filesystem::path resolvedPath = resolvedPathResult.GetValue();
+        const std::filesystem::path& resolvedPath = resolvedPathResult.GetValue();
 
         if (!std::filesystem::exists(resolvedPath))
         {
@@ -229,7 +228,7 @@ namespace Life::Assets
         const uint32_t resolvedImporterVersion =
             importerVersion != 0u ? importerVersion : GetCurrentAssetImporterVersion(type);
 
-        Record record;
+        Record record{};
         record.Guid = guidResult.GetValue();
         record.Key = key;
         record.ResolvedPath = resolvedPath.string();
@@ -506,7 +505,7 @@ namespace Life::Assets
         const uint32_t resolvedImporterVersion =
             importerVersion != 0u ? importerVersion : GetCurrentAssetImporterVersion(type);
 
-        Record record;
+        Record record{};
         record.Guid = guid;
         record.Key = virtualKey;
         record.ResolvedPath = {};
@@ -648,7 +647,7 @@ namespace Life::Assets
             return Result<std::filesystem::path>(rootResult.GetError());
         }
 
-        const std::filesystem::path root = rootResult.GetValue();
+        const std::filesystem::path& root = rootResult.GetValue();
         return root / "Build" / "AssetDatabase.json";
     }
 
@@ -659,7 +658,7 @@ namespace Life::Assets
         {
             return Result<void>(pathResult.GetError());
         }
-        const std::filesystem::path dbPath = pathResult.GetValue();
+        const std::filesystem::path& dbPath = pathResult.GetValue();
         const std::filesystem::path projectRoot = dbPath.parent_path().parent_path();
         const std::filesystem::path projectAssetsRoot = projectRoot / "Assets";
 
@@ -673,14 +672,15 @@ namespace Life::Assets
             const uint64_t sourceSizeBytes = GetFileSizeOrZero(dbPath);
             const int64_t sourceLastWriteTimeTicks = GetLastWriteTimeTicksOrZero(dbPath);
             const std::filesystem::path cachePath = AssetRegistryCache::GetCacheFilePath(dbPath);
+            const AssetRegistryCacheExpectedState expectedState{
+                kAssetDatabaseJsonVersion,
+                sourceSizeBytes,
+                sourceLastWriteTimeTicks,
+            };
 
             auto loadFromCache = [&]() -> Result<void>
             {
-                const auto cacheLoadResult = AssetRegistryCache::LoadFromFile(
-                    cachePath,
-                    kAssetDatabaseJsonVersion,
-                    sourceSizeBytes,
-                    sourceLastWriteTimeTicks);
+                const auto cacheLoadResult = AssetRegistryCache::LoadFromFile(cachePath, expectedState);
                 if (cacheLoadResult.IsFailure())
                 {
                     return Result<void>(cacheLoadResult.GetError());
@@ -787,7 +787,7 @@ namespace Life::Assets
                     continue;
                 }
 
-                Record r = recResult.GetValue();
+                const Record& r = recResult.GetValue();
                 if (r.Guid.empty() || r.Key.empty()) continue;
 
                 if (r.SourceKind != AssetSourceKind::Generated)
@@ -799,14 +799,14 @@ namespace Life::Assets
                 }
 
                 m_GuidByKey[r.Key] = r.Guid;
-                m_ByGuid[r.Guid] = std::move(r);
+                m_ByGuid[r.Guid] = r;
             }
             RebuildDependentsIndexLocked();
             ++m_Revision;
 
             const auto cacheSaveResult = AssetRegistryCache::SaveToFile(
                 cachePath,
-                BuildRegistryCacheSnapshot(m_ByGuid, sourceSizeBytes, sourceLastWriteTimeTicks));
+                BuildRegistryCacheSnapshot(m_ByGuid, expectedState));
             if (cacheSaveResult.IsFailure())
             {
                 LOG_CORE_WARN("AssetDatabase: failed to save binary cache: {}",
@@ -828,7 +828,7 @@ namespace Life::Assets
         {
             return Result<void>(pathResult.GetError());
         }
-        const std::filesystem::path dbPath = pathResult.GetValue();
+        const std::filesystem::path& dbPath = pathResult.GetValue();
 
         try
         {
@@ -871,12 +871,15 @@ namespace Life::Assets
                 }
             }
 
+            const AssetRegistryCacheExpectedState expectedState{
+                kAssetDatabaseJsonVersion,
+                GetFileSizeOrZero(dbPath),
+                GetLastWriteTimeTicksOrZero(dbPath),
+            };
+
             const auto cacheSaveResult = AssetRegistryCache::SaveToFile(
                 AssetRegistryCache::GetCacheFilePath(dbPath),
-                BuildRegistryCacheSnapshot(
-                    m_ByGuid,
-                    GetFileSizeOrZero(dbPath),
-                    GetLastWriteTimeTicksOrZero(dbPath)));
+                BuildRegistryCacheSnapshot(m_ByGuid, expectedState));
             if (cacheSaveResult.IsFailure())
             {
                 LOG_CORE_WARN("AssetDatabase: failed to save binary cache: {}",

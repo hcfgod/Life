@@ -26,7 +26,25 @@ namespace Life::Assets
 
         TextureResource* GetTexture() const { return m_Texture.get(); }
         const TextureSpecification& GetSpecification() const { return m_Specification; }
-        void SetSpecification(const TextureSpecification& spec) { m_Specification = spec; }
+        void SetSpecification(const TextureSpecification& spec) { ApplySpecification(spec); }
+        void ApplySpecification(const TextureSpecification& spec);
+        void SetSamplerDescription(const TextureSamplerDescription& samplerDescription)
+        {
+            if (m_Texture)
+                m_Texture->SetSamplerDescription(samplerDescription);
+        }
+
+        void SetFilterModes(TextureFilterMode minFilter, TextureFilterMode magFilter)
+        {
+            if (m_Texture)
+                m_Texture->SetFilterModes(minFilter, magFilter);
+        }
+
+        void SetWrapModes(TextureWrapMode wrapU, TextureWrapMode wrapV, TextureWrapMode wrapW = TextureWrapMode::Repeat)
+        {
+            if (m_Texture)
+                m_Texture->SetWrapModes(wrapU, wrapV, wrapW);
+        }
 
         bool Reload() override;
 

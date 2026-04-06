@@ -51,6 +51,22 @@ namespace Life::Assets
     public:
         struct Record
         {
+            Record()
+                : Type(AssetType::Unknown)
+                , ImporterSettings(nlohmann::json::object())
+                , SourceSizeBytes(0)
+                , SourceLastWriteTimeTicks(0)
+                , ImporterSettingsHash64(0)
+                , ImporterVersion(0)
+                , SourceKind(AssetSourceKind::File)
+            {
+            }
+
+            Record(const Record&) = default;
+            Record(Record&&) noexcept = default;
+            Record& operator=(const Record&) = default;
+            Record& operator=(Record&&) noexcept = default;
+
             std::string Guid;
             std::string Key;
             std::string ResolvedPath;
