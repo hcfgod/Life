@@ -39,12 +39,12 @@ namespace Life
 
         struct QuadVertex
         {
-            glm::vec2 LocalPosition;
-            glm::vec3 QuadPosition;
+            glm::vec2 LocalPosition{ 0.0f, 0.0f };
+            glm::vec3 QuadPosition{ 0.0f, 0.0f, 0.0f };
             float QuadRotation = 0.0f;
-            glm::vec2 QuadSize;
-            glm::vec4 Color;
-            glm::vec2 TexCoord;
+            glm::vec2 QuadSize{ 0.0f, 0.0f };
+            glm::vec4 Color{ 1.0f, 1.0f, 1.0f, 1.0f };
+            glm::vec2 TexCoord{ 0.0f, 0.0f };
         };
 
         Scope<TextureResource> CreateSolidTexture(GraphicsDevice& device, const char* debugName,

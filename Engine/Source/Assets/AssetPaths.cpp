@@ -8,6 +8,7 @@
 #include <optional>
 #include <mutex>
 #include <cstdlib>
+#include <string>
 
 namespace Life::Assets
 {
@@ -20,6 +21,34 @@ namespace Life::Assets
     // Keep this as a trivial success value during static initialization.
     // Error object construction may query platform info, which is unsafe this early.
     static Result<std::filesystem::path> s_CachedResult(std::filesystem::path{});
+
+    static std::optional<std::string> TryGetEnvironmentVariable(const char* name)
+    {
+#ifdef LIFE_PLATFORM_WINDOWS
+        char* value = nullptr;
+        size_t valueLength = 0;
+        const errno_t result = _dupenv_s(&value, &valueLength, name);
+        if (result != 0 || value == nullptr)
+        {
+            if (value != nullptr)
+                std::free(value);
+            return std::nullopt;
+        }
+
+        std::string resolvedValue(value);
+        std::free(value);
+        if (resolvedValue.empty())
+            return std::nullopt;
+
+        return resolvedValue;
+#else
+        const char* value = std::getenv(name);
+        if (value == nullptr || value[0] == '\0')
+            return std::nullopt;
+
+        return std::string(value);
+#endif
+    }
 
     static std::optional<std::filesystem::path> TryResolveSharedEditorRoot()
     {
@@ -57,20 +86,17 @@ namespace Life::Assets
 
         // Optional explicit shared-assets root.
         // Must point to the directory that contains "Assets/".
-        if (const char* env = std::getenv("LIFE_SHARED_ASSET_ROOT"))
+        if (const auto env = TryGetEnvironmentVariable("LIFE_SHARED_ASSET_ROOT"); env.has_value())
         {
-            if (env[0] != '\0')
-            {
-                std::filesystem::path candidate = std::filesystem::weakly_canonical(std::filesystem::path(env));
-                if (candidate.filename() == "Assets")
-                    candidate = candidate.parent_path();
+            std::filesystem::path candidate = std::filesystem::weakly_canonical(std::filesystem::path(*env));
+            if (candidate.filename() == "Assets")
+                candidate = candidate.parent_path();
 
-                std::error_code envEc;
-                if (std::filesystem::exists(candidate / "Assets", envEc) &&
-                    std::filesystem::is_directory(candidate / "Assets", envEc))
-                {
-                    return candidate;
-                }
+            std::error_code envEc;
+            if (std::filesystem::exists(candidate / "Assets", envEc) &&
+                std::filesystem::is_directory(candidate / "Assets", envEc))
+            {
+                return candidate;
             }
         }
 
@@ -186,28 +212,25 @@ namespace Life::Assets
 
         // Environment override (optional):
         // Set `LIFE_ASSET_ROOT` to a directory that contains `Assets/`.
-        if (const char* env = std::getenv("LIFE_ASSET_ROOT"))
+        if (const auto env = TryGetEnvironmentVariable("LIFE_ASSET_ROOT"); env.has_value())
         {
-            if (env[0] != '\0')
+            std::filesystem::path candidate = std::filesystem::weakly_canonical(std::filesystem::path(*env));
+            if (candidate.filename() == "Assets")
             {
-                std::filesystem::path candidate = std::filesystem::weakly_canonical(std::filesystem::path(env));
-                if (candidate.filename() == "Assets")
-                {
-                    candidate = candidate.parent_path();
-                }
+                candidate = candidate.parent_path();
+            }
 
-                std::error_code envEc;
-                if (std::filesystem::exists(candidate, envEc) && std::filesystem::is_directory(candidate, envEc))
+            std::error_code envEc;
+            if (std::filesystem::exists(candidate, envEc) && std::filesystem::is_directory(candidate, envEc))
+            {
+                const std::filesystem::path assetsDir = candidate / "Assets";
+                if (std::filesystem::exists(assetsDir, envEc) && std::filesystem::is_directory(assetsDir, envEc))
                 {
-                    const std::filesystem::path assetsDir = candidate / "Assets";
-                    if (std::filesystem::exists(assetsDir, envEc) && std::filesystem::is_directory(assetsDir, envEc))
-                    {
-                        Result<std::filesystem::path> ok = candidate;
-                        std::lock_guard<std::mutex> lock(s_CacheMutex);
-                        s_CachedResult = ok;
-                        s_HasCached = true;
-                        return ok;
-                    }
+                    Result<std::filesystem::path> ok = candidate;
+                    std::lock_guard<std::mutex> lock(s_CacheMutex);
+                    s_CachedResult = ok;
+                    s_HasCached = true;
+                    return ok;
                 }
             }
         }
