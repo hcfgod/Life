@@ -221,9 +221,9 @@ namespace Life
         Error(ErrorCode code, std::string message, 
               const std::source_location& location,
               ErrorSeverity severity = ErrorSeverity::Error);
-        Error(const Error&) = default;
+        Error(const Error& other);
         Error(Error&&) noexcept = default;
-        Error& operator=(const Error&) = default;
+        Error& operator=(const Error& other);
         Error& operator=(Error&&) noexcept = default;
         ~Error() override = default;
         

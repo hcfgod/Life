@@ -89,6 +89,12 @@ namespace Life
     private:
         static constexpr std::size_t MaxMouseButtons = InputCodeLimits::MouseButtonCount;
 
+        struct MouseMotion
+        {
+            InputVector2 Position{};
+            InputVector2 Delta{};
+        };
+
         struct PerGamepadState
         {
             GamepadId Id = 0;
@@ -101,7 +107,7 @@ namespace Life
 
         void CloseAllGamepads() noexcept;
         void OnKey(KeyCode keyCode, bool down, bool repeat);
-        void OnMouseMotion(const InputVector2& position, const InputVector2& delta);
+        void OnMouseMotion(const MouseMotion& motion);
         void OnMouseButton(MouseButtonCode button, bool down);
         void OnMouseWheel(float offsetX, float offsetY);
         void OnGamepadAdded(GamepadId which);

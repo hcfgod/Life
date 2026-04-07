@@ -145,69 +145,70 @@ namespace Life
 
         switch (event.type)
         {
-        case SDL_EVENT_KEY_DOWN:
-        case SDL_EVENT_KEY_UP:
-            if (m_KeyboardInputBlocked)
-                break;
-            OnKey(ToKeyCode(event.key.scancode), event.key.down, event.key.repeat);
+            case SDL_EVENT_KEY_DOWN:
+            case SDL_EVENT_KEY_UP:
+                if (m_KeyboardInputBlocked)
+                    break;
+                OnKey(ToKeyCode(event.key.scancode), event.key.down, event.key.repeat);
             break;
 
-        case SDL_EVENT_MOUSE_MOTION:
-            if (m_MouseInputBlocked)
+            case SDL_EVENT_MOUSE_MOTION:
+                if (m_MouseInputBlocked)
+                {
+                    m_MousePosition = { event.motion.x, event.motion.y };
+                    break;
+                }
+                OnMouseMotion(MouseMotion{{ event.motion.x, event.motion.y }, { event.motion.xrel, event.motion.yrel }});
+            break;
+
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+                if (m_MouseInputBlocked)
+                    break;
+                OnMouseButton(ToMouseButtonCode(event.button.button), event.button.down);
+            break;
+
+            case SDL_EVENT_MOUSE_WHEEL:
+                if (m_MouseInputBlocked)
+                    break;
+                OnMouseWheel(event.wheel.x, event.wheel.y);
+            break;
+
+            case SDL_EVENT_GAMEPAD_ADDED:
             {
-                m_MousePosition = { event.motion.x, event.motion.y };
+                GamepadId gamepadId = 0;
+                if (TryConvertSdlGamepadId(event.gdevice.which, gamepadId))
+                    OnGamepadAdded(gamepadId);
                 break;
             }
-            OnMouseMotion({ event.motion.x, event.motion.y }, { event.motion.xrel, event.motion.yrel });
-            break;
 
-        case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        case SDL_EVENT_MOUSE_BUTTON_UP:
-            if (m_MouseInputBlocked)
+            case SDL_EVENT_GAMEPAD_REMOVED:
+            {
+                GamepadId gamepadId = 0;
+                if (TryConvertSdlGamepadId(event.gdevice.which, gamepadId))
+                    OnGamepadRemoved(gamepadId);
                 break;
-            OnMouseButton(ToMouseButtonCode(event.button.button), event.button.down);
-            break;
+            }
 
-        case SDL_EVENT_MOUSE_WHEEL:
-            if (m_MouseInputBlocked)
+            case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+            {
+                GamepadId gamepadId = 0;
+                if (TryConvertSdlGamepadId(event.gaxis.which, gamepadId))
+                    OnGamepadAxis(gamepadId, ToGamepadAxisCode(static_cast<SDL_GamepadAxis>(event.gaxis.axis)), event.gaxis.value);
                 break;
-            OnMouseWheel(event.wheel.x, event.wheel.y);
-            break;
+            }
 
-        case SDL_EVENT_GAMEPAD_ADDED:
-        {
-            GamepadId gamepadId = 0;
-            if (TryConvertSdlGamepadId(event.gdevice.which, gamepadId))
-                OnGamepadAdded(gamepadId);
-            break;
-        }
+            case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+            case SDL_EVENT_GAMEPAD_BUTTON_UP:
+            {
+                GamepadId gamepadId = 0;
+                if (TryConvertSdlGamepadId(event.gbutton.which, gamepadId))
+                    OnGamepadButton(gamepadId, ToGamepadButtonCode(static_cast<SDL_GamepadButton>(event.gbutton.button)), event.gbutton.down);
+                break;
+            }
 
-        case SDL_EVENT_GAMEPAD_REMOVED:
-        {
-            GamepadId gamepadId = 0;
-            if (TryConvertSdlGamepadId(event.gdevice.which, gamepadId))
-                OnGamepadRemoved(gamepadId);
-            break;
-        }
-
-        case SDL_EVENT_GAMEPAD_AXIS_MOTION:
-        {
-            GamepadId gamepadId = 0;
-            if (TryConvertSdlGamepadId(event.gaxis.which, gamepadId))
-                OnGamepadAxis(gamepadId, ToGamepadAxisCode(static_cast<SDL_GamepadAxis>(event.gaxis.axis)), event.gaxis.value);
-            break;
-        }
-
-        case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
-        case SDL_EVENT_GAMEPAD_BUTTON_UP:
-        {
-            GamepadId gamepadId = 0;
-            if (TryConvertSdlGamepadId(event.gbutton.which, gamepadId))
-                OnGamepadButton(gamepadId, ToGamepadButtonCode(static_cast<SDL_GamepadButton>(event.gbutton.button)), event.gbutton.down);
-            break;
-        }
-
-        default:
+            default:
+            
             break;
         }
     }
@@ -477,16 +478,16 @@ namespace Life
         }
     }
 
-    void InputSystem::OnMouseMotion(const InputVector2& position, const InputVector2& delta)
+    void InputSystem::OnMouseMotion(const MouseMotion& motion)
     {
-        m_MousePosition = position;
+        m_MousePosition = motion.Position;
         if (m_PendingSyntheticMouseMotionEvents > 0)
         {
             --m_PendingSyntheticMouseMotionEvents;
             return;
         }
 
-        m_MouseDelta += delta;
+        m_MouseDelta += motion.Delta;
     }
 
     void InputSystem::OnMouseButton(MouseButtonCode button, bool down)

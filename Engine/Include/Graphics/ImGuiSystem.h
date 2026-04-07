@@ -30,7 +30,7 @@ namespace Life
         void Render();
         void OnSdlEvent(const SDL_Event& event);
         void CaptureEvent(Event& event);
-        void* GetTextureHandle(TextureResource& texture);
+        bool DrawImage(TextureResource& texture, float width, float height);
         void ReleaseTextureHandle(TextureResource& texture) noexcept;
 
         bool IsInitialized() const noexcept { return m_Initialized; }

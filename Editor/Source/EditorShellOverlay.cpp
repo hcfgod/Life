@@ -1,13 +1,10 @@
 #include "Editor/EditorShellOverlay.h"
 
-#include <nvrhi/nvrhi.h>
-
 #if __has_include(<imgui.h>)
 #include <imgui.h>
 #include <imgui_internal.h>
 #endif
 
-#include <algorithm>
 #include <cmath>
 #include <string>
 
@@ -22,33 +19,34 @@ namespace EditorApp
     {
         m_LayoutInitialized = false;
         EnsureEditorCamera();
-        if (auto* assetManager = GetApplication().TryGetService<Life::Assets::AssetManager>())
+        Life::Application& application = GetApplication();
+        Life::Assets::AssetManager& assetManager = application.GetService<Life::Assets::AssetManager>();
+        m_CheckerTextureAsset = assetManager.GetOrLoad<Life::Assets::TextureAsset>(m_CheckerTextureKey);
+        if (!m_CheckerTextureAsset)
+            LOG_WARN("Editor failed to load textured quad asset '{}'. Falling back to error texture.", m_CheckerTextureKey);
+        else
         {
-            if (auto* assetDatabase = GetApplication().TryGetService<Life::Assets::AssetDatabase>())
-            {
-                m_CheckerTextureAsset = assetManager->GetOrLoad<Life::Assets::TextureAsset>(m_CheckerTextureKey, *assetDatabase);
-                if (!m_CheckerTextureAsset)
-                    LOG_WARN("Editor failed to load textured quad asset '{}'. Falling back to error texture.", m_CheckerTextureKey);
-                else
-                {
-                    m_CheckerTextureAsset->SetFilterModes(Life::TextureFilterMode::Nearest, Life::TextureFilterMode::Nearest);
-                    m_CheckerTextureAsset->SetWrapModes(Life::TextureWrapMode::Repeat, Life::TextureWrapMode::Repeat);
-                }
-            }
+            m_CheckerTextureAsset->SetFilterModes(Life::TextureFilterMode::Nearest, Life::TextureFilterMode::Nearest);
+            m_CheckerTextureAsset->SetWrapModes(Life::TextureWrapMode::Repeat, Life::TextureWrapMode::Repeat);
         }
+
+        if (application.HasService<Life::Renderer>() && application.HasService<Life::Renderer2D>())
+        {
+            m_SceneViewport = Life::CreateScope<Life::SceneViewport>(
+                application.GetService<Life::Renderer>(),
+                application.GetService<Life::Renderer2D>(),
+                application.GetService<Life::ImGuiSystem>());
+        }
+
         LOG_INFO("Editor shell overlay attached.");
     }
 
     void EditorShellOverlay::OnDetach()
     {
-        ReleaseSceneRenderTarget();
+        m_SceneViewport.reset();
 
-        Life::Application& application = GetApplication();
         if (m_OwnsCamera)
-        {
-            if (Life::CameraManager* cameraManager = application.TryGetService<Life::CameraManager>())
-                cameraManager->DestroyCamera(m_EditorCameraName);
-        }
+            GetApplication().GetService<Life::CameraManager>().DestroyCamera(m_EditorCameraName);
 
         m_OwnsCamera = false;
         m_CheckerTextureAsset.reset();
@@ -59,19 +57,16 @@ namespace EditorApp
     {
         m_ElapsedTime += timestep;
 
-        if (Life::InputSystem* inputSystem = GetApplication().TryGetService<Life::InputSystem>())
-        {
-            if (inputSystem->WasActionStartedThisFrame("Editor", "Quit"))
-                GetApplication().RequestShutdown();
-        }
+        if (GetApplication().GetService<Life::InputSystem>().WasActionStartedThisFrame("Editor", "Quit"))
+            GetApplication().RequestShutdown();
     }
 
     void EditorShellOverlay::OnRender()
     {
 #if __has_include(<imgui.h>)
         Life::Application& application = GetApplication();
-        Life::ImGuiSystem* imguiSystem = application.TryGetService<Life::ImGuiSystem>();
-        if (imguiSystem == nullptr || !imguiSystem->IsInitialized() || !imguiSystem->IsAvailable())
+        Life::ImGuiSystem& imguiSystem = application.GetService<Life::ImGuiSystem>();
+        if (!imguiSystem.IsInitialized() || !imguiSystem.IsAvailable())
             return;
 
         EnsureEditorCamera();
@@ -170,16 +165,13 @@ namespace EditorApp
         {
             if (ImGui::Begin("Inspector", &m_ShowInspectorPanel))
             {
-                if (Life::CameraManager* cameraManager = application.TryGetService<Life::CameraManager>())
+                if (Life::Camera* editorCamera = TryGetEditorCamera())
                 {
-                    if (Life::Camera* editorCamera = cameraManager->GetCamera(m_EditorCameraName))
-                    {
-                        const glm::vec3& position = editorCamera->GetPosition();
-                        ImGui::Text("Camera: %s", editorCamera->GetName().c_str());
-                        ImGui::Text("Projection: %s", editorCamera->GetProjectionType() == Life::ProjectionType::Perspective ? "Perspective" : "Orthographic");
-                        ImGui::Text("Position: %.2f %.2f %.2f", position.x, position.y, position.z);
-                        ImGui::Text("Aspect Ratio: %.3f", editorCamera->GetAspectRatio());
-                    }
+                    const glm::vec3& position = editorCamera->GetPosition();
+                    ImGui::Text("Camera: %s", editorCamera->GetName().c_str());
+                    ImGui::Text("Projection: %s", editorCamera->GetProjectionType() == Life::ProjectionType::Perspective ? "Perspective" : "Orthographic");
+                    ImGui::Text("Position: %.2f %.2f %.2f", position.x, position.y, position.z);
+                    ImGui::Text("Aspect Ratio: %.3f", editorCamera->GetAspectRatio());
                 }
             }
             ImGui::End();
@@ -200,13 +192,13 @@ namespace EditorApp
         {
             if (ImGui::Begin("Stats", &m_ShowStatsPanel))
             {
-                ImGui::Text("Graphics Backend: %s", imguiSystem->GetBackend() == Life::GraphicsBackend::Vulkan ? "Vulkan" : imguiSystem->GetBackend() == Life::GraphicsBackend::D3D12 ? "D3D12" : "None");
-                ImGui::Text("Viewport Size: %u x %u", m_ViewportWidth, m_ViewportHeight);
-                ImGui::Text("ImGui Keyboard Capture: %s", imguiSystem->WantsKeyboardCapture() ? "true" : "false");
-                ImGui::Text("ImGui Mouse Capture: %s", imguiSystem->WantsMouseCapture() ? "true" : "false");
-                if (Life::Renderer2D* renderer2D = application.TryGetService<Life::Renderer2D>())
+                ImGui::Text("Graphics Backend: %s", imguiSystem.GetBackend() == Life::GraphicsBackend::Vulkan ? "Vulkan" : imguiSystem.GetBackend() == Life::GraphicsBackend::D3D12 ? "D3D12" : "None");
+                ImGui::Text("Viewport Size: %u x %u", m_SceneViewport ? m_SceneViewport->GetWidth() : 0u, m_SceneViewport ? m_SceneViewport->GetHeight() : 0u);
+                ImGui::Text("ImGui Keyboard Capture: %s", imguiSystem.WantsKeyboardCapture() ? "true" : "false");
+                ImGui::Text("ImGui Mouse Capture: %s", imguiSystem.WantsMouseCapture() ? "true" : "false");
+                if (m_SceneViewport)
                 {
-                    const Life::Renderer2D::Statistics& stats = renderer2D->GetStats();
+                    const Life::Renderer2D::Statistics& stats = application.GetService<Life::Renderer2D>().GetStats();
                     ImGui::Separator();
                     ImGui::Text("Renderer2D Draw Calls: %u", stats.DrawCalls);
                     ImGui::Text("Renderer2D Quads: %u", stats.QuadCount);
@@ -224,12 +216,12 @@ namespace EditorApp
                 const ImVec2 availableRegion = ImGui::GetContentRegionAvail();
                 if (availableRegion.x >= 1.0f && availableRegion.y >= 1.0f)
                 {
-                    EnsureSceneRenderTarget(
-                        static_cast<uint32_t>(availableRegion.x),
-                        static_cast<uint32_t>(availableRegion.y));
-                    RenderSceneViewport(*imguiSystem);
-                    if (m_SceneTextureHandle != nullptr)
-                        ImGui::Image(ImTextureRef(m_SceneTextureHandle), availableRegion, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+                    if (!RenderSceneViewport(
+                            static_cast<uint32_t>(availableRegion.x),
+                            static_cast<uint32_t>(availableRegion.y)))
+                    {
+                        ImGui::TextUnformatted("Scene viewport rendering is unavailable.");
+                    }
                 }
                 else
                 {
@@ -254,145 +246,74 @@ namespace EditorApp
 
     void EditorShellOverlay::EnsureEditorCamera()
     {
-        Life::Application& application = GetApplication();
-        Life::CameraManager* cameraManager = application.TryGetService<Life::CameraManager>();
-        if (cameraManager == nullptr)
-            return;
+        Life::CameraManager& cameraManager = GetApplication().GetService<Life::CameraManager>();
 
-        Life::Camera* editorCamera = cameraManager->GetCamera(m_EditorCameraName);
-        if (editorCamera == nullptr)
-        {
-            Life::CameraSpecification cameraSpecification;
-            cameraSpecification.Name = m_EditorCameraName;
-            cameraSpecification.Projection = Life::ProjectionType::Orthographic;
-            cameraSpecification.AspectRatio = m_ViewportHeight > 0 ? static_cast<float>(m_ViewportWidth) / static_cast<float>(m_ViewportHeight) : 16.0f / 9.0f;
-            cameraSpecification.OrthoSize = 4.5f;
-            cameraSpecification.OrthoNear = 0.1f;
-            cameraSpecification.OrthoFar = 10.0f;
-            cameraSpecification.ClearColor = { 0.08f, 0.08f, 0.12f, 1.0f };
+        Life::CameraSpecification cameraSpecification;
+        cameraSpecification.Name = m_EditorCameraName;
+        cameraSpecification.Projection = Life::ProjectionType::Orthographic;
+        cameraSpecification.AspectRatio = (m_SceneViewport && m_SceneViewport->GetHeight() > 0)
+            ? static_cast<float>(m_SceneViewport->GetWidth()) / static_cast<float>(m_SceneViewport->GetHeight())
+            : 16.0f / 9.0f;
+        cameraSpecification.OrthoSize = 4.5f;
+        cameraSpecification.OrthoNear = 0.1f;
+        cameraSpecification.OrthoFar = 10.0f;
+        cameraSpecification.ClearColor = { 0.08f, 0.08f, 0.12f, 1.0f };
 
-            editorCamera = cameraManager->CreateCamera(cameraSpecification);
-            m_OwnsCamera = editorCamera != nullptr;
-        }
+        const bool alreadyExists = cameraManager.HasCamera(m_EditorCameraName);
+        Life::Camera& editorCamera = cameraManager.EnsureCamera(cameraSpecification);
+        if (!alreadyExists)
+            m_OwnsCamera = true;
 
-        if (editorCamera != nullptr)
-        {
-            Life::OrthographicProjectionParameters orthographicParameters;
-            orthographicParameters.Size = 4.5f;
-            orthographicParameters.NearClip = 0.1f;
-            orthographicParameters.FarClip = 10.0f;
-            editorCamera->SetOrthographic(orthographicParameters);
-            editorCamera->SetPosition({ 0.0f, 0.0f, 1.0f });
-            editorCamera->LookAt({ 0.0f, 0.0f, 0.0f });
-            cameraManager->SetPrimaryCamera(m_EditorCameraName);
-        }
+        Life::OrthographicProjectionParameters orthographicParameters;
+        orthographicParameters.Size = 4.5f;
+        orthographicParameters.NearClip = 0.1f;
+        orthographicParameters.FarClip = 10.0f;
+        editorCamera.SetOrthographic(orthographicParameters);
+        editorCamera.SetPosition({ 0.0f, 0.0f, 1.0f });
+        editorCamera.LookAt({ 0.0f, 0.0f, 0.0f });
+        cameraManager.SetPrimaryCamera(m_EditorCameraName);
     }
 
-    void EditorShellOverlay::EnsureSceneRenderTarget(uint32_t width, uint32_t height)
+    void EditorShellOverlay::DrawSceneViewportContent(Life::Renderer2D& renderer2D)
     {
-        width = std::max(width, 1u);
-        height = std::max(height, 1u);
-        if (m_SceneColorTarget && m_ViewportWidth == width && m_ViewportHeight == height)
-            return;
+        if (m_CheckerTextureAsset)
+            renderer2D.DrawQuad({ 0.0f, 0.0f, 0.0f }, { 3.5f, 3.5f }, *m_CheckerTextureAsset, { 1.0f, 1.0f, 1.0f, 1.0f });
+        else
+            renderer2D.DrawQuad({ 0.0f, 0.0f, 0.0f }, { 3.5f, 3.5f }, { 1.0f, 0.0f, 1.0f, 1.0f });
 
-        ReleaseSceneRenderTarget();
-
-        if (Life::GraphicsDevice* graphicsDevice = GetApplication().TryGetService<Life::GraphicsDevice>())
-        {
-            Life::TextureDescription textureDescription;
-            textureDescription.DebugName = "EditorSceneColorTarget";
-            textureDescription.Width = width;
-            textureDescription.Height = height;
-            textureDescription.Format = Life::TextureFormat::BGRA8_UNORM;
-            textureDescription.IsRenderTarget = true;
-            m_SceneColorTarget = Life::TextureResource::Create2D(*graphicsDevice, textureDescription);
-            if (m_SceneColorTarget)
-            {
-                m_ViewportWidth = width;
-                m_ViewportHeight = height;
-                if (!m_LoggedSceneViewportReady)
-                {
-                    LOG_INFO("Editor scene viewport render target created at {}x{}.", width, height);
-                    m_LoggedSceneViewportReady = true;
-                }
-                if (Life::CameraManager* cameraManager = GetApplication().TryGetService<Life::CameraManager>())
-                {
-                    if (Life::Camera* editorCamera = cameraManager->GetCamera(m_EditorCameraName))
-                        editorCamera->SetAspectRatio(static_cast<float>(width) / static_cast<float>(height));
-                }
-            }
-            else if (!m_LoggedSceneTargetFailure)
-            {
-                LOG_ERROR("Editor scene viewport render target creation failed at {}x{}.", width, height);
-                m_LoggedSceneTargetFailure = true;
-            }
-        }
-    }
-
-    void EditorShellOverlay::ReleaseSceneRenderTarget() noexcept
-    {
-        if (m_SceneColorTarget)
-        {
-            if (Life::ImGuiSystem* imguiSystem = GetApplication().TryGetService<Life::ImGuiSystem>())
-                imguiSystem->ReleaseTextureHandle(*m_SceneColorTarget);
-        }
-
-        m_SceneColorTarget.reset();
-        m_SceneTextureHandle = nullptr;
-        m_ViewportWidth = 0;
-        m_ViewportHeight = 0;
-        m_LoggedSceneViewportReady = false;
-    }
-
-    void EditorShellOverlay::RenderSceneViewport(Life::ImGuiSystem& imguiSystem)
-    {
-        Life::Application& application = GetApplication();
-        Life::Renderer* renderer = application.TryGetService<Life::Renderer>();
-        Life::Renderer2D* renderer2D = application.TryGetService<Life::Renderer2D>();
-        Life::CameraManager* cameraManager = application.TryGetService<Life::CameraManager>();
-        if (renderer == nullptr || renderer2D == nullptr || cameraManager == nullptr || !m_SceneColorTarget)
-            return;
-
-        Life::Camera* editorCamera = cameraManager->GetCamera(m_EditorCameraName);
-        if (editorCamera == nullptr)
-            return;
-
-        if (nvrhi::ICommandList* commandList = renderer->GetGraphicsDevice().GetCurrentCommandList())
-        {
-            if (nvrhi::ITexture* nativeTexture = m_SceneColorTarget->GetNativeHandle())
-            {
-                commandList->setTextureState(nativeTexture, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
-                commandList->commitBarriers();
-            }
-        }
-
-        renderer->SetRenderTarget(m_SceneColorTarget.get());
-        Life::TextureResource* checkerTexture = m_CheckerTextureAsset ? m_CheckerTextureAsset->GetTexture() : nullptr;
-        renderer2D->BeginScene(*editorCamera);
-        renderer2D->DrawQuad({ 0.0f, 0.0f, 0.0f }, { 3.5f, 3.5f }, checkerTexture, { 1.0f, 1.0f, 1.0f, 1.0f });
-        renderer2D->DrawRotatedQuad(
+        renderer2D.DrawRotatedQuad(
             { std::sin(m_ElapsedTime) * 1.75f, std::cos(m_ElapsedTime * 0.75f) * 1.25f, -0.5f },
             { 1.35f, 1.35f },
             m_ElapsedTime,
             { 0.95f, 0.45f, 0.25f, 0.90f });
-        renderer2D->DrawQuad({ -2.0f, -1.4f, -1.0f }, { 1.25f, 1.25f }, { 0.25f, 0.90f, 0.45f, 0.85f });
-        renderer2D->EndScene();
+        renderer2D.DrawQuad({ -2.0f, -1.4f, -1.0f }, { 1.25f, 1.25f }, { 0.25f, 0.90f, 0.45f, 0.85f });
+    }
 
-        if (nvrhi::ICommandList* commandList = renderer->GetGraphicsDevice().GetCurrentCommandList())
-        {
-            if (nvrhi::ITexture* nativeTexture = m_SceneColorTarget->GetNativeHandle())
-            {
-                commandList->setTextureState(nativeTexture, nvrhi::AllSubresources, nvrhi::ResourceStates::ShaderResource);
-                commandList->commitBarriers();
-            }
-        }
+    Life::Camera* EditorShellOverlay::TryGetEditorCamera()
+    {
+        return GetApplication().GetService<Life::CameraManager>().GetCamera(m_EditorCameraName);
+    }
 
-        renderer->SetRenderTarget(nullptr);
-        m_SceneTextureHandle = imguiSystem.GetTextureHandle(*m_SceneColorTarget);
-        if (m_SceneTextureHandle == nullptr && !m_LoggedSceneHandleFailure)
-        {
-            LOG_ERROR("Editor scene viewport failed to acquire an ImGui texture handle for the render target.");
-            m_LoggedSceneHandleFailure = true;
-        }
+    bool EditorShellOverlay::RenderSceneViewport(uint32_t width, uint32_t height)
+    {
+        if (!m_SceneViewport)
+            return false;
+
+        Life::Camera* editorCamera = TryGetEditorCamera();
+        if (editorCamera == nullptr)
+            return false;
+
+        if (!m_SceneViewport->Resize(width, height))
+            return false;
+
+        editorCamera->SetAspectRatio(static_cast<float>(m_SceneViewport->GetWidth()) / static_cast<float>(m_SceneViewport->GetHeight()));
+
+        if (!m_SceneViewport->BeginRender2D(*editorCamera))
+            return false;
+
+        DrawSceneViewportContent(m_SceneViewport->GetRenderer2D());
+        m_SceneViewport->EndRender2D();
+
+        return m_SceneViewport->Draw(static_cast<float>(width), static_cast<float>(height));
     }
 }

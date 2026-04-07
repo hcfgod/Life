@@ -1,6 +1,8 @@
 #include "Core/LifePCH.h"
 #include "Graphics/CameraManager.h"
 
+#include <stdexcept>
+
 namespace Life
 {
     Camera* CameraManager::CreateCamera(const CameraSpecification& specification)
@@ -17,6 +19,22 @@ namespace Life
             m_PrimaryCameraName = name;
 
         return cameraPtr;
+    }
+
+    Camera& CameraManager::EnsureCamera(const CameraSpecification& specification)
+    {
+        const std::string& name = specification.Name;
+        if (name.empty())
+            throw std::invalid_argument("CameraManager::EnsureCamera requires a non-empty camera name.");
+
+        if (Camera* existingCamera = GetCamera(name))
+            return *existingCamera;
+
+        Camera* createdCamera = CreateCamera(specification);
+        if (createdCamera == nullptr)
+            throw std::runtime_error("CameraManager::EnsureCamera failed to create the requested camera.");
+
+        return *createdCamera;
     }
 
     bool CameraManager::DestroyCamera(const std::string& name)

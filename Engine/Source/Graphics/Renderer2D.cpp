@@ -1,6 +1,7 @@
 #include "Core/LifePCH.h"
 #include "Graphics/Renderer2D.h"
 
+#include "Assets/TextureAsset.h"
 #include "Core/Log.h"
 #include "Graphics/Camera.h"
 #include "Graphics/GraphicsBuffer.h"
@@ -53,7 +54,7 @@ namespace Life
         std::vector<QuadVertex> Vertices;
         glm::mat4 ViewProjection{ 1.0f };
         Statistics Stats{};
-        TextureResource* BatchTexture = nullptr;
+        const TextureResource* BatchTexture = nullptr;
         Scope<TextureResource> WhiteTexture;
         Scope<TextureResource> ErrorTexture;
         uint32_t QuadCount = 0;
@@ -159,16 +160,28 @@ namespace Life
         DrawRotatedQuad(position, size, 0.0f, m_Impl->WhiteTexture.get(), color);
     }
 
-    void Renderer2D::DrawQuad(const glm::vec2& position, const glm::vec2& size, TextureResource* texture,
+    void Renderer2D::DrawQuad(const glm::vec2& position, const glm::vec2& size, const TextureResource* texture,
                               const glm::vec4& color)
     {
         DrawQuad(glm::vec3(position, 0.0f), size, texture, color);
     }
 
-    void Renderer2D::DrawQuad(const glm::vec3& position, const glm::vec2& size, TextureResource* texture,
+    void Renderer2D::DrawQuad(const glm::vec3& position, const glm::vec2& size, const TextureResource* texture,
                               const glm::vec4& color)
     {
         DrawRotatedQuad(position, size, 0.0f, texture, color);
+    }
+
+    void Renderer2D::DrawQuad(const glm::vec2& position, const glm::vec2& size, const Assets::TextureAsset& textureAsset,
+                              const glm::vec4& color)
+    {
+        DrawQuad(glm::vec3(position, 0.0f), size, textureAsset, color);
+    }
+
+    void Renderer2D::DrawQuad(const glm::vec3& position, const glm::vec2& size, const Assets::TextureAsset& textureAsset,
+                              const glm::vec4& color)
+    {
+        DrawRotatedQuad(position, size, 0.0f, textureAsset, color);
     }
 
     void Renderer2D::DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
@@ -178,7 +191,7 @@ namespace Life
     }
 
     void Renderer2D::DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
-                                     TextureResource* texture, const glm::vec4& color)
+                                     const TextureResource* texture, const glm::vec4& color)
     {
         if (!m_Impl->SceneActive)
             return;
@@ -188,6 +201,12 @@ namespace Life
             * glm::scale(glm::mat4(1.0f), glm::vec3(size, 1.0f));
 
         PushQuad(transform, color, { 0.0f, 0.0f }, { 1.0f, 1.0f }, texture);
+    }
+
+    void Renderer2D::DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
+                                     const Assets::TextureAsset& textureAsset, const glm::vec4& color)
+    {
+        DrawRotatedQuad(position, size, rotationRadians, textureAsset.TryGetTextureResource(), color);
     }
 
     const Renderer2D::Statistics& Renderer2D::GetStats() const noexcept
@@ -312,9 +331,9 @@ namespace Life
     }
 
     void Renderer2D::PushQuad(const glm::mat4& transform, const glm::vec4& color,
-                              const glm::vec2& uvMin, const glm::vec2& uvMax, TextureResource* texture)
+                              const glm::vec2& uvMin, const glm::vec2& uvMax, const TextureResource* texture)
     {
-        TextureResource* resolvedTexture = texture != nullptr ? texture : m_Impl->ErrorTexture.get();
+        const TextureResource* resolvedTexture = texture != nullptr ? texture : m_Impl->ErrorTexture.get();
         if (resolvedTexture == nullptr)
             return;
 

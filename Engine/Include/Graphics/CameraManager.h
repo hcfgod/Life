@@ -21,6 +21,7 @@ namespace Life
         CameraManager& operator=(CameraManager&&) = delete;
 
         Camera* CreateCamera(const CameraSpecification& specification);
+        Camera& EnsureCamera(const CameraSpecification& specification);
         bool DestroyCamera(const std::string& name);
 
         Camera* GetCamera(const std::string& name);

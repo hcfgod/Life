@@ -26,7 +26,7 @@ namespace Life
                              GraphicsPipeline& pipeline,
                              GraphicsBuffer& vertexBuffer,
                              uint32_t vertexCount,
-                             TextureResource* texture)
+                             const TextureResource* texture)
     {
         renderer.Submit(pipeline, vertexBuffer, vertexCount, texture);
     }

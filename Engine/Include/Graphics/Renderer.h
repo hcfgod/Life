@@ -63,7 +63,7 @@ namespace Life
         void Submit(GraphicsPipeline& pipeline,
                     GraphicsBuffer& vertexBuffer,
                     uint32_t vertexCount,
-                    TextureResource* texture = nullptr);
+                    const TextureResource* texture = nullptr);
 
         void SubmitIndexed(GraphicsPipeline& pipeline,
                            GraphicsBuffer& vertexBuffer,

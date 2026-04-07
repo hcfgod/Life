@@ -216,6 +216,7 @@ namespace Life
             RegisterBuiltInServices(m_Services, *this, *m_Application, m_Context, m_EventRouter, m_LayerStack, m_InputSystem, GetJobSystem(), Async::GetAsyncIO(), *m_Runtime, *m_Window);
             m_Services.Register<Assets::AssetDatabase>(m_AssetDatabase);
             m_Services.Register<Assets::AssetBundle>(m_AssetBundle);
+            m_AssetManager.BindDatabase(m_AssetDatabase);
             m_Services.Register<Assets::AssetManager>(m_AssetManager);
             m_CameraManager = CreateScope<CameraManager>();
             m_Services.Register<CameraManager>(*m_CameraManager);

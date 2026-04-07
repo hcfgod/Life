@@ -24,7 +24,7 @@ namespace Life
                          GraphicsPipeline& pipeline,
                          GraphicsBuffer& vertexBuffer,
                          uint32_t vertexCount,
-                         TextureResource* texture = nullptr);
+                         const TextureResource* texture = nullptr);
 
         static void DrawIndexed(Renderer& renderer,
                                 GraphicsPipeline& pipeline,

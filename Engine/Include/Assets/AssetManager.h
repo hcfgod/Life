@@ -47,11 +47,44 @@ namespace Life::Assets
         AssetManager(const AssetManager&) = delete;
         AssetManager& operator=(const AssetManager&) = delete;
 
+        void BindDatabase(AssetDatabase& database) noexcept
+        {
+            std::unique_lock<std::shared_mutex> writeLock(m_Mutex);
+            m_Database = &database;
+        }
+
+        void UnbindDatabase() noexcept
+        {
+            std::unique_lock<std::shared_mutex> writeLock(m_Mutex);
+            m_Database = nullptr;
+        }
+
+        bool HasBoundDatabase() const noexcept
+        {
+            std::shared_lock<std::shared_mutex> readLock(m_Mutex);
+            return m_Database != nullptr;
+        }
+
         // -----------------------------------------------------------------
         // GetOrLoad<T>
         // Returns a cached shared_ptr if still alive, otherwise triggers
         // an async import via AssetImporter<T> and caches the result.
         // -----------------------------------------------------------------
+        template<typename T>
+        std::shared_ptr<T> GetOrLoad(const std::string& key)
+        {
+            AssetDatabase* database = nullptr;
+            {
+                std::shared_lock<std::shared_mutex> readLock(m_Mutex);
+                database = m_Database;
+            }
+
+            if (database == nullptr)
+                return nullptr;
+
+            return GetOrLoad<T>(key, *database);
+        }
+
         template<typename T>
         std::shared_ptr<T> GetOrLoad(const std::string& key, AssetDatabase& db)
         {
@@ -195,6 +228,7 @@ namespace Life::Assets
         std::unordered_map<std::string, std::weak_ptr<Asset>> m_KeyCache;
         std::unordered_map<std::string, std::weak_ptr<Asset>> m_GuidCache;
         std::unordered_map<std::string, std::chrono::steady_clock::time_point> m_FailedLoadRetryByKey;
+        AssetDatabase* m_Database = nullptr;
         std::chrono::milliseconds m_RetryCooldown{1000};
     };
 

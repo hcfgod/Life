@@ -25,6 +25,10 @@ namespace Life::Assets
         static Ptr LoadBlocking(const std::string& assetPath, const TextureSpecification& specification = {});
 
         TextureResource* GetTexture() const { return m_Texture.get(); }
+        TextureResource& GetTextureResource() { return *m_Texture; }
+        const TextureResource& GetTextureResource() const { return *m_Texture; }
+        TextureResource* TryGetTextureResource() noexcept { return m_Texture.get(); }
+        const TextureResource* TryGetTextureResource() const noexcept { return m_Texture.get(); }
         const TextureSpecification& GetSpecification() const { return m_Specification; }
         void SetSpecification(const TextureSpecification& spec) { ApplySpecification(spec); }
         void ApplySpecification(const TextureSpecification& spec);

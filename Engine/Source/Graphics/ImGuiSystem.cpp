@@ -593,16 +593,26 @@ namespace Life
 #endif
     }
 
-    void* ImGuiSystem::GetTextureHandle(TextureResource& texture)
+    bool ImGuiSystem::DrawImage(TextureResource& texture, float width, float height)
     {
 #if LIFE_HAS_IMGUI
         if (!m_Initialized || !m_Available || m_Impl == nullptr || !m_Impl->RendererBackend)
-            return nullptr;
+            return false;
 
-        return m_Impl->RendererBackend->GetTextureHandle(texture);
+        if (width <= 0.0f || height <= 0.0f)
+            return false;
+
+        void* textureHandle = m_Impl->RendererBackend->GetTextureHandle(texture);
+        if (textureHandle == nullptr)
+            return false;
+
+        ImGui::Image(ImTextureRef(textureHandle), ImVec2(width, height), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+        return true;
 #else
         (void)texture;
-        return nullptr;
+        (void)width;
+        (void)height;
+        return false;
 #endif
     }
 

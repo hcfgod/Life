@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Engine.h"
-#include "Graphics/TextureResource.h"
 
 #include <memory>
 #include <string>
@@ -22,9 +21,9 @@ namespace EditorApp
 
     private:
         void EnsureEditorCamera();
-        void EnsureSceneRenderTarget(uint32_t width, uint32_t height);
-        void ReleaseSceneRenderTarget() noexcept;
-        void RenderSceneViewport(Life::ImGuiSystem& imguiSystem);
+        void DrawSceneViewportContent(Life::Renderer2D& renderer2D);
+        Life::Camera* TryGetEditorCamera();
+        bool RenderSceneViewport(uint32_t width, uint32_t height);
 
         bool m_ShowHierarchyPanel = true;
         bool m_ShowInspectorPanel = true;
@@ -33,16 +32,10 @@ namespace EditorApp
         bool m_ShowScenePanel = true;
         bool m_LayoutInitialized = false;
         bool m_OwnsCamera = false;
-        bool m_LoggedSceneTargetFailure = false;
-        bool m_LoggedSceneHandleFailure = false;
-        bool m_LoggedSceneViewportReady = false;
         float m_ElapsedTime = 0.0f;
-        uint32_t m_ViewportWidth = 0;
-        uint32_t m_ViewportHeight = 0;
         std::string m_EditorCameraName = "EditorSceneCamera";
         std::string m_CheckerTextureKey = "Assets/Textures/Renderer2DChecker.ppm";
         std::shared_ptr<Life::Assets::TextureAsset> m_CheckerTextureAsset;
-        Life::Scope<Life::TextureResource> m_SceneColorTarget;
-        void* m_SceneTextureHandle = nullptr;
+        Life::Scope<Life::SceneViewport> m_SceneViewport;
     };
 }

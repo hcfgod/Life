@@ -207,7 +207,7 @@ namespace Life
     void Renderer::Submit(GraphicsPipeline& pipeline,
                           GraphicsBuffer& vertexBuffer,
                           uint32_t vertexCount,
-                          TextureResource* texture)
+                          const TextureResource* texture)
     {
         nvrhi::ICommandList* commandList = m_GraphicsDevice.GetCurrentCommandList();
         if (!commandList)

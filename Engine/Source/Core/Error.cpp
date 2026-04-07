@@ -45,6 +45,33 @@ namespace Life
         BuildContext();
     }
 
+    Error::Error(const Error& other)
+        : std::exception()
+        , m_Code(other.m_Code)
+        , m_Message(other.m_Message)
+        , m_Location(other.m_Location)
+        , m_Severity(other.m_Severity)
+        , m_Context(other.m_Context)
+        , m_SystemErrorCode(other.m_SystemErrorCode)
+        , m_WhatBuffer(other.m_WhatBuffer)
+    {
+    }
+
+    Error& Error::operator=(const Error& other)
+    {
+        if (this == &other)
+            return *this;
+
+        m_Code = other.m_Code;
+        m_Message = other.m_Message;
+        m_Location = other.m_Location;
+        m_Severity = other.m_Severity;
+        m_Context = other.m_Context;
+        m_SystemErrorCode = other.m_SystemErrorCode;
+        m_WhatBuffer = other.m_WhatBuffer;
+        return *this;
+    }
+
     const char* Error::what() const noexcept
     {
         try
