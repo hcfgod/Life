@@ -83,7 +83,7 @@ It currently provides:
 - batched non-indexed triangle submission
 - per-camera viewport/scissor setup
 
-During `DrawQuad(...)` and `DrawRotatedQuad(...)`, the renderer builds transformed quad vertices on the CPU and appends them to the current batch.
+During `DrawQuad(...)` and `DrawRotatedQuad(...)`, the renderer builds per-vertex local quad data plus per-quad transform attributes and appends them to the current batch.
 
 During `Flush()` and `EndScene()`, it:
 
@@ -92,7 +92,7 @@ During `Flush()` and `EndScene()`, it:
 - submits the draw through `RenderCommand::Draw(...)`
 - resets the batch for the next scene or flush boundary
 
-The current implementation deliberately keeps transform handling simple by multiplying each quad vertex by the scene view-projection matrix on the CPU before upload. That avoids introducing constant-buffer or push-constant machinery into the first-pass renderer.
+The current implementation now uploads a small scene constant buffer containing the view-projection matrix and lets the vertex shader apply per-quad translation, rotation, and size on the GPU. This removes CPU-side transform baking without requiring a full instancing path yet.
 
 ### `SceneSurface`
 
@@ -116,7 +116,7 @@ When `BeginScene(const Camera&)` is called, it:
 - converts the camera's normalized viewport into pixel-space viewport/scissor rectangles using the current framebuffer extent
 - applies viewport and scissor state through `RenderCommand`
 - clears the active back buffer when the camera uses `CameraClearMode::SolidColor`
-- caches the camera view-projection matrix for subsequent draws
+- uploads the camera view-projection matrix into a scene constant buffer for subsequent draws
 
 During `DrawQuad(...)` and `DrawRotatedQuad(...)`, the renderer builds:
 
@@ -126,7 +126,8 @@ During `DrawQuad(...)` and `DrawRotatedQuad(...)`, the renderer builds:
 
 Current implementation characteristics:
 
-- quad vertices are transformed on the CPU using the current view-projection matrix before upload
+- quad transforms are evaluated on the GPU from per-vertex local positions plus per-quad transform attributes
+- the current camera view-projection matrix is uploaded through a scene constant buffer at scene start
 - batched geometry is uploaded into one dynamic vertex buffer per flush
 - pipeline and shader acquisition are prepared internally before scene submission
 - draw submission now supports multiple texture batch ranges within one queued vertex upload instead of treating a single active texture as the architectural model

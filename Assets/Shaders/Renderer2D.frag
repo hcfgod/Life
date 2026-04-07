@@ -4,8 +4,8 @@
 layout(location = 0) in vec4 fragColor;
 layout(location = 1) in vec2 fragTexCoord;
 
-layout(set = 0, binding = 0) uniform texture2D uTexture;
-layout(set = 0, binding = 1) uniform sampler uTextureSampler;
+layout(set = 0, binding = 1) uniform texture2D uTexture;
+layout(set = 0, binding = 2) uniform sampler uTextureSampler;
 
 layout(location = 0) out vec4 outColor;
 

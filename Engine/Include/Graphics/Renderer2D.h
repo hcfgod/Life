@@ -61,9 +61,10 @@ namespace Life
 
     private:
         bool EnsureResourcesReady();
+        bool UpdateSceneConstants(const glm::mat4& viewProjection);
         void ResetQueuedDraws() noexcept;
         void SubmitQueuedDraws();
-        void PushQuad(const glm::mat4& transform, const glm::vec4& color,
+        void PushQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians, const glm::vec4& color,
                       const glm::vec2& uvMin, const glm::vec2& uvMax, const TextureResource* texture);
 
         Renderer& m_Renderer;

@@ -67,12 +67,14 @@ namespace Life
         struct TextureBindingCacheKey
         {
             nvrhi::IBindingLayout* Layout = nullptr;
+            nvrhi::IBuffer* ConstantBuffer = nullptr;
             nvrhi::ITexture* Texture = nullptr;
             TextureSamplerDescription SamplerDescription{};
 
             bool operator==(const TextureBindingCacheKey& other) const noexcept
             {
                 return Layout == other.Layout &&
+                       ConstantBuffer == other.ConstantBuffer &&
                        Texture == other.Texture &&
                        SamplerDescription == other.SamplerDescription;
             }
@@ -83,9 +85,10 @@ namespace Life
             size_t operator()(const TextureBindingCacheKey& key) const noexcept
             {
                 const size_t layoutHash = std::hash<nvrhi::IBindingLayout*>{}(key.Layout);
+                const size_t constantBufferHash = std::hash<nvrhi::IBuffer*>{}(key.ConstantBuffer);
                 const size_t textureHash = std::hash<nvrhi::ITexture*>{}(key.Texture);
                 const size_t samplerHash = TextureSamplerDescriptionHasher{}(key.SamplerDescription);
-                return layoutHash ^ (textureHash << 1) ^ (samplerHash << 2);
+                return layoutHash ^ (constantBufferHash << 1) ^ (textureHash << 2) ^ (samplerHash << 3);
             }
         };
 
@@ -210,7 +213,8 @@ namespace Life
     void Renderer::Submit(GraphicsPipeline& pipeline,
                           GraphicsBuffer& vertexBuffer,
                           const DrawParameters& drawParameters,
-                          const TextureResource* texture)
+                          const TextureResource* texture,
+                          const GraphicsBuffer* sceneConstants)
     {
         nvrhi::ICommandList* commandList = m_GraphicsDevice.GetCurrentCommandList();
         if (!commandList)
@@ -234,6 +238,12 @@ namespace Life
         EnsureFramebuffer();
         state.framebuffer = m_Impl->CurrentFramebuffer;
 
+        nvrhi::IDevice* nvrhiDevice = nullptr;
+        nvrhi::IBindingLayout* bindingLayout = nullptr;
+        nvrhi::IBuffer* nativeSceneConstants = nullptr;
+        TextureSamplerDescription samplerDescription{};
+        nvrhi::ITexture* nativeTexture = nullptr;
+
         if (m_Impl->HasPendingViewport)
         {
             state.viewport.addViewport(m_Impl->PendingViewport);
@@ -250,71 +260,117 @@ namespace Life
                 static_cast<float>(framebufferExtent.Height)));
         }
 
-        if (pipeline.GetDescription().UseTextureBinding)
+        if (pipeline.GetDescription().UseSceneConstants || pipeline.GetDescription().UseTextureBinding)
         {
-            if (texture == nullptr || !texture->IsValid())
-            {
-                LOG_CORE_WARN("Renderer::Submit: Textured pipeline '{}' received no valid texture.",
-                              pipeline.GetDescription().DebugName);
-                return;
-            }
-
-            nvrhi::IDevice* nvrhiDevice = m_GraphicsDevice.GetNvrhiDevice();
-            if (!nvrhiDevice)
-                return;
-
-            nvrhi::IBindingLayout* bindingLayout = pipeline.GetNativeBindingLayoutHandle();
+            bindingLayout = pipeline.GetNativeBindingLayoutHandle();
             if (!bindingLayout)
             {
-                LOG_CORE_ERROR("Renderer::Submit: Textured pipeline '{}' has no binding layout.",
+                LOG_CORE_ERROR("Renderer::Submit: Pipeline '{}' has no binding layout.",
                                pipeline.GetDescription().DebugName);
                 return;
             }
 
-            nvrhi::ITexture* nativeTexture = texture->GetNativeHandle();
-            if (!nativeTexture)
-            {
-                LOG_CORE_WARN("Renderer::Submit: Textured pipeline '{}' received a texture with no native handle.",
-                              pipeline.GetDescription().DebugName);
+            nvrhiDevice = m_GraphicsDevice.GetNvrhiDevice();
+            if (!nvrhiDevice)
                 return;
-            }
 
-            const TextureSamplerDescription& samplerDescription = texture->GetSamplerDescription();
-            auto samplerIt = m_Impl->TextureSamplers.find(samplerDescription);
-            if (samplerIt == m_Impl->TextureSamplers.end())
+            if (pipeline.GetDescription().UseSceneConstants)
             {
-                nvrhi::SamplerHandle sampler = nvrhiDevice->createSampler(ToNvrhiSamplerDesc(samplerDescription));
-                if (!sampler)
+                if (sceneConstants == nullptr || !sceneConstants->IsValid())
                 {
-                    LOG_CORE_ERROR("Renderer::Submit: Failed to create texture sampler for pipeline '{}'.",
-                                   pipeline.GetDescription().DebugName);
+                    LOG_CORE_WARN("Renderer::Submit: Scene-constant pipeline '{}' received no valid constant buffer.",
+                                  pipeline.GetDescription().DebugName);
                     return;
                 }
 
-                samplerIt = m_Impl->TextureSamplers.emplace(samplerDescription, std::move(sampler)).first;
+                nativeSceneConstants = sceneConstants->GetNativeHandle();
+                if (!nativeSceneConstants)
+                {
+                    LOG_CORE_WARN("Renderer::Submit: Scene-constant pipeline '{}' received a constant buffer with no native handle.",
+                                  pipeline.GetDescription().DebugName);
+                    return;
+                }
             }
 
-            const TextureBindingCacheKey cacheKey{ bindingLayout, nativeTexture, samplerDescription };
-            auto bindingSetIt = m_Impl->TextureBindingSets.find(cacheKey);
-            if (bindingSetIt == m_Impl->TextureBindingSets.end())
+            if (pipeline.GetDescription().UseTextureBinding)
             {
-                nvrhi::BindingSetDesc bindingSetDesc;
-                bindingSetDesc.trackLiveness = true;
-                bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(0, nativeTexture));
-                bindingSetDesc.addItem(nvrhi::BindingSetItem::Sampler(0, samplerIt->second.Get()));
-
-                nvrhi::BindingSetHandle bindingSet = nvrhiDevice->createBindingSet(bindingSetDesc, bindingLayout);
-                if (!bindingSet)
+                if (texture == nullptr || !texture->IsValid())
                 {
-                    LOG_CORE_ERROR("Renderer::Submit: Failed to create texture binding set for pipeline '{}'.",
-                                   pipeline.GetDescription().DebugName);
+                    LOG_CORE_WARN("Renderer::Submit: Textured pipeline '{}' received no valid texture.",
+                                  pipeline.GetDescription().DebugName);
                     return;
                 }
 
-                bindingSetIt = m_Impl->TextureBindingSets.emplace(cacheKey, std::move(bindingSet)).first;
-            }
+                nativeTexture = texture->GetNativeHandle();
+                if (!nativeTexture)
+                {
+                    LOG_CORE_WARN("Renderer::Submit: Textured pipeline '{}' received a texture with no native handle.",
+                                  pipeline.GetDescription().DebugName);
+                    return;
+                }
 
-            state.addBindingSet(bindingSetIt->second.Get());
+                samplerDescription = texture->GetSamplerDescription();
+                auto samplerIt = m_Impl->TextureSamplers.find(samplerDescription);
+                if (samplerIt == m_Impl->TextureSamplers.end())
+                {
+                    nvrhi::SamplerHandle sampler = nvrhiDevice->createSampler(ToNvrhiSamplerDesc(samplerDescription));
+                    if (!sampler)
+                    {
+                        LOG_CORE_ERROR("Renderer::Submit: Failed to create texture sampler for pipeline '{}'.",
+                                       pipeline.GetDescription().DebugName);
+                        return;
+                    }
+
+                    samplerIt = m_Impl->TextureSamplers.emplace(samplerDescription, std::move(sampler)).first;
+                }
+
+                const TextureBindingCacheKey cacheKey{ bindingLayout, nativeSceneConstants, nativeTexture, samplerDescription };
+                auto bindingSetIt = m_Impl->TextureBindingSets.find(cacheKey);
+                if (bindingSetIt == m_Impl->TextureBindingSets.end())
+                {
+                    nvrhi::BindingSetDesc bindingSetDesc;
+                    bindingSetDesc.trackLiveness = true;
+                    if (nativeSceneConstants)
+                        bindingSetDesc.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, nativeSceneConstants));
+                    bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(0, nativeTexture));
+                    bindingSetDesc.addItem(nvrhi::BindingSetItem::Sampler(0, samplerIt->second.Get()));
+
+                    nvrhi::BindingSetHandle bindingSet = nvrhiDevice->createBindingSet(bindingSetDesc, bindingLayout);
+                    if (!bindingSet)
+                    {
+                        LOG_CORE_ERROR("Renderer::Submit: Failed to create binding set for pipeline '{}'.",
+                                       pipeline.GetDescription().DebugName);
+                        return;
+                    }
+
+                    bindingSetIt = m_Impl->TextureBindingSets.emplace(cacheKey, std::move(bindingSet)).first;
+                }
+
+                state.addBindingSet(bindingSetIt->second.Get());
+            }
+            else
+            {
+                const TextureBindingCacheKey cacheKey{ bindingLayout, nativeSceneConstants, nullptr, {} };
+                auto bindingSetIt = m_Impl->TextureBindingSets.find(cacheKey);
+                if (bindingSetIt == m_Impl->TextureBindingSets.end())
+                {
+                    nvrhi::BindingSetDesc bindingSetDesc;
+                    bindingSetDesc.trackLiveness = true;
+                    bindingSetDesc.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, nativeSceneConstants));
+
+                    nvrhi::BindingSetHandle bindingSet = nvrhiDevice->createBindingSet(bindingSetDesc, bindingLayout);
+                    if (!bindingSet)
+                    {
+                        LOG_CORE_ERROR("Renderer::Submit: Failed to create scene-constant binding set for pipeline '{}'.",
+                                       pipeline.GetDescription().DebugName);
+                        return;
+                    }
+
+                    bindingSetIt = m_Impl->TextureBindingSets.emplace(cacheKey, std::move(bindingSet)).first;
+                }
+
+                state.addBindingSet(bindingSetIt->second.Get());
+            }
         }
 
         commandList->setGraphicsState(state);

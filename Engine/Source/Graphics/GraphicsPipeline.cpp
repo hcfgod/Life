@@ -116,18 +116,28 @@ namespace Life
 
         // Create a binding layout for constant buffers and textures
         nvrhi::BindingLayoutHandle bindingLayout;
-        if (desc.UseTextureBinding)
+        if (desc.UseSceneConstants || desc.UseTextureBinding)
         {
             nvrhi::BindingLayoutDesc bindingLayoutDesc;
-            bindingLayoutDesc.visibility = nvrhi::ShaderType::Pixel;
+            bindingLayoutDesc.visibility = nvrhi::ShaderType::AllGraphics;
             bindingLayoutDesc.registerSpace = 0;
             bindingLayoutDesc.registerSpaceIsDescriptorSet = true;
-            bindingLayoutDesc.addItem(nvrhi::BindingLayoutItem::Texture_SRV(0));
-            bindingLayoutDesc.addItem(nvrhi::BindingLayoutItem::Sampler(0));
 
             nvrhi::VulkanBindingOffsets bindingOffsets;
-            bindingOffsets.shaderResource = 0;
-            bindingOffsets.sampler = 1;
+            if (desc.UseSceneConstants)
+            {
+                bindingLayoutDesc.addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0));
+                bindingOffsets.constantBuffer = 0;
+            }
+
+            if (desc.UseTextureBinding)
+            {
+                bindingLayoutDesc.addItem(nvrhi::BindingLayoutItem::Texture_SRV(0));
+                bindingLayoutDesc.addItem(nvrhi::BindingLayoutItem::Sampler(0));
+                bindingOffsets.shaderResource = desc.UseSceneConstants ? 1 : 0;
+                bindingOffsets.sampler = desc.UseSceneConstants ? 2 : 1;
+            }
+
             bindingLayoutDesc.bindingOffsets = bindingOffsets;
 
             bindingLayout = nvrhiDevice->createBindingLayout(bindingLayoutDesc);

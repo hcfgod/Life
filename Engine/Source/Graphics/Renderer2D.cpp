@@ -24,6 +24,11 @@ namespace Life
         constexpr uint32_t MaxQuads = 1000;
         constexpr uint32_t VerticesPerQuad = 6;
 
+        struct Renderer2DSceneConstants
+        {
+            glm::mat4 ViewProjection{ 1.0f };
+        };
+
         struct QuadBatchRange
         {
             const TextureResource* Texture = nullptr;
@@ -34,7 +39,10 @@ namespace Life
 
         struct QuadVertex
         {
-            glm::vec4 Position;
+            glm::vec2 LocalPosition;
+            glm::vec3 QuadPosition;
+            float QuadRotation = 0.0f;
+            glm::vec2 QuadSize;
             glm::vec4 Color;
             glm::vec2 TexCoord;
         };
@@ -55,13 +63,13 @@ namespace Life
     struct Renderer2D::Impl
     {
         Scope<GraphicsBuffer> VertexBuffer;
+        Scope<GraphicsBuffer> SceneConstantBuffer;
         Scope<GraphicsPipeline> Pipeline;
         Shader* VertexShader = nullptr;
         Shader* PixelShader = nullptr;
         VertexLayout Layout;
         std::vector<QuadVertex> Vertices;
         std::vector<QuadBatchRange> Batches;
-        glm::mat4 ViewProjection{ 1.0f };
         Statistics Stats{};
         Scope<TextureResource> WhiteTexture;
         Scope<TextureResource> ErrorTexture;
@@ -111,7 +119,9 @@ namespace Life
         if (!EnsureResourcesReady())
             return;
 
-        m_Impl->ViewProjection = viewProjection;
+        if (!UpdateSceneConstants(viewProjection))
+            return;
+
         ResetQueuedDraws();
         m_Impl->SceneActive = true;
     }
@@ -179,11 +189,7 @@ namespace Life
         if (!m_Impl->SceneActive)
             return;
 
-        glm::mat4 transform = glm::translate(glm::mat4(1.0f), position)
-            * glm::rotate(glm::mat4(1.0f), rotationRadians, glm::vec3(0.0f, 0.0f, 1.0f))
-            * glm::scale(glm::mat4(1.0f), glm::vec3(size, 1.0f));
-
-        PushQuad(transform, color, { 0.0f, 0.0f }, { 1.0f, 1.0f }, texture);
+        PushQuad(position, size, rotationRadians, color, { 0.0f, 0.0f }, { 1.0f, 1.0f }, texture);
     }
 
     void Renderer2D::DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
@@ -218,13 +224,18 @@ namespace Life
 
         m_Impl->Layout = VertexLayout
         {
-            { "inPosition", VertexAttributeSemantic::Position, TextureFormat::RGBA32_FLOAT },
+            { "inLocalPosition", VertexAttributeSemantic::Position, TextureFormat::RG32_FLOAT },
+            { "inQuadTransform", VertexAttributeSemantic::Custom, TextureFormat::RGBA32_FLOAT },
+            { "inQuadSize", VertexAttributeSemantic::Custom, TextureFormat::RG32_FLOAT },
             { "inColor", VertexAttributeSemantic::Color, TextureFormat::RGBA32_FLOAT },
             { "inTexCoord", VertexAttributeSemantic::TexCoord0, TextureFormat::RG32_FLOAT }
         };
 
         if (!m_Impl->VertexBuffer)
             m_Impl->VertexBuffer = GraphicsBuffer::CreateDynamicVertex(device, vertexBufferSpecification);
+
+        if (!m_Impl->SceneConstantBuffer)
+            m_Impl->SceneConstantBuffer = GraphicsBuffer::CreateConstant(device, sizeof(Renderer2DSceneConstants), "Renderer2DSceneConstants");
 
         if (!m_Impl->WhiteTexture)
             m_Impl->WhiteTexture = CreateSolidTexture(device, "Renderer2DWhiteTexture", { 255, 255, 255, 255 });
@@ -278,6 +289,7 @@ namespace Life
             pipelineDescription.Blend.DstColorFactor = BlendFactor::InvSrcAlpha;
             pipelineDescription.Blend.SrcAlphaFactor = BlendFactor::One;
             pipelineDescription.Blend.DstAlphaFactor = BlendFactor::InvSrcAlpha;
+            pipelineDescription.UseSceneConstants = true;
             pipelineDescription.UseTextureBinding = true;
 
             m_Impl->Pipeline = m_Renderer.CreatePipeline(pipelineDescription);
@@ -285,6 +297,7 @@ namespace Life
 
         m_Impl->ResourcesReady =
             m_Impl->VertexBuffer != nullptr &&
+            m_Impl->SceneConstantBuffer != nullptr &&
             m_Impl->Pipeline != nullptr &&
             m_Impl->VertexShader != nullptr &&
             m_Impl->PixelShader != nullptr &&
@@ -296,8 +309,9 @@ namespace Life
             if (!m_Impl->ReportedInitializationFailure)
             {
                 LOG_CORE_ERROR(
-                    "Renderer2D failed to initialize required resources (VertexBuffer={}, Pipeline={}, VertexShader={}, PixelShader={}, WhiteTexture={}, ErrorTexture={}).",
+                    "Renderer2D failed to initialize required resources (VertexBuffer={}, SceneConstants={}, Pipeline={}, VertexShader={}, PixelShader={}, WhiteTexture={}, ErrorTexture={}).",
                     m_Impl->VertexBuffer != nullptr,
+                    m_Impl->SceneConstantBuffer != nullptr,
                     m_Impl->Pipeline != nullptr,
                     m_Impl->VertexShader != nullptr,
                     m_Impl->PixelShader != nullptr,
@@ -310,6 +324,22 @@ namespace Life
         }
 
         m_Impl->ReportedInitializationFailure = false;
+        return true;
+    }
+
+    bool Renderer2D::UpdateSceneConstants(const glm::mat4& viewProjection)
+    {
+        if (!m_Impl->SceneConstantBuffer)
+            return false;
+
+        Renderer2DSceneConstants sceneConstants;
+        sceneConstants.ViewProjection = viewProjection;
+        if (!m_Impl->SceneConstantBuffer->SetData(m_Renderer.GetGraphicsDevice(), &sceneConstants, sizeof(sceneConstants)))
+        {
+            LOG_CORE_ERROR("Renderer2D failed to upload scene constant data.");
+            return false;
+        }
+
         return true;
     }
 
@@ -346,7 +376,8 @@ namespace Life
                                 *m_Impl->Pipeline,
                                 *m_Impl->VertexBuffer,
                                 drawParameters,
-                                batch.Texture);
+                                batch.Texture,
+                                m_Impl->SceneConstantBuffer.get());
         }
 
         m_Impl->Stats.DrawCalls += static_cast<uint32_t>(m_Impl->Batches.size());
@@ -354,7 +385,7 @@ namespace Life
         ResetQueuedDraws();
     }
 
-    void Renderer2D::PushQuad(const glm::mat4& transform, const glm::vec4& color,
+    void Renderer2D::PushQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians, const glm::vec4& color,
                               const glm::vec2& uvMin, const glm::vec2& uvMax, const TextureResource* texture)
     {
         const TextureResource* resolvedTexture = texture != nullptr ? texture : m_Impl->ErrorTexture.get();
@@ -395,7 +426,10 @@ namespace Life
         for (size_t vertexIndex = 0; vertexIndex < quadPositions.size(); ++vertexIndex)
         {
             QuadVertex vertex;
-            vertex.Position = m_Impl->ViewProjection * transform * quadPositions[vertexIndex];
+            vertex.LocalPosition = glm::vec2(quadPositions[vertexIndex]);
+            vertex.QuadPosition = position;
+            vertex.QuadRotation = rotationRadians;
+            vertex.QuadSize = size;
             vertex.Color = color;
             vertex.TexCoord = quadTexCoords[vertexIndex];
             m_Impl->Vertices.push_back(vertex);

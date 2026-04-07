@@ -26,9 +26,10 @@ namespace Life
                              GraphicsPipeline& pipeline,
                              GraphicsBuffer& vertexBuffer,
                              const DrawParameters& drawParameters,
-                             const TextureResource* texture)
+                             const TextureResource* texture,
+                             const GraphicsBuffer* sceneConstants)
     {
-        renderer.Submit(pipeline, vertexBuffer, drawParameters, texture);
+        renderer.Submit(pipeline, vertexBuffer, drawParameters, texture, sceneConstants);
     }
 
     void RenderCommand::DrawIndexed(Renderer& renderer,

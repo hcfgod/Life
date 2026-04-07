@@ -63,7 +63,8 @@ namespace Life
         void Submit(GraphicsPipeline& pipeline,
                     GraphicsBuffer& vertexBuffer,
                     const DrawParameters& drawParameters = {},
-                    const TextureResource* texture = nullptr);
+                    const TextureResource* texture = nullptr,
+                    const GraphicsBuffer* sceneConstants = nullptr);
 
         void SubmitIndexed(GraphicsPipeline& pipeline,
                            GraphicsBuffer& vertexBuffer,

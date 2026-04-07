@@ -24,7 +24,8 @@ namespace Life
                          GraphicsPipeline& pipeline,
                          GraphicsBuffer& vertexBuffer,
                          const DrawParameters& drawParameters = {},
-                         const TextureResource* texture = nullptr);
+                         const TextureResource* texture = nullptr,
+                         const GraphicsBuffer* sceneConstants = nullptr);
 
         static void DrawIndexed(Renderer& renderer,
                                 GraphicsPipeline& pipeline,
