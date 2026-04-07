@@ -1,9 +1,8 @@
 #include "Core/LifePCH.h"
-#include "Graphics/SceneViewport.h"
+#include "Graphics/SceneSurface.h"
 
 #include "Core/Log.h"
 #include "Graphics/Camera.h"
-#include "Graphics/GraphicsDevice.h"
 #include "Graphics/ImGuiSystem.h"
 #include "Graphics/Renderer.h"
 #include "Graphics/Renderer2D.h"
@@ -13,19 +12,19 @@
 
 namespace Life
 {
-    SceneViewport::SceneViewport(Renderer& renderer, Renderer2D& renderer2D, ImGuiSystem& imguiSystem)
+    SceneSurface::SceneSurface(Renderer& renderer, Renderer2D& renderer2D, ImGuiSystem& imguiSystem)
         : m_Renderer(renderer)
         , m_Renderer2D(renderer2D)
         , m_ImGuiSystem(imguiSystem)
     {
     }
 
-    SceneViewport::~SceneViewport() noexcept
+    SceneSurface::~SceneSurface() noexcept
     {
         Reset();
     }
 
-    bool SceneViewport::Resize(uint32_t width, uint32_t height)
+    bool SceneSurface::Resize(uint32_t width, uint32_t height)
     {
         width = std::max(width, 1u);
         height = std::max(height, 1u);
@@ -35,7 +34,7 @@ namespace Life
         Reset();
 
         TextureDescription textureDescription;
-        textureDescription.DebugName = "SceneViewportColorTarget";
+        textureDescription.DebugName = "SceneSurfaceColorTarget";
         textureDescription.Width = width;
         textureDescription.Height = height;
         textureDescription.Format = TextureFormat::BGRA8_UNORM;
@@ -44,7 +43,7 @@ namespace Life
         m_ColorTarget = TextureResource::Create2D(m_Renderer.GetGraphicsDevice(), textureDescription);
         if (!m_ColorTarget)
         {
-            LOG_CORE_ERROR("SceneViewport failed to create a render target at {}x{}.", width, height);
+            LOG_CORE_ERROR("SceneSurface failed to create a render target at {}x{}.", width, height);
             return false;
         }
 
@@ -53,28 +52,28 @@ namespace Life
         return true;
     }
 
-    bool SceneViewport::BeginRender2D(const Camera& camera)
+    bool SceneSurface::BeginScene2D(const Camera& camera)
     {
         if (!m_ColorTarget)
             return false;
 
-        if (!BeginRender())
+        if (!BeginSurfaceRender())
             return false;
 
         m_Renderer2D.BeginScene(camera);
         return true;
     }
 
-    void SceneViewport::EndRender2D() noexcept
+    void SceneSurface::EndScene2D() noexcept
     {
         if (!m_RenderActive)
             return;
 
         m_Renderer2D.EndScene();
-        EndRender();
+        EndSurfaceRender();
     }
 
-    bool SceneViewport::Draw(float width, float height)
+    bool SceneSurface::Present(float width, float height)
     {
         if (!m_ColorTarget)
             return false;
@@ -82,10 +81,10 @@ namespace Life
         return m_ImGuiSystem.DrawImage(*m_ColorTarget, width, height);
     }
 
-    void SceneViewport::Reset() noexcept
+    void SceneSurface::Reset() noexcept
     {
         if (m_RenderActive)
-            EndRender2D();
+            EndScene2D();
 
         if (m_ColorTarget)
             m_ImGuiSystem.ReleaseTextureHandle(*m_ColorTarget);
@@ -96,22 +95,12 @@ namespace Life
         m_RenderActive = false;
     }
 
-    bool SceneViewport::IsReady() const noexcept
+    bool SceneSurface::IsReady() const noexcept
     {
         return m_ColorTarget != nullptr;
     }
 
-    TextureResource* SceneViewport::GetColorTarget() noexcept
-    {
-        return m_ColorTarget.get();
-    }
-
-    const TextureResource* SceneViewport::GetColorTarget() const noexcept
-    {
-        return m_ColorTarget.get();
-    }
-
-    bool SceneViewport::BeginRender()
+    bool SceneSurface::BeginSurfaceRender()
     {
         if (!m_ColorTarget || m_RenderActive)
             return false;
@@ -123,7 +112,7 @@ namespace Life
         return true;
     }
 
-    void SceneViewport::EndRender() noexcept
+    void SceneSurface::EndSurfaceRender() noexcept
     {
         if (!m_RenderActive)
             return;

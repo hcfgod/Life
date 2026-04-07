@@ -8,7 +8,7 @@ The repository is organized around four primary targets:
 
 - `Engine` - the core engine library containing application lifecycle, services, layers, overlays, input, logging, crash diagnostics, platform abstractions, rendering systems, camera management, and tooling integration points.
 - `Runtime` - the executable app that consumes `Engine`; treat it as the current game/runtime sandbox and integration sample for engine development.
-- `Editor` - the dedicated editor application target built on the same engine architecture, with docking UI and an offscreen scene viewport path.
+- `Editor` - the dedicated editor application target built on the same engine architecture, with docking UI and an offscreen scene-surface path.
 - `Test` - the doctest-based validation target for engine behavior, including lifecycle, event-flow, graphics, tooling, and regression coverage.
 
 The current platform layer is SDL-backed, with the runtime owning SDL subsystem lifetime and event polling while window objects stay focused on window state and native handles. The active rendering/tooling path is Vulkan-backed through NVRHI, with higher-level engine services layered above the backend device.
@@ -25,7 +25,7 @@ The workspace now includes a broader custom engine foundation than the original 
 - `Camera` and `CameraManager` provide named camera ownership, orthographic and perspective projections, primary-camera selection, per-camera clear settings, aspect-ratio updates, and viewport handling.
 - `ImGuiSystem` is host-owned and provides the current tooling bridge for docking UI, input capture, and texture-backed editor panels.
 - `Runtime` demonstrates scene-facing rendering, input actions, multi-camera usage, overlays, and host-owned engine services in a normal app context.
-- `Editor` demonstrates a dedicated tooling app with docking panels, stats, hierarchy/inspector-style UI, and an offscreen scene viewport rendered through engine services.
+- `Editor` demonstrates a dedicated tooling app with docking panels, stats, hierarchy/inspector-style UI, and an offscreen scene surface rendered through engine services.
 - Logging, crash diagnostics, structured error handling, and platform/runtime metadata are integrated as first-class engine systems rather than ad hoc utilities.
 
 ## Current Goals
@@ -205,7 +205,7 @@ At the moment it serves as a practical integration sample for:
 
 - host-owned `ImGuiSystem` initialization and docking UI
 - overlay-driven editor shell composition
-- offscreen scene viewport rendering into a texture-backed panel
+- offscreen scene-surface rendering into the editor `Scene` panel
 - camera inspection and editor-camera ownership through `CameraManager`
 - tooling input capture layered on top of the normal event and input pipeline
 
@@ -230,7 +230,7 @@ At the moment it serves as a practical integration sample for:
 - `Documents/EntryPointsAndBootstrap.md` - executable entry, SDL callback bootstrap, runner state, exception phases, and teardown boundaries.
 - `Documents/LayersAndOverlays.md` - the host-owned layer model, overlay ordering, traversal rules, and attach/detach semantics.
 - `Documents/Rendering.md` - rendering ownership, service boundaries, `GraphicsDevice`, `Renderer`, `Renderer2D`, cameras, and current Vulkan/NVRHI behavior.
-- `Documents/EditorAndTooling.md` - the dedicated editor app, host-owned `ImGuiSystem`, tooling event/frame integration, and the current scene viewport path.
+- `Documents/EditorAndTooling.md` - the dedicated editor app, host-owned `ImGuiSystem`, tooling event/frame integration, and the current scene-surface path.
 - `Documents/InputSystem.md` - host-owned input architecture, action assets, rebinding, and frame semantics.
 - `Documents/EventThreadingInvariants.md` - runtime ownership, event ordering, and thread-safety boundaries.
 - `Documents/Logging.md` - logging configuration, sink behavior, reconfiguration, and integration guidance.

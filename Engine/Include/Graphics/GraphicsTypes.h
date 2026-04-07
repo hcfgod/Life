@@ -158,6 +158,12 @@ namespace Life
         uint32_t Height = 0;
     };
 
+    struct DrawParameters
+    {
+        uint32_t VertexCount = 0;
+        uint32_t VertexOffset = 0;
+    };
+
     struct IndexedDrawParameters
     {
         uint32_t IndexCount = 0;

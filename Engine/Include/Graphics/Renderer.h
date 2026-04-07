@@ -62,7 +62,7 @@ namespace Life
 
         void Submit(GraphicsPipeline& pipeline,
                     GraphicsBuffer& vertexBuffer,
-                    uint32_t vertexCount,
+                    const DrawParameters& drawParameters = {},
                     const TextureResource* texture = nullptr);
 
         void SubmitIndexed(GraphicsPipeline& pipeline,
@@ -70,6 +70,8 @@ namespace Life
                            GraphicsBuffer& indexBuffer,
                            const IndexedDrawParameters& drawParameters = {});
 
+        bool PushRenderTarget(TextureResource& colorTarget);
+        void PopRenderTarget() noexcept;
         void SetRenderTarget(TextureResource* colorTarget);
         TextureResource* GetRenderTarget() const noexcept;
         FramebufferExtent GetFramebufferExtent() const;

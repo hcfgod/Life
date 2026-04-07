@@ -60,8 +60,9 @@ namespace Life
         void ResetStats() noexcept;
 
     private:
-        void InitializeResources();
-        void EnsurePipeline();
+        bool EnsureResourcesReady();
+        void ResetQueuedDraws() noexcept;
+        void SubmitQueuedDraws();
         void PushQuad(const glm::mat4& transform, const glm::vec4& color,
                       const glm::vec2& uvMin, const glm::vec2& uvMax, const TextureResource* texture);
 

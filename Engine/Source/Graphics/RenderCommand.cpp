@@ -25,10 +25,10 @@ namespace Life
     void RenderCommand::Draw(Renderer& renderer,
                              GraphicsPipeline& pipeline,
                              GraphicsBuffer& vertexBuffer,
-                             uint32_t vertexCount,
+                             const DrawParameters& drawParameters,
                              const TextureResource* texture)
     {
-        renderer.Submit(pipeline, vertexBuffer, vertexCount, texture);
+        renderer.Submit(pipeline, vertexBuffer, drawParameters, texture);
     }
 
     void RenderCommand::DrawIndexed(Renderer& renderer,

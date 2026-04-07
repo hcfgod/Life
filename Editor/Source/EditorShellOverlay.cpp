@@ -32,7 +32,7 @@ namespace EditorApp
 
         if (application.HasService<Life::Renderer>() && application.HasService<Life::Renderer2D>())
         {
-            m_SceneViewport = Life::CreateScope<Life::SceneViewport>(
+            m_SceneSurface = Life::CreateScope<Life::SceneSurface>(
                 application.GetService<Life::Renderer>(),
                 application.GetService<Life::Renderer2D>(),
                 application.GetService<Life::ImGuiSystem>());
@@ -43,7 +43,7 @@ namespace EditorApp
 
     void EditorShellOverlay::OnDetach()
     {
-        m_SceneViewport.reset();
+        m_SceneSurface.reset();
 
         if (m_OwnsCamera)
             GetApplication().GetService<Life::CameraManager>().DestroyCamera(m_EditorCameraName);
@@ -193,10 +193,10 @@ namespace EditorApp
             if (ImGui::Begin("Stats", &m_ShowStatsPanel))
             {
                 ImGui::Text("Graphics Backend: %s", imguiSystem.GetBackend() == Life::GraphicsBackend::Vulkan ? "Vulkan" : imguiSystem.GetBackend() == Life::GraphicsBackend::D3D12 ? "D3D12" : "None");
-                ImGui::Text("Viewport Size: %u x %u", m_SceneViewport ? m_SceneViewport->GetWidth() : 0u, m_SceneViewport ? m_SceneViewport->GetHeight() : 0u);
+                ImGui::Text("Scene Surface Size: %u x %u", m_SceneSurface ? m_SceneSurface->GetWidth() : 0u, m_SceneSurface ? m_SceneSurface->GetHeight() : 0u);
                 ImGui::Text("ImGui Keyboard Capture: %s", imguiSystem.WantsKeyboardCapture() ? "true" : "false");
                 ImGui::Text("ImGui Mouse Capture: %s", imguiSystem.WantsMouseCapture() ? "true" : "false");
-                if (m_SceneViewport)
+                if (m_SceneSurface)
                 {
                     const Life::Renderer2D::Statistics& stats = application.GetService<Life::Renderer2D>().GetStats();
                     ImGui::Separator();
@@ -216,16 +216,16 @@ namespace EditorApp
                 const ImVec2 availableRegion = ImGui::GetContentRegionAvail();
                 if (availableRegion.x >= 1.0f && availableRegion.y >= 1.0f)
                 {
-                    if (!RenderSceneViewport(
+                    if (!RenderSceneSurface(
                             static_cast<uint32_t>(availableRegion.x),
                             static_cast<uint32_t>(availableRegion.y)))
                     {
-                        ImGui::TextUnformatted("Scene viewport rendering is unavailable.");
+                        ImGui::TextUnformatted("Scene surface rendering is unavailable.");
                     }
                 }
                 else
                 {
-                    ImGui::TextUnformatted("Scene viewport has no drawable area.");
+                    ImGui::TextUnformatted("Scene surface has no drawable area.");
                 }
             }
             ImGui::End();
@@ -251,8 +251,8 @@ namespace EditorApp
         Life::CameraSpecification cameraSpecification;
         cameraSpecification.Name = m_EditorCameraName;
         cameraSpecification.Projection = Life::ProjectionType::Orthographic;
-        cameraSpecification.AspectRatio = (m_SceneViewport && m_SceneViewport->GetHeight() > 0)
-            ? static_cast<float>(m_SceneViewport->GetWidth()) / static_cast<float>(m_SceneViewport->GetHeight())
+        cameraSpecification.AspectRatio = (m_SceneSurface && m_SceneSurface->GetHeight() > 0)
+            ? static_cast<float>(m_SceneSurface->GetWidth()) / static_cast<float>(m_SceneSurface->GetHeight())
             : 16.0f / 9.0f;
         cameraSpecification.OrthoSize = 4.5f;
         cameraSpecification.OrthoNear = 0.1f;
@@ -274,7 +274,7 @@ namespace EditorApp
         cameraManager.SetPrimaryCamera(m_EditorCameraName);
     }
 
-    void EditorShellOverlay::DrawSceneViewportContent(Life::Renderer2D& renderer2D)
+    void EditorShellOverlay::DrawSceneSurfaceContent(Life::Renderer2D& renderer2D)
     {
         if (m_CheckerTextureAsset)
             renderer2D.DrawQuad({ 0.0f, 0.0f, 0.0f }, { 3.5f, 3.5f }, *m_CheckerTextureAsset, { 1.0f, 1.0f, 1.0f, 1.0f });
@@ -294,26 +294,26 @@ namespace EditorApp
         return GetApplication().GetService<Life::CameraManager>().GetCamera(m_EditorCameraName);
     }
 
-    bool EditorShellOverlay::RenderSceneViewport(uint32_t width, uint32_t height)
+    bool EditorShellOverlay::RenderSceneSurface(uint32_t width, uint32_t height)
     {
-        if (!m_SceneViewport)
+        if (!m_SceneSurface)
             return false;
 
         Life::Camera* editorCamera = TryGetEditorCamera();
         if (editorCamera == nullptr)
             return false;
 
-        if (!m_SceneViewport->Resize(width, height))
+        if (!m_SceneSurface->Resize(width, height))
             return false;
 
-        editorCamera->SetAspectRatio(static_cast<float>(m_SceneViewport->GetWidth()) / static_cast<float>(m_SceneViewport->GetHeight()));
+        editorCamera->SetAspectRatio(static_cast<float>(m_SceneSurface->GetWidth()) / static_cast<float>(m_SceneSurface->GetHeight()));
 
-        if (!m_SceneViewport->BeginRender2D(*editorCamera))
+        if (!m_SceneSurface->BeginScene2D(*editorCamera))
             return false;
 
-        DrawSceneViewportContent(m_SceneViewport->GetRenderer2D());
-        m_SceneViewport->EndRender2D();
+        DrawSceneSurfaceContent(m_SceneSurface->GetRenderer2D());
+        m_SceneSurface->EndScene2D();
 
-        return m_SceneViewport->Draw(static_cast<float>(width), static_cast<float>(height));
+        return m_SceneSurface->Present(static_cast<float>(width), static_cast<float>(height));
     }
 }

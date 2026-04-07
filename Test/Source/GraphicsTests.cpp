@@ -130,6 +130,39 @@ TEST_CASE("Renderer and Renderer2D stay safe no-op services without live frame r
     CHECK(renderer2D.GetStats().QuadCount == 0);
 }
 
+TEST_CASE("SceneSurface stays safe without live frame resources")
+{
+    Life::WindowSpecification windowSpecification;
+    windowSpecification.Title = "GraphicsTests";
+    TestWindow window(windowSpecification);
+
+    FakeGraphicsDevice graphicsDevice;
+    Life::Renderer renderer(graphicsDevice);
+    Life::Renderer2D renderer2D(renderer);
+    Life::ImGuiSystem imguiSystem(window, nullptr);
+    Life::SceneSurface sceneSurface(renderer, renderer2D, imguiSystem);
+
+    Life::CameraSpecification cameraSpecification;
+    cameraSpecification.Projection = Life::ProjectionType::Orthographic;
+    cameraSpecification.AspectRatio = 1.0f;
+    Life::Camera camera(cameraSpecification);
+
+    CHECK_FALSE(sceneSurface.IsReady());
+    CHECK_FALSE(sceneSurface.Resize(320, 180));
+    CHECK_FALSE(sceneSurface.IsReady());
+    CHECK(sceneSurface.GetWidth() == 0);
+    CHECK(sceneSurface.GetHeight() == 0);
+    CHECK_FALSE(sceneSurface.BeginScene2D(camera));
+    CHECK_FALSE(sceneSurface.Present(320.0f, 180.0f));
+
+    sceneSurface.EndScene2D();
+    sceneSurface.Reset();
+
+    CHECK_FALSE(sceneSurface.IsReady());
+    CHECK(sceneSurface.GetWidth() == 0);
+    CHECK(sceneSurface.GetHeight() == 0);
+}
+
 TEST_CASE("ApplicationHost registers a safe no-op ImGuiSystem service without graphics")
 {
     Life::Log::Init();

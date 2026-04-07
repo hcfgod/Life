@@ -4,7 +4,7 @@
 
 Life now includes a dedicated `Editor` application target and a host-owned tooling path built around `ImGuiSystem`.
 
-This is no longer just a runtime sandbox with debug UI bolted on. The repository now has a separate editor executable, dedicated editor overlay code, docking-based UI layout, and an offscreen scene viewport path that renders engine content into an editor panel.
+This is no longer just a runtime sandbox with debug UI bolted on. The repository now has a separate editor executable, dedicated editor overlay code, docking-based UI layout, and an offscreen scene-surface path that renders engine content into an editor panel.
 
 This document explains how the current editor/tooling path fits into the broader engine architecture.
 
@@ -15,7 +15,7 @@ The current tooling stack has four main pieces:
 - the `Editor` application target
 - the host-owned `ImGuiSystem`
 - the layer/overlay model used to host editor UI
-- the offscreen scene viewport path used by the editor shell
+- the offscreen scene-surface path used by the editor shell
 
 The design goal is to keep tooling inside the same authoritative host, service, frame, and event model used by the runtime rather than introducing a second ad hoc application architecture just for the editor.
 
@@ -97,7 +97,7 @@ The current Vulkan ImGui backend performs the following work:
 - renders draw data directly into the active back buffer through dynamic rendering
 - manages texture handles for engine `TextureResource` objects shown inside ImGui
 
-This is the key seam that makes editor scene viewport rendering possible.
+This is the key seam that makes editor scene-surface rendering possible.
 
 ## Editor Shell Overlay
 
@@ -112,26 +112,23 @@ Current behavior includes:
 - reporting renderer and ImGui capture state in the stats panel
 - inspecting camera state through `CameraManager`
 - managing a dedicated editor camera
-- rendering an offscreen scene viewport and displaying it as an ImGui image
+- rendering an offscreen scene-surface and displaying it as an ImGui image
 
 This is important architecturally. The editor is using the same host-owned services as runtime code: `CameraManager`, `Renderer`, `Renderer2D`, `GraphicsDevice`, `ImGuiSystem`, and `LayerStack`.
 
-## Scene Viewport Path
+## Scene Surface Path
 
-The current editor scene viewport is a real engine rendering path, not a placeholder image.
+The current editor scene-surface is a real engine rendering path, not a placeholder image.
 
 At a high level, `EditorShellOverlay` currently:
 
-1. creates or resizes a `TextureResource` render target for the scene viewport
-2. updates the editor camera aspect ratio to match the viewport size
-3. transitions the target texture for render-target use
-4. tells `Renderer` to use that target as the active render target
-5. renders scene content through `Renderer2D`
-6. transitions the target texture for shader-read access
-7. clears the renderer's explicit render target override
-8. asks `ImGuiSystem` for a texture handle and displays the image in the `Scene` panel
+1. creates or resizes an engine-owned `SceneSurface`
+2. updates the editor camera aspect ratio to match the scene-surface size
+3. asks the scene-surface to begin offscreen scene rendering
+4. renders scene content through `Renderer2D`
+5. asks the scene-surface to end rendering and present the completed image through `ImGuiSystem`
 
-This gives the editor a proper offscreen-rendered scene panel while still staying inside the same frame and renderer ownership model as the runtime.
+This gives the editor a proper offscreen-rendered scene-surface panel while still staying inside the same frame and renderer ownership model as the runtime.
 
 ## Camera Usage in the Editor
 
@@ -141,7 +138,7 @@ Current behavior:
 
 - the overlay ensures the editor camera exists on attach and before rendering
 - the camera is orthographic in the current implementation
-- the overlay updates its aspect ratio to match the current scene viewport render target
+- the overlay updates its aspect ratio to match the current scene-surface size
 - the overlay makes it the primary camera while the editor shell is active
 - the overlay destroys the camera on detach if it created it
 
@@ -191,7 +188,7 @@ For current tooling and editor work, the safest pattern is:
 - treat `ImGuiSystem` as a host-owned service, not a process-global singleton
 - build editor UI as layers or overlays inside the existing layer model
 - resolve engine services through `Application::GetService<T>()` or `TryGetService<T>()`
-- render editor scene views through explicit render targets owned by rendering services rather than by ad hoc native API calls
+- render editor scene-surfaces through explicit render targets owned by rendering services rather than by ad hoc native API calls
 - tolerate the absence of graphics or ImGui support gracefully in higher-level tooling code
 
 ## Design Rules
@@ -201,7 +198,7 @@ Future editor/tooling expansion should preserve the following rules:
 - keep the editor as a normal application target that consumes the engine API
 - keep `ImGuiSystem` host-owned and optional
 - keep one authoritative frame and event pipeline for runtime and tooling work
-- keep scene viewport rendering expressed through engine render services rather than bypassing them
+- keep scene-surface rendering expressed through engine render services rather than bypassing them
 - keep tooling layered on top of the existing service and layer model
 
 If the editor grows substantially from here, the next systems should still plug into the current host-owned architecture rather than introducing a second independent tooling runtime.

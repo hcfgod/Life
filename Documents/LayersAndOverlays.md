@@ -208,7 +208,7 @@ Two concrete examples show the current intended usage:
 - `Runtime/Source/GameLayer.cpp` is a regular runtime layer that consumes input, manages cameras through host-owned services, and renders through `Renderer2D`
 - `Runtime/Source/RuntimeDiagnosticsOverlay.cpp` and `Editor/Source/EditorShellOverlay.cpp` are overlay-style layers that behave like top-level diagnostics or editor UI surfaces
 
-The editor overlay is especially illustrative because it uses the overlay model to host docking UI, stats panels, and a scene viewport while still participating in the same host-owned frame lifecycle as the runtime.
+The editor overlay is especially illustrative because it uses the overlay model to host docking UI, stats panels, and a scene surface while still participating in the same host-owned frame lifecycle as the runtime.
 
 ## Recommended Usage
 

@@ -73,65 +73,39 @@ It currently provides:
 
 `RenderCommand` is a thin static forwarding layer over `Renderer`. It exists as a lightweight command surface for higher-level code without turning rendering into a global singleton.
 
-### `Renderer2D`
+### `Renderer2D` is currently intended as the first built-in higher-level renderer layered on top of `Renderer`.
 
-`Renderer2D` is the first built-in scene-facing renderer.
+It currently provides:
 
-Its current implementation is intentionally narrow:
-
+- `BeginScene(...)`
 - color-only quad rendering
 - dynamic CPU-updated vertex streaming
 - batched non-indexed triangle submission
 - per-camera viewport/scissor setup
-- per-camera clear handling
 
-The current 2D path does not introduce a full material system, texture binding model, or generalized scene graph. It is a first-pass renderer built on the stable ownership model above.
+During `DrawQuad(...)` and `DrawRotatedQuad(...)`, the renderer builds transformed quad vertices on the CPU and appends them to the current batch.
 
-### `Camera` and `CameraManager`
+During `Flush()` and `EndScene()`, it:
 
-`Camera` represents the view/projection state used by higher-level rendering code.
+- uploads the batched vertex data into a dynamic vertex buffer
+- submits one or more queued texture batch ranges from that shared upload
+- submits the draw through `RenderCommand::Draw(...)`
+- resets the batch for the next scene or flush boundary
 
-The current camera surface includes:
+The current implementation deliberately keeps transform handling simple by multiplying each quad vertex by the scene view-projection matrix on the CPU before upload. That avoids introducing constant-buffer or push-constant machinery into the first-pass renderer.
 
-- perspective and orthographic projection
-- position/orientation state
-- `LookAt(...)` helpers
-- clear mode and clear color
-- normalized viewport rectangles
-- lazy view/projection rebuilds
+### `SceneSurface`
 
-`CameraManager` is a host-owned service that stores named cameras, supports explicit primary-camera selection, provides priority-sorted retrieval, and can update aspect ratio across all managed cameras.
+`SceneSurface` is the current engine-owned abstraction for offscreen scene rendering into tooling UI.
 
-## Frame Ownership
+Current responsibilities:
 
-The host owns the frame envelope.
+- own offscreen color-target creation and resize policy
+- begin and end scene rendering against the active offscreen surface
+- present the completed surface through `ImGuiSystem`
+- keep raw render-target transitions and restoration inside `Renderer`
 
-`ApplicationHost::RunFrame(...)` currently performs render-related work in this order:
-
-1. update input actions
-2. call `GraphicsDevice::BeginFrame()` when a device exists
-3. call `ImGuiSystem::BeginFrame()` when a graphics frame started and ImGui is available
-4. invoke `Application::OnUpdate(...)` through `OnHostRunFrame(...)`
-5. run `LayerStack::OnUpdate(...)` if the application is still running
-6. run `LayerStack::OnRender()` when a frame was successfully started and the application is still running
-7. call `ImGuiSystem::Render()` when a graphics frame started, the application is still running, and ImGui is available
-8. call `GraphicsDevice::Present()` when a frame was successfully started
-9. end the input frame before returning
-
-Application, layer, and tooling code render inside that host-owned frame window. They do not start or end frames themselves.
-
-## Validity of Per-Frame Objects
-
-`GetCurrentBackBuffer()` and `GetCurrentCommandList()` are only valid while a frame is active.
-
-The current Vulkan backend explicitly returns `nullptr` when no frame is active. That can happen when:
-
-- the host has no graphics device
-- `BeginFrame()` failed
-- swapchain acquisition forced a resize/recreate path
-- presentation has already completed
-
-Code that records rendering commands must therefore treat these pointers as conditional and must not cache them across frames.
+Tooling code should reason in terms of scene surfaces rather than `TextureResource` lifecycle details.
 
 ## Current 2D Rendering Path
 
@@ -144,16 +118,20 @@ When `BeginScene(const Camera&)` is called, it:
 - clears the active back buffer when the camera uses `CameraClearMode::SolidColor`
 - caches the camera view-projection matrix for subsequent draws
 
-During `DrawQuad(...)` and `DrawRotatedQuad(...)`, the renderer builds transformed quad vertices on the CPU and appends them to the current batch.
+During `DrawQuad(...)` and `DrawRotatedQuad(...)`, the renderer builds:
 
-During `Flush()` and `EndScene()`, it:
+- colored quads
+- textured quads
+- rotated quads
 
-- uploads the batched vertex data into a dynamic vertex buffer
-- lazily creates the required graphics pipeline if needed
-- submits the draw through `RenderCommand::Draw(...)`
-- resets the batch for the next scene or flush boundary
+Current implementation characteristics:
 
-The current implementation deliberately keeps transform handling simple by multiplying each quad vertex by the scene view-projection matrix on the CPU before upload. That avoids introducing constant-buffer or push-constant machinery into the first-pass renderer.
+- quad vertices are transformed on the CPU using the current view-projection matrix before upload
+- batched geometry is uploaded into one dynamic vertex buffer per flush
+- pipeline and shader acquisition are prepared internally before scene submission
+- draw submission now supports multiple texture batch ranges within one queued vertex upload instead of treating a single active texture as the architectural model
+
+This is still an early renderer, but the resource-ownership and batching seams are now cleaner than the original one-texture-per-flush path.
 
 ## Shader Assets and Build Flow
 
@@ -181,9 +159,22 @@ Current behavior:
 - initialization succeeds only when Dear ImGui is present in the build, the window exposes an SDL handle, and the active graphics backend has renderer support
 - SDL events are forwarded into `ImGuiSystem::OnSdlEvent(...)` before engine-event translation
 - engine events later pass through `ImGuiSystem::CaptureEvent(...)`, which can stop propagation for keyboard and mouse input when the UI wants capture
-- editor tooling can render offscreen into a `TextureResource`, transition it for shader read access, and display it through `ImGuiSystem::GetTextureHandle(...)`
+- editor tooling can render offscreen through an engine-owned `SceneSurface` that owns its offscreen target lifetime while delegating render-target push/pop to `Renderer`
 
 At the moment, the active renderer backend implementation is Vulkan. D3D12 remains a reserved seam rather than a complete tooling path here.
+
+## Scene Surface Boundary
+
+`SceneSurface` is the current engine-owned abstraction for offscreen scene rendering into tooling UI.
+
+Current responsibilities:
+
+- own offscreen color-target creation and resize policy
+- begin and end scene rendering against the active offscreen surface
+- present the completed surface through `ImGuiSystem`
+- keep raw render-target transitions and restoration inside `Renderer`
+
+Tooling code should reason in terms of scene surfaces rather than `TextureResource` lifecycle details.
 
 ## Failure Behavior
 

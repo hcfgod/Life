@@ -24,6 +24,14 @@ namespace Life
         constexpr uint32_t MaxQuads = 1000;
         constexpr uint32_t VerticesPerQuad = 6;
 
+        struct QuadBatchRange
+        {
+            const TextureResource* Texture = nullptr;
+            uint32_t VertexOffset = 0;
+            uint32_t VertexCount = 0;
+            uint32_t QuadCount = 0;
+        };
+
         struct QuadVertex
         {
             glm::vec4 Position;
@@ -52,13 +60,13 @@ namespace Life
         Shader* PixelShader = nullptr;
         VertexLayout Layout;
         std::vector<QuadVertex> Vertices;
+        std::vector<QuadBatchRange> Batches;
         glm::mat4 ViewProjection{ 1.0f };
         Statistics Stats{};
-        const TextureResource* BatchTexture = nullptr;
         Scope<TextureResource> WhiteTexture;
         Scope<TextureResource> ErrorTexture;
-        uint32_t QuadCount = 0;
-        bool Initialized = false;
+        uint32_t QueuedQuadCount = 0;
+        bool ResourcesReady = false;
         bool ReportedInitializationFailure = false;
         bool SceneActive = false;
     };
@@ -76,8 +84,7 @@ namespace Life
 
     void Renderer2D::BeginScene(const Camera& camera)
     {
-        InitializeResources();
-        if (!m_Impl->Initialized)
+        if (!EnsureResourcesReady())
             return;
 
         const FramebufferExtent framebufferExtent = m_Renderer.GetFramebufferExtent();
@@ -101,14 +108,11 @@ namespace Life
 
     void Renderer2D::BeginScene(const glm::mat4& viewProjection)
     {
-        InitializeResources();
-        if (!m_Impl->Initialized)
+        if (!EnsureResourcesReady())
             return;
 
         m_Impl->ViewProjection = viewProjection;
-        m_Impl->Vertices.clear();
-        m_Impl->QuadCount = 0;
-        m_Impl->BatchTexture = nullptr;
+        ResetQueuedDraws();
         m_Impl->SceneActive = true;
     }
 
@@ -123,31 +127,10 @@ namespace Life
 
     void Renderer2D::Flush()
     {
-        if (!m_Impl->SceneActive || m_Impl->QuadCount == 0)
+        if (!m_Impl->SceneActive || m_Impl->QueuedQuadCount == 0)
             return;
 
-        EnsurePipeline();
-        if (!m_Impl->Pipeline || !m_Impl->VertexBuffer)
-            return;
-
-        const uint32_t vertexDataSize = static_cast<uint32_t>(m_Impl->Vertices.size() * sizeof(QuadVertex));
-        if (!m_Impl->VertexBuffer->SetData(m_Renderer.GetGraphicsDevice(), m_Impl->Vertices.data(), vertexDataSize))
-        {
-            LOG_CORE_ERROR("Renderer2D failed to upload batched vertex data.");
-            return;
-        }
-
-        RenderCommand::Draw(m_Renderer,
-                            *m_Impl->Pipeline,
-                            *m_Impl->VertexBuffer,
-                            m_Impl->QuadCount * VerticesPerQuad,
-                            m_Impl->BatchTexture);
-
-        m_Impl->Stats.DrawCalls++;
-        m_Impl->Stats.QuadCount += m_Impl->QuadCount;
-        m_Impl->Vertices.clear();
-        m_Impl->QuadCount = 0;
-        m_Impl->BatchTexture = nullptr;
+        SubmitQueuedDraws();
     }
 
     void Renderer2D::DrawQuad(const glm::vec2& position, const glm::vec2& size, const glm::vec4& color)
@@ -219,10 +202,10 @@ namespace Life
         m_Impl->Stats = {};
     }
 
-    void Renderer2D::InitializeResources()
+    bool Renderer2D::EnsureResourcesReady()
     {
-        if (m_Impl->Initialized)
-            return;
+        if (m_Impl->ResourcesReady)
+            return true;
 
         GraphicsDevice& device = m_Renderer.GetGraphicsDevice();
         const auto maxVertexCount =
@@ -279,20 +262,43 @@ namespace Life
                 pixelShaderPath.string());
         }
 
-        m_Impl->Initialized =
+        if (m_Impl->VertexShader && m_Impl->PixelShader && !m_Impl->Pipeline)
+        {
+            GraphicsPipelineDescription pipelineDescription;
+            pipelineDescription.DebugName = "Renderer2DPipeline";
+            pipelineDescription.VertexShader = m_Impl->VertexShader;
+            pipelineDescription.PixelShader = m_Impl->PixelShader;
+            pipelineDescription.Layout = m_Impl->Layout;
+            pipelineDescription.Topology = PrimitiveTopology::TriangleList;
+            pipelineDescription.Rasterizer.Cull = CullMode::None;
+            pipelineDescription.DepthStencil.DepthTestEnable = false;
+            pipelineDescription.DepthStencil.DepthWriteEnable = false;
+            pipelineDescription.Blend.BlendEnable = true;
+            pipelineDescription.Blend.SrcColorFactor = BlendFactor::SrcAlpha;
+            pipelineDescription.Blend.DstColorFactor = BlendFactor::InvSrcAlpha;
+            pipelineDescription.Blend.SrcAlphaFactor = BlendFactor::One;
+            pipelineDescription.Blend.DstAlphaFactor = BlendFactor::InvSrcAlpha;
+            pipelineDescription.UseTextureBinding = true;
+
+            m_Impl->Pipeline = m_Renderer.CreatePipeline(pipelineDescription);
+        }
+
+        m_Impl->ResourcesReady =
             m_Impl->VertexBuffer != nullptr &&
+            m_Impl->Pipeline != nullptr &&
             m_Impl->VertexShader != nullptr &&
             m_Impl->PixelShader != nullptr &&
             m_Impl->WhiteTexture != nullptr &&
             m_Impl->ErrorTexture != nullptr;
 
-        if (!m_Impl->Initialized)
+        if (!m_Impl->ResourcesReady)
         {
             if (!m_Impl->ReportedInitializationFailure)
             {
                 LOG_CORE_ERROR(
-                    "Renderer2D failed to initialize required resources (VertexBuffer={}, VertexShader={}, PixelShader={}, WhiteTexture={}, ErrorTexture={}).",
+                    "Renderer2D failed to initialize required resources (VertexBuffer={}, Pipeline={}, VertexShader={}, PixelShader={}, WhiteTexture={}, ErrorTexture={}).",
                     m_Impl->VertexBuffer != nullptr,
+                    m_Impl->Pipeline != nullptr,
                     m_Impl->VertexShader != nullptr,
                     m_Impl->PixelShader != nullptr,
                     m_Impl->WhiteTexture != nullptr,
@@ -300,34 +306,52 @@ namespace Life
                 m_Impl->ReportedInitializationFailure = true;
             }
 
-            return;
+            return false;
         }
 
         m_Impl->ReportedInitializationFailure = false;
+        return true;
     }
 
-    void Renderer2D::EnsurePipeline()
+    void Renderer2D::ResetQueuedDraws() noexcept
     {
-        if (m_Impl->Pipeline || !m_Impl->Initialized)
+        m_Impl->Vertices.clear();
+        m_Impl->Batches.clear();
+        m_Impl->QueuedQuadCount = 0;
+    }
+
+    void Renderer2D::SubmitQueuedDraws()
+    {
+        if (!m_Impl->Pipeline || !m_Impl->VertexBuffer || m_Impl->Batches.empty() || m_Impl->Vertices.empty())
+        {
+            ResetQueuedDraws();
             return;
+        }
 
-        GraphicsPipelineDescription pipelineDescription;
-        pipelineDescription.DebugName = "Renderer2DPipeline";
-        pipelineDescription.VertexShader = m_Impl->VertexShader;
-        pipelineDescription.PixelShader = m_Impl->PixelShader;
-        pipelineDescription.Layout = m_Impl->Layout;
-        pipelineDescription.Topology = PrimitiveTopology::TriangleList;
-        pipelineDescription.Rasterizer.Cull = CullMode::None;
-        pipelineDescription.DepthStencil.DepthTestEnable = false;
-        pipelineDescription.DepthStencil.DepthWriteEnable = false;
-        pipelineDescription.Blend.BlendEnable = true;
-        pipelineDescription.Blend.SrcColorFactor = BlendFactor::SrcAlpha;
-        pipelineDescription.Blend.DstColorFactor = BlendFactor::InvSrcAlpha;
-        pipelineDescription.Blend.SrcAlphaFactor = BlendFactor::One;
-        pipelineDescription.Blend.DstAlphaFactor = BlendFactor::InvSrcAlpha;
-        pipelineDescription.UseTextureBinding = true;
+        const uint32_t vertexDataSize = static_cast<uint32_t>(m_Impl->Vertices.size() * sizeof(QuadVertex));
+        if (!m_Impl->VertexBuffer->SetData(m_Renderer.GetGraphicsDevice(), m_Impl->Vertices.data(), vertexDataSize))
+        {
+            LOG_CORE_ERROR("Renderer2D failed to upload queued vertex data.");
+            ResetQueuedDraws();
+            return;
+        }
 
-        m_Impl->Pipeline = m_Renderer.CreatePipeline(pipelineDescription);
+        for (const QuadBatchRange& batch : m_Impl->Batches)
+        {
+            DrawParameters drawParameters;
+            drawParameters.VertexCount = batch.VertexCount;
+            drawParameters.VertexOffset = batch.VertexOffset;
+
+            RenderCommand::Draw(m_Renderer,
+                                *m_Impl->Pipeline,
+                                *m_Impl->VertexBuffer,
+                                drawParameters,
+                                batch.Texture);
+        }
+
+        m_Impl->Stats.DrawCalls += static_cast<uint32_t>(m_Impl->Batches.size());
+        m_Impl->Stats.QuadCount += m_Impl->QueuedQuadCount;
+        ResetQueuedDraws();
     }
 
     void Renderer2D::PushQuad(const glm::mat4& transform, const glm::vec4& color,
@@ -337,14 +361,16 @@ namespace Life
         if (resolvedTexture == nullptr)
             return;
 
-        if ((m_Impl->BatchTexture != nullptr && m_Impl->BatchTexture != resolvedTexture) || m_Impl->QuadCount >= MaxQuads)
+        if (m_Impl->QueuedQuadCount >= MaxQuads)
             Flush();
 
-        if (m_Impl->QuadCount != 0 && m_Impl->BatchTexture != resolvedTexture)
-            return;
-
-        if (m_Impl->BatchTexture == nullptr)
-            m_Impl->BatchTexture = resolvedTexture;
+        if (m_Impl->Batches.empty() || m_Impl->Batches.back().Texture != resolvedTexture)
+        {
+            QuadBatchRange batch;
+            batch.Texture = resolvedTexture;
+            batch.VertexOffset = static_cast<uint32_t>(m_Impl->Vertices.size());
+            m_Impl->Batches.push_back(batch);
+        }
 
         const std::array<glm::vec4, VerticesPerQuad> quadPositions =
         {
@@ -375,6 +401,9 @@ namespace Life
             m_Impl->Vertices.push_back(vertex);
         }
 
-        m_Impl->QuadCount++;
+        QuadBatchRange& batch = m_Impl->Batches.back();
+        batch.VertexCount += VerticesPerQuad;
+        batch.QuadCount++;
+        m_Impl->QueuedQuadCount++;
     }
 }

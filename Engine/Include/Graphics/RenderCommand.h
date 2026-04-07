@@ -23,7 +23,7 @@ namespace Life
         static void Draw(Renderer& renderer,
                          GraphicsPipeline& pipeline,
                          GraphicsBuffer& vertexBuffer,
-                         uint32_t vertexCount,
+                         const DrawParameters& drawParameters = {},
                          const TextureResource* texture = nullptr);
 
         static void DrawIndexed(Renderer& renderer,

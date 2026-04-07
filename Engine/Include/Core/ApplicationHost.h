@@ -69,6 +69,15 @@ namespace Life
         const Assets::AssetManager& GetAssetManager() const { return m_AssetManager; }
 
     private:
+        void UpdateInputCaptureState() noexcept;
+        bool TryBeginGraphicsFrame() noexcept;
+        void BeginImGuiFramePhase(bool frameStarted);
+        void RunApplicationUpdatePhase(float timestep);
+        void RunLayerUpdatePhase(float timestep);
+        void RunLayerRenderPhase(bool frameStarted);
+        void RunImGuiRenderPhase(bool frameStarted);
+        void RunPresentPhase(bool frameStarted) noexcept;
+
         Scope<Application> m_Application;
         Scope<ApplicationRuntime> m_Runtime;
         Scope<Window> m_Window;

@@ -9,6 +9,7 @@
 
 #include <cstdio>
 #include <unordered_map>
+#include <vector>
 
 namespace Life
 {
@@ -103,6 +104,7 @@ namespace Life
     {
         nvrhi::FramebufferHandle CurrentFramebuffer;
         TextureResource* ActiveColorTarget = nullptr;
+        std::vector<TextureResource*> RenderTargetStack;
         nvrhi::ITexture* CachedColorTarget = nullptr;
         nvrhi::IDevice* CachedDevice = nullptr;
         std::unordered_map<TextureSamplerDescription, nvrhi::SamplerHandle, TextureSamplerDescriptionHasher> TextureSamplers;
@@ -132,6 +134,7 @@ namespace Life
             {
                 m_Impl->CurrentFramebuffer = nullptr;
                 m_Impl->ActiveColorTarget = nullptr;
+                m_Impl->RenderTargetStack.clear();
                 m_Impl->CachedColorTarget = nullptr;
                 m_Impl->CachedDevice = nullptr;
                 m_Impl->TextureSamplers.clear();
@@ -206,7 +209,7 @@ namespace Life
 
     void Renderer::Submit(GraphicsPipeline& pipeline,
                           GraphicsBuffer& vertexBuffer,
-                          uint32_t vertexCount,
+                          const DrawParameters& drawParameters,
                           const TextureResource* texture)
     {
         nvrhi::ICommandList* commandList = m_GraphicsDevice.GetCurrentCommandList();
@@ -317,11 +320,12 @@ namespace Life
         commandList->setGraphicsState(state);
 
         nvrhi::DrawArguments drawArgs;
-        drawArgs.vertexCount = vertexCount;
+        drawArgs.vertexCount = drawParameters.VertexCount;
+        drawArgs.startVertexLocation = drawParameters.VertexOffset;
         commandList->draw(drawArgs);
 
         m_Stats.DrawCalls++;
-        m_Stats.VerticesSubmitted += vertexCount;
+        m_Stats.VerticesSubmitted += drawParameters.VertexCount;
     }
 
     void Renderer::SubmitIndexed(GraphicsPipeline& pipeline,
@@ -382,6 +386,45 @@ namespace Life
 
         m_Stats.DrawCalls++;
         m_Stats.IndicesSubmitted += drawParameters.IndexCount;
+    }
+
+    bool Renderer::PushRenderTarget(TextureResource& colorTarget)
+    {
+        nvrhi::ICommandList* commandList = m_GraphicsDevice.GetCurrentCommandList();
+        nvrhi::ITexture* nativeTexture = colorTarget.GetNativeHandle();
+        if (!commandList || !nativeTexture)
+            return false;
+
+        commandList->setTextureState(nativeTexture, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
+        commandList->commitBarriers();
+
+        m_Impl->RenderTargetStack.push_back(m_Impl->ActiveColorTarget);
+        SetRenderTarget(&colorTarget);
+        return true;
+    }
+
+    void Renderer::PopRenderTarget() noexcept
+    {
+        if (!m_Impl || m_Impl->RenderTargetStack.empty())
+            return;
+
+        TextureResource* completedRenderTarget = m_Impl->ActiveColorTarget;
+        TextureResource* previousRenderTarget = m_Impl->RenderTargetStack.back();
+        m_Impl->RenderTargetStack.pop_back();
+
+        if (completedRenderTarget != nullptr && completedRenderTarget != previousRenderTarget)
+        {
+            if (nvrhi::ICommandList* commandList = m_GraphicsDevice.GetCurrentCommandList())
+            {
+                if (nvrhi::ITexture* nativeTexture = completedRenderTarget->GetNativeHandle())
+                {
+                    commandList->setTextureState(nativeTexture, nvrhi::AllSubresources, nvrhi::ResourceStates::ShaderResource);
+                    commandList->commitBarriers();
+                }
+            }
+        }
+
+        SetRenderTarget(previousRenderTarget);
     }
 
     void Renderer::SetRenderTarget(TextureResource* colorTarget)

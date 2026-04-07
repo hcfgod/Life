@@ -12,21 +12,21 @@ namespace Life
     class Renderer2D;
     class TextureResource;
 
-    class SceneViewport
+    class SceneSurface
     {
     public:
-        SceneViewport(Renderer& renderer, Renderer2D& renderer2D, ImGuiSystem& imguiSystem);
-        ~SceneViewport() noexcept;
+        SceneSurface(Renderer& renderer, Renderer2D& renderer2D, ImGuiSystem& imguiSystem);
+        ~SceneSurface() noexcept;
 
-        SceneViewport(const SceneViewport&) = delete;
-        SceneViewport& operator=(const SceneViewport&) = delete;
-        SceneViewport(SceneViewport&&) = delete;
-        SceneViewport& operator=(SceneViewport&&) = delete;
+        SceneSurface(const SceneSurface&) = delete;
+        SceneSurface& operator=(const SceneSurface&) = delete;
+        SceneSurface(SceneSurface&&) = delete;
+        SceneSurface& operator=(SceneSurface&&) = delete;
 
         bool Resize(uint32_t width, uint32_t height);
-        bool BeginRender2D(const Camera& camera);
-        void EndRender2D() noexcept;
-        bool Draw(float width, float height);
+        bool BeginScene2D(const Camera& camera);
+        void EndScene2D() noexcept;
+        bool Present(float width, float height);
         void Reset() noexcept;
 
         Renderer2D& GetRenderer2D() noexcept { return m_Renderer2D; }
@@ -34,12 +34,10 @@ namespace Life
         bool IsReady() const noexcept;
         uint32_t GetWidth() const noexcept { return m_Width; }
         uint32_t GetHeight() const noexcept { return m_Height; }
-        TextureResource* GetColorTarget() noexcept;
-        const TextureResource* GetColorTarget() const noexcept;
 
     private:
-        bool BeginRender();
-        void EndRender() noexcept;
+        bool BeginSurfaceRender();
+        void EndSurfaceRender() noexcept;
 
         Renderer& m_Renderer;
         Renderer2D& m_Renderer2D;

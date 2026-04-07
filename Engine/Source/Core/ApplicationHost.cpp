@@ -379,37 +379,83 @@ namespace Life
             InputSystem& Input;
         } inputFrameFinalizer(m_InputSystem);
 
-        m_InputSystem.SetKeyboardInputBlocked(m_ImGuiSystem && m_ImGuiSystem->WantsKeyboardCapture());
-        m_InputSystem.SetMouseInputBlocked(m_ImGuiSystem && m_ImGuiSystem->WantsMouseCapture());
+        UpdateInputCaptureState();
         m_InputSystem.UpdateActions();
 
-        bool frameStarted = false;
-        if (m_GraphicsDevice)
-        {
-            try { frameStarted = m_GraphicsDevice->BeginFrame(); }
-            catch (const std::exception& e) { LOG_CORE_ERROR("BeginFrame failed: {}", e.what()); }
-        }
+        const bool frameStarted = TryBeginGraphicsFrame();
+        BeginImGuiFramePhase(frameStarted);
+        RunApplicationUpdatePhase(timestep);
+        RunLayerUpdatePhase(timestep);
+        RunLayerRenderPhase(frameStarted);
+        UpdateInputCaptureState();
+        RunImGuiRenderPhase(frameStarted);
+        RunPresentPhase(frameStarted);
+    }
 
-        if (frameStarted && m_ImGuiSystem)
-            m_ImGuiSystem->BeginFrame();
-
-        m_Application->OnHostRunFrame(timestep);
-        if (m_Running)
-            m_LayerStack.OnUpdate(timestep);
-
-        if (frameStarted && m_Running)
-            m_LayerStack.OnRender();
-
+    void ApplicationHost::UpdateInputCaptureState() noexcept
+    {
         m_InputSystem.SetKeyboardInputBlocked(m_ImGuiSystem && m_ImGuiSystem->WantsKeyboardCapture());
         m_InputSystem.SetMouseInputBlocked(m_ImGuiSystem && m_ImGuiSystem->WantsMouseCapture());
+    }
 
+    bool ApplicationHost::TryBeginGraphicsFrame() noexcept
+    {
+        if (!m_GraphicsDevice)
+            return false;
+
+        try
+        {
+            return m_GraphicsDevice->BeginFrame();
+        }
+        catch (const std::exception& e)
+        {
+            LOG_CORE_ERROR("BeginFrame failed: {}", e.what());
+        }
+
+        return false;
+    }
+
+    void ApplicationHost::BeginImGuiFramePhase(bool frameStarted)
+    {
+        if (frameStarted && m_ImGuiSystem)
+            m_ImGuiSystem->BeginFrame();
+    }
+
+    void ApplicationHost::RunApplicationUpdatePhase(float timestep)
+    {
+        m_Application->OnHostRunFrame(timestep);
+    }
+
+    void ApplicationHost::RunLayerUpdatePhase(float timestep)
+    {
+        if (m_Running)
+            m_LayerStack.OnUpdate(timestep);
+    }
+
+    void ApplicationHost::RunLayerRenderPhase(bool frameStarted)
+    {
+        if (frameStarted && m_Running)
+            m_LayerStack.OnRender();
+    }
+
+    void ApplicationHost::RunImGuiRenderPhase(bool frameStarted)
+    {
         if (frameStarted && m_Running && m_ImGuiSystem)
             m_ImGuiSystem->Render();
+    }
 
-        if (frameStarted && m_GraphicsDevice)
+    void ApplicationHost::RunPresentPhase(bool frameStarted) noexcept
+    {
+        if (!frameStarted || !m_GraphicsDevice)
+            return;
+
+        try
         {
-            try { m_GraphicsDevice->Present(); }
-            catch (const std::exception& e) { LOG_CORE_ERROR("Present failed: {}", e.what()); }
+            m_GraphicsDevice->Present();
+        }
+        catch (const std::exception& e)
+        {
+            LOG_CORE_ERROR("Present failed: {}", e.what());
         }
     }
 

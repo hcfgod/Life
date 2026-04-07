@@ -21,9 +21,9 @@ namespace EditorApp
 
     private:
         void EnsureEditorCamera();
-        void DrawSceneViewportContent(Life::Renderer2D& renderer2D);
+        void DrawSceneSurfaceContent(Life::Renderer2D& renderer2D);
         Life::Camera* TryGetEditorCamera();
-        bool RenderSceneViewport(uint32_t width, uint32_t height);
+        bool RenderSceneSurface(uint32_t width, uint32_t height);
 
         bool m_ShowHierarchyPanel = true;
         bool m_ShowInspectorPanel = true;
@@ -36,6 +36,6 @@ namespace EditorApp
         std::string m_EditorCameraName = "EditorSceneCamera";
         std::string m_CheckerTextureKey = "Assets/Textures/Renderer2DChecker.ppm";
         std::shared_ptr<Life::Assets::TextureAsset> m_CheckerTextureAsset;
-        Life::Scope<Life::SceneViewport> m_SceneViewport;
+        Life::Scope<Life::SceneSurface> m_SceneSurface;
     };
 }
