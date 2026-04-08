@@ -14,7 +14,7 @@
 #include <sstream>
 
 namespace Life::Assets
-{@@
+{
     std::future<ShaderAsset::Ptr> ShaderAsset::LoadAsync(const std::string& key, const Settings& settings)
     {
         const uint64_t generation = AssetLoadCoordinator::GetGeneration();

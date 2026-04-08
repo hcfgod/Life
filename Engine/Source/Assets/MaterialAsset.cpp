@@ -129,6 +129,7 @@ namespace Life::Assets
                         asset->m_MainTextureUvMax.y = sub.value("vMax", 1.0f);
                     }
 
+                    // Register dependencies in AssetDatabase
                     auto* db = GetServices().TryGet<AssetDatabase>();
                     if (db)
                     {

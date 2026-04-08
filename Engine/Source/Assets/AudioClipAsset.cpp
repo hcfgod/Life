@@ -18,7 +18,7 @@ namespace Life::Assets
         Settings defaultSettings;
         return LoadAsync(assetPath, defaultSettings);
     }
-@@
+
     std::future<AudioClipAsset::Ptr> AudioClipAsset::LoadAsync(const std::string& assetPath, const Settings& settings)
     {
         const uint64_t generation = AssetLoadCoordinator::GetGeneration();
@@ -99,6 +99,8 @@ namespace Life::Assets
 
                 AssetLoadProgress::SetProgress(assetPath, 0.40f, "Decoding audio...");
 
+                // TODO: Integrate actual audio decoding (WAV/OGG/MP3/FLAC).
+                // For now, create a stub decoded audio with silence.
                 DecodedAudio audio;
                 audio.SampleRateHz = settings.TargetSampleRateHz;
                 audio.ChannelCount = settings.TargetChannelCount;

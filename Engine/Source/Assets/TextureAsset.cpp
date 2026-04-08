@@ -61,7 +61,7 @@ namespace Life::Assets
             return samplerDescription;
         }
     }
-@@
+
     std::future<TextureAsset::Ptr> TextureAsset::LoadAsync(const std::string& assetPath, const TextureSpecification& specification)
     {
         const uint64_t generation = AssetLoadCoordinator::GetGeneration();
