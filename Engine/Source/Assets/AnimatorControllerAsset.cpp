@@ -128,42 +128,61 @@ namespace Life::Assets
     std::future<AnimatorControllerAsset::Ptr> AnimatorControllerAsset::LoadAsync(const std::string& key, Settings settings)
     {
         const uint64_t generation = AssetLoadCoordinator::GetGeneration();
+        const auto loadKey = CreateRef<std::string>(key);
+        const auto loadSettings = CreateRef<Settings>(settings);
 
-        return std::async(std::launch::async, [key, settings, generation]() -> Ptr {
-            AssetLoadProgress::SetProgress(key, 0.05f, "Resolving...");
-
-            if (!AssetLoadCoordinator::IsGenerationCurrent(generation))
-            {
-                AssetLoadProgress::ClearProgress(key);
-                return nullptr;
-            }
-
-            const auto result = ResolveAndReadJsonAsset(key, "AnimatorController");
-            if (result.IsFailure())
-            {
-                AssetLoadProgress::ClearProgress(key);
-                LOG_CORE_ERROR("AnimatorControllerAsset::LoadAsync: {}", result.GetError().GetErrorMessage());
-                return nullptr;
-            }
-
-            const auto& [guid, fileText] = result.GetValue();
-            AssetLoadProgress::SetProgress(key, 0.40f, "Parsing...");
-
+        return std::async(std::launch::async, [loadKey, loadSettings, generation]() -> Ptr {
+            const std::string& key = *loadKey;
+            const Settings& settings = *loadSettings;
             try
             {
-                json j = json::parse(fileText);
-                Data data = ParseAnimatorControllerJson(j);
+                AssetLoadProgress::SetProgress(key, 0.05f, "Resolving...");
 
-                auto asset = Ref<AnimatorControllerAsset>(
-                    new AnimatorControllerAsset(key, guid, std::move(data), settings));
+                if (!AssetLoadCoordinator::IsGenerationCurrent(generation))
+                {
+                    AssetLoadProgress::ClearProgress(key);
+                    return nullptr;
+                }
 
-                AssetLoadProgress::ClearProgress(key);
-                return asset;
+                const auto result = ResolveAndReadJsonAsset(key, "AnimatorController");
+                if (result.IsFailure())
+                {
+                    AssetLoadProgress::ClearProgress(key);
+                    LOG_CORE_ERROR("AnimatorControllerAsset::LoadAsync: {}", result.GetError().GetErrorMessage());
+                    return nullptr;
+                }
+
+                const auto& [guid, fileText] = result.GetValue();
+                AssetLoadProgress::SetProgress(key, 0.40f, "Parsing...");
+
+                try
+                {
+                    json j = json::parse(fileText);
+                    Data data = ParseAnimatorControllerJson(j);
+
+                    auto asset = Ref<AnimatorControllerAsset>(
+                        new AnimatorControllerAsset(key, guid, std::move(data), settings));
+
+                    AssetLoadProgress::ClearProgress(key);
+                    return asset;
+                }
+                catch (const std::exception& e)
+                {
+                    AssetLoadProgress::ClearProgress(key);
+                    LOG_CORE_ERROR("AnimatorControllerAsset::LoadAsync: JSON parse failed for '{}': {}", key, e.what());
+                    return nullptr;
+                }
             }
             catch (const std::exception& e)
             {
                 AssetLoadProgress::ClearProgress(key);
-                LOG_CORE_ERROR("AnimatorControllerAsset::LoadAsync: JSON parse failed for '{}': {}", key, e.what());
+                LOG_CORE_ERROR("AnimatorControllerAsset::LoadAsync: unexpected exception for '{}': {}", key, e.what());
+                return nullptr;
+            }
+            catch (...)
+            {
+                AssetLoadProgress::ClearProgress(key);
+                LOG_CORE_ERROR("AnimatorControllerAsset::LoadAsync: unexpected exception for '{}'", key);
                 return nullptr;
             }
         });

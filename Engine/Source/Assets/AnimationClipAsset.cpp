@@ -149,43 +149,62 @@ namespace Life::Assets
     std::future<AnimationClipAsset::Ptr> AnimationClipAsset::LoadAsync(const std::string& key, Settings settings)
     {
         const uint64_t generation = AssetLoadCoordinator::GetGeneration();
+        const auto loadKey = CreateRef<std::string>(key);
+        const auto loadSettings = CreateRef<Settings>(settings);
 
-        return std::async(std::launch::async, [key, settings, generation]() -> Ptr {
-            AssetLoadProgress::SetProgress(key, 0.05f, "Resolving...");
-
-            if (!AssetLoadCoordinator::IsGenerationCurrent(generation))
-            {
-                AssetLoadProgress::ClearProgress(key);
-                return nullptr;
-            }
-
-            const auto result = ResolveAndReadJsonAsset(key, "AnimationClip");
-            if (result.IsFailure())
-            {
-                AssetLoadProgress::ClearProgress(key);
-                LOG_CORE_ERROR("AnimationClipAsset::LoadAsync: {}", result.GetError().GetErrorMessage());
-                return nullptr;
-            }
-
-            const auto& [guid, fileText] = result.GetValue();
-
-            AssetLoadProgress::SetProgress(key, 0.40f, "Parsing...");
-
+        return std::async(std::launch::async, [loadKey, loadSettings, generation]() -> Ptr {
+            const std::string& key = *loadKey;
+            const Settings& settings = *loadSettings;
             try
             {
-                json j = json::parse(fileText);
-                Data data = ParseAnimationClipJson(j);
+                AssetLoadProgress::SetProgress(key, 0.05f, "Resolving...");
 
-                auto asset = Ref<AnimationClipAsset>(
-                    new AnimationClipAsset(key, guid, std::move(data), settings));
+                if (!AssetLoadCoordinator::IsGenerationCurrent(generation))
+                {
+                    AssetLoadProgress::ClearProgress(key);
+                    return nullptr;
+                }
 
-                AssetLoadProgress::ClearProgress(key);
-                return asset;
+                const auto result = ResolveAndReadJsonAsset(key, "AnimationClip");
+                if (result.IsFailure())
+                {
+                    AssetLoadProgress::ClearProgress(key);
+                    LOG_CORE_ERROR("AnimationClipAsset::LoadAsync: {}", result.GetError().GetErrorMessage());
+                    return nullptr;
+                }
+
+                const auto& [guid, fileText] = result.GetValue();
+
+                AssetLoadProgress::SetProgress(key, 0.40f, "Parsing...");
+
+                try
+                {
+                    json j = json::parse(fileText);
+                    Data data = ParseAnimationClipJson(j);
+
+                    auto asset = Ref<AnimationClipAsset>(
+                        new AnimationClipAsset(key, guid, std::move(data), settings));
+
+                    AssetLoadProgress::ClearProgress(key);
+                    return asset;
+                }
+                catch (const std::exception& e)
+                {
+                    AssetLoadProgress::ClearProgress(key);
+                    LOG_CORE_ERROR("AnimationClipAsset::LoadAsync: JSON parse failed for '{}': {}", key, e.what());
+                    return nullptr;
+                }
             }
             catch (const std::exception& e)
             {
                 AssetLoadProgress::ClearProgress(key);
-                LOG_CORE_ERROR("AnimationClipAsset::LoadAsync: JSON parse failed for '{}': {}", key, e.what());
+                LOG_CORE_ERROR("AnimationClipAsset::LoadAsync: unexpected exception for '{}': {}", key, e.what());
+                return nullptr;
+            }
+            catch (...)
+            {
+                AssetLoadProgress::ClearProgress(key);
+                LOG_CORE_ERROR("AnimationClipAsset::LoadAsync: unexpected exception for '{}'", key);
                 return nullptr;
             }
         });

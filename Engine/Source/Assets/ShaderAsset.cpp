@@ -14,112 +14,131 @@
 #include <sstream>
 
 namespace Life::Assets
-{
+{@@
     std::future<ShaderAsset::Ptr> ShaderAsset::LoadAsync(const std::string& key, const Settings& settings)
     {
         const uint64_t generation = AssetLoadCoordinator::GetGeneration();
+        const auto loadKey = CreateRef<std::string>(key);
+        const auto loadSettings = CreateRef<Settings>(settings);
 
-        return std::async(std::launch::async, [key, settings, generation]() -> Ptr {
-            AssetLoadProgress::SetProgress(key, 0.05f, "Resolving...");
-
-            if (!AssetLoadCoordinator::IsGenerationCurrent(generation))
+        return std::async(std::launch::async, [loadKey, loadSettings, generation]() -> Ptr {
+            const std::string& key = *loadKey;
+            const Settings& settings = *loadSettings;
+            try
             {
-                AssetLoadProgress::ClearProgress(key);
-                return nullptr;
-            }
+                AssetLoadProgress::SetProgress(key, 0.05f, "Resolving...");
 
-            bool fromBundle = false;
-            std::string resolvedPath;
-            std::string guid;
-            std::string fileText;
-
-            auto* bundle = GetServices().TryGet<AssetBundle>();
-            if (bundle && bundle->IsEnabled() && bundle->IsLoaded())
-            {
-                const auto entry = bundle->FindEntryByKey(key);
-                if (entry.has_value())
+                if (!AssetLoadCoordinator::IsGenerationCurrent(generation))
                 {
-                    const auto textResult = bundle->ReadAllTextByKey(key);
-                    if (textResult.IsSuccess())
+                    AssetLoadProgress::ClearProgress(key);
+                    return nullptr;
+                }
+
+                bool fromBundle = false;
+                std::string resolvedPath;
+                std::string guid;
+                std::string fileText;
+
+                auto* bundle = GetServices().TryGet<AssetBundle>();
+                if (bundle && bundle->IsEnabled() && bundle->IsLoaded())
+                {
+                    const auto entry = bundle->FindEntryByKey(key);
+                    if (entry.has_value())
                     {
-                        fromBundle = true;
-                        guid = entry->Guid;
-                        resolvedPath = "<AssetBundle>";
-                        fileText = textResult.GetValue();
-                        AssetLoadProgress::SetProgress(key, 0.20f, "Reading from bundle...");
+                        const auto textResult = bundle->ReadAllTextByKey(key);
+                        if (textResult.IsSuccess())
+                        {
+                            fromBundle = true;
+                            guid = entry->Guid;
+                            resolvedPath = "<AssetBundle>";
+                            fileText = textResult.GetValue();
+                            AssetLoadProgress::SetProgress(key, 0.20f, "Reading from bundle...");
+                        }
                     }
                 }
+
+                if (!fromBundle)
+                {
+                    const auto resolvedResult = ResolveAssetKeyToPath(key);
+                    if (resolvedResult.IsFailure())
+                    {
+                        AssetLoadProgress::ClearProgress(key);
+                        LOG_CORE_ERROR("ShaderAsset::LoadAsync: failed to resolve key '{}': {}",
+                                       key, resolvedResult.GetError().GetErrorMessage());
+                        return nullptr;
+                    }
+
+                    resolvedPath = resolvedResult.GetValue().string();
+                    AssetLoadProgress::SetProgress(key, 0.12f, "Reading source...");
+
+                    const auto guidResult = LoadOrCreateGuid(resolvedPath, {{"key", key}, {"type", "Shader"}});
+                    if (guidResult.IsFailure())
+                    {
+                        AssetLoadProgress::ClearProgress(key);
+                        LOG_CORE_ERROR("ShaderAsset::LoadAsync: meta GUID failed for '{}': {}",
+                                       resolvedPath, guidResult.GetError().GetErrorMessage());
+                        return nullptr;
+                    }
+                    guid = guidResult.GetValue();
+
+                    std::ifstream in(resolvedPath, std::ios::in | std::ios::binary);
+                    if (!in.is_open())
+                    {
+                        AssetLoadProgress::ClearProgress(key);
+                        LOG_CORE_ERROR("ShaderAsset::LoadAsync: failed to open '{}'", resolvedPath);
+                        return nullptr;
+                    }
+
+                    std::ostringstream ss;
+                    ss << in.rdbuf();
+                    fileText = ss.str();
+                }
+
+                AssetLoadProgress::SetProgress(key, 0.30f, "Parsing...");
+
+                const ParseCombinedGlslInput parseInput{ key, resolvedPath, fileText, settings.Name };
+                const auto parsedResult = ParseCombinedGlsl(parseInput);
+                if (parsedResult.IsFailure())
+                {
+                    AssetLoadProgress::ClearProgress(key);
+                    LOG_CORE_ERROR("ShaderAsset::LoadAsync: parse failed for '{}': {}",
+                                   resolvedPath, parsedResult.GetError().GetErrorMessage());
+                    return nullptr;
+                }
+
+                auto parsed = parsedResult.GetValue();
+
+                AssetLoadProgress::SetProgress(key, 0.50f, "Validating...");
+
+                const auto preparedResult = PrepareShaderStagesForActiveGraphicsAPI(std::move(parsed), resolvedPath);
+                if (preparedResult.IsFailure())
+                {
+                    AssetLoadProgress::ClearProgress(key);
+                    LOG_CORE_ERROR("ShaderAsset::LoadAsync: preparation failed for '{}': {}",
+                                   resolvedPath, preparedResult.GetError().GetErrorMessage());
+                    return nullptr;
+                }
+
+                parsed = preparedResult.GetValue();
+
+                auto asset = Ref<ShaderAsset>(
+                    new ShaderAsset(key, guid, std::move(parsed), settings));
+
+                AssetLoadProgress::ClearProgress(key);
+                return asset;
             }
-
-            if (!fromBundle)
-            {
-                const auto resolvedResult = ResolveAssetKeyToPath(key);
-                if (resolvedResult.IsFailure())
-                {
-                    AssetLoadProgress::ClearProgress(key);
-                    LOG_CORE_ERROR("ShaderAsset::LoadAsync: failed to resolve key '{}': {}",
-                                   key, resolvedResult.GetError().GetErrorMessage());
-                    return nullptr;
-                }
-
-                resolvedPath = resolvedResult.GetValue().string();
-                AssetLoadProgress::SetProgress(key, 0.12f, "Reading source...");
-
-                const auto guidResult = LoadOrCreateGuid(resolvedPath, {{"key", key}, {"type", "Shader"}});
-                if (guidResult.IsFailure())
-                {
-                    AssetLoadProgress::ClearProgress(key);
-                    LOG_CORE_ERROR("ShaderAsset::LoadAsync: meta GUID failed for '{}': {}",
-                                   resolvedPath, guidResult.GetError().GetErrorMessage());
-                    return nullptr;
-                }
-                guid = guidResult.GetValue();
-
-                std::ifstream in(resolvedPath, std::ios::in | std::ios::binary);
-                if (!in.is_open())
-                {
-                    AssetLoadProgress::ClearProgress(key);
-                    LOG_CORE_ERROR("ShaderAsset::LoadAsync: failed to open '{}'", resolvedPath);
-                    return nullptr;
-                }
-
-                std::ostringstream ss;
-                ss << in.rdbuf();
-                fileText = ss.str();
-            }
-
-            AssetLoadProgress::SetProgress(key, 0.30f, "Parsing...");
-
-            const ParseCombinedGlslInput parseInput{ key, resolvedPath, fileText, settings.Name };
-            const auto parsedResult = ParseCombinedGlsl(parseInput);
-            if (parsedResult.IsFailure())
+            catch (const std::exception& e)
             {
                 AssetLoadProgress::ClearProgress(key);
-                LOG_CORE_ERROR("ShaderAsset::LoadAsync: parse failed for '{}': {}",
-                               resolvedPath, parsedResult.GetError().GetErrorMessage());
+                LOG_CORE_ERROR("ShaderAsset::LoadAsync: unexpected exception for '{}': {}", key, e.what());
                 return nullptr;
             }
-
-            auto parsed = parsedResult.GetValue();
-
-            AssetLoadProgress::SetProgress(key, 0.50f, "Validating...");
-
-            const auto preparedResult = PrepareShaderStagesForActiveGraphicsAPI(std::move(parsed), resolvedPath);
-            if (preparedResult.IsFailure())
+            catch (...)
             {
                 AssetLoadProgress::ClearProgress(key);
-                LOG_CORE_ERROR("ShaderAsset::LoadAsync: preparation failed for '{}': {}",
-                               resolvedPath, preparedResult.GetError().GetErrorMessage());
+                LOG_CORE_ERROR("ShaderAsset::LoadAsync: unexpected exception for '{}'", key);
                 return nullptr;
             }
-
-            parsed = preparedResult.GetValue();
-
-            auto asset = Ref<ShaderAsset>(
-                new ShaderAsset(key, guid, std::move(parsed), settings));
-
-            AssetLoadProgress::ClearProgress(key);
-            return asset;
         });
     }
 

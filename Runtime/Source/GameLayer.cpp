@@ -36,7 +36,7 @@ namespace RuntimeApp
         if (m_CameraManager)
         {
             const auto& specification = GetApplication().GetSpecification();
-            Life::CameraManager& cameraManager = m_CameraManager->get();
+            Life::CameraManager& cameraManager = m_CameraManager.value().get();
             const float aspectRatio = specification.Height > 0
                 ? static_cast<float>(specification.Width) / static_cast<float>(specification.Height)
                 : 1.0f;
@@ -83,7 +83,7 @@ namespace RuntimeApp
     {
         if (m_CameraManager)
         {
-            Life::CameraManager& cameraManager = m_CameraManager->get();
+            Life::CameraManager& cameraManager = m_CameraManager.value().get();
             cameraManager.DestroyCamera(m_OrthographicCameraName);
             cameraManager.DestroyCamera(m_PerspectiveCameraName);
         }
@@ -107,7 +107,7 @@ namespace RuntimeApp
 
         if (m_InputSystem)
         {
-            Life::InputSystem& input = m_InputSystem->get();
+            Life::InputSystem& input = m_InputSystem.value().get();
 
             if (input.WasActionStartedThisFrame("Gameplay", "Quit"))
             {
@@ -130,7 +130,7 @@ namespace RuntimeApp
 
             if (input.WasActionStartedThisFrame("Gameplay", "ToggleCamera") && m_CameraManager)
             {
-                Life::CameraManager& cameraManager = m_CameraManager->get();
+                Life::CameraManager& cameraManager = m_CameraManager.value().get();
                 m_IsUsingPerspectiveCamera = !m_IsUsingPerspectiveCamera;
                 const std::string& activeCameraName = m_IsUsingPerspectiveCamera
                     ? m_PerspectiveCameraName
@@ -146,8 +146,8 @@ namespace RuntimeApp
     {
         if (m_CameraManager && m_Renderer2D)
         {
-            Life::CameraManager& cameraManager = m_CameraManager->get();
-            Life::Renderer2D& renderer2D = m_Renderer2D->get();
+            Life::CameraManager& cameraManager = m_CameraManager.value().get();
+            Life::Renderer2D& renderer2D = m_Renderer2D.value().get();
             if (Life::Camera* activeCamera = cameraManager.GetPrimaryCamera())
             {
                 renderer2D.BeginScene(*activeCamera);
@@ -174,7 +174,7 @@ namespace RuntimeApp
             LOG_INFO("Runtime window resized to {}x{}.", resizeEvent.GetWidth(), resizeEvent.GetHeight());
             if (m_CameraManager)
             {
-                Life::CameraManager& cameraManager = m_CameraManager->get();
+                Life::CameraManager& cameraManager = m_CameraManager.value().get();
                 const float aspectRatio = resizeEvent.GetHeight() > 0
                     ? static_cast<float>(resizeEvent.GetWidth()) / static_cast<float>(resizeEvent.GetHeight())
                     : 1.0f;

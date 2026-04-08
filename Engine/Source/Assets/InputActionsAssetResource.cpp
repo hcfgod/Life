@@ -67,39 +67,58 @@ namespace Life::Assets
     std::future<InputActionsAssetResource::Ptr> InputActionsAssetResource::LoadAsync(const std::string& key, Settings settings)
     {
         const uint64_t generation = AssetLoadCoordinator::GetGeneration();
+        const auto loadKey = CreateRef<std::string>(key);
+        const auto loadSettings = CreateRef<Settings>(settings);
 
-        return std::async(std::launch::async, [key, settings, generation]() -> Ptr {
-            AssetLoadProgress::SetProgress(key, 0.05f, "Resolving...");
+        return std::async(std::launch::async, [loadKey, loadSettings, generation]() -> Ptr {
+            const std::string& key = *loadKey;
+            const Settings& settings = *loadSettings;
+            try
+            {
+                AssetLoadProgress::SetProgress(key, 0.05f, "Resolving...");
 
-            if (!AssetLoadCoordinator::IsGenerationCurrent(generation))
+                if (!AssetLoadCoordinator::IsGenerationCurrent(generation))
+                {
+                    AssetLoadProgress::ClearProgress(key);
+                    return nullptr;
+                }
+
+                const auto result = ResolveAndReadJsonAsset(key, "InputActions");
+                if (result.IsFailure())
+                {
+                    AssetLoadProgress::ClearProgress(key);
+                    LOG_CORE_ERROR("InputActionsAssetResource::LoadAsync: {}", result.GetError().GetErrorMessage());
+                    return nullptr;
+                }
+
+                const auto& [guid, fileText] = result.GetValue();
+                AssetLoadProgress::SetProgress(key, 0.40f, "Parsing...");
+
+                auto value = DeserializeInputActions(fileText, key);
+                if (!value)
+                {
+                    AssetLoadProgress::ClearProgress(key);
+                    return nullptr;
+                }
+
+                auto asset = Ref<InputActionsAssetResource>(
+                    new InputActionsAssetResource(key, guid, std::move(value), settings));
+
+                AssetLoadProgress::ClearProgress(key);
+                return asset;
+            }
+            catch (const std::exception& e)
             {
                 AssetLoadProgress::ClearProgress(key);
+                LOG_CORE_ERROR("InputActionsAssetResource::LoadAsync: unexpected exception for '{}': {}", key, e.what());
                 return nullptr;
             }
-
-            const auto result = ResolveAndReadJsonAsset(key, "InputActions");
-            if (result.IsFailure())
+            catch (...)
             {
                 AssetLoadProgress::ClearProgress(key);
-                LOG_CORE_ERROR("InputActionsAssetResource::LoadAsync: {}", result.GetError().GetErrorMessage());
+                LOG_CORE_ERROR("InputActionsAssetResource::LoadAsync: unexpected exception for '{}'", key);
                 return nullptr;
             }
-
-            const auto& [guid, fileText] = result.GetValue();
-            AssetLoadProgress::SetProgress(key, 0.40f, "Parsing...");
-
-            auto value = DeserializeInputActions(fileText, key);
-            if (!value)
-            {
-                AssetLoadProgress::ClearProgress(key);
-                return nullptr;
-            }
-
-            auto asset = Ref<InputActionsAssetResource>(
-                new InputActionsAssetResource(key, guid, std::move(value), settings));
-
-            AssetLoadProgress::ClearProgress(key);
-            return asset;
         });
     }
 

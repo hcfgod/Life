@@ -22,130 +22,148 @@ namespace Life::Assets
     std::future<MaterialAsset::Ptr> MaterialAsset::LoadAsync(const std::string& key, Settings settings)
     {
         const uint64_t generation = AssetLoadCoordinator::GetGeneration();
+        const auto loadKey = CreateRef<std::string>(key);
+        const auto loadSettings = CreateRef<Settings>(settings);
 
-        return std::async(std::launch::async, [key, settings, generation]() -> Ptr {
-            AssetLoadProgress::SetProgress(key, 0.05f, "Resolving...");
-
-            if (!AssetLoadCoordinator::IsGenerationCurrent(generation))
-            {
-                AssetLoadProgress::ClearProgress(key);
-                return nullptr;
-            }
-
-            bool fromBundle = false;
-            std::string resolvedPath;
-            std::string guid;
-            std::string fileText;
-
-            auto* bundle = GetServices().TryGet<AssetBundle>();
-            if (bundle && bundle->IsEnabled() && bundle->IsLoaded())
-            {
-                const auto entry = bundle->FindEntryByKey(key);
-                if (entry.has_value())
-                {
-                    const auto textResult = bundle->ReadAllTextByKey(key);
-                    if (textResult.IsSuccess())
-                    {
-                        fromBundle = true;
-                        guid = entry->Guid;
-                        resolvedPath = "<AssetBundle>";
-                        fileText = textResult.GetValue();
-                    }
-                }
-            }
-
-            if (!fromBundle)
-            {
-                const auto resolvedResult = ResolveAssetKeyToPath(key);
-                if (resolvedResult.IsFailure())
-                {
-                    AssetLoadProgress::ClearProgress(key);
-                    LOG_CORE_ERROR("MaterialAsset::LoadAsync: failed to resolve key '{}': {}",
-                                   key, resolvedResult.GetError().GetErrorMessage());
-                    return nullptr;
-                }
-
-                resolvedPath = resolvedResult.GetValue().string();
-
-                const auto guidResult = LoadOrCreateGuid(resolvedPath, {{"key", key}, {"type", "Material"}});
-                if (guidResult.IsFailure())
-                {
-                    AssetLoadProgress::ClearProgress(key);
-                    LOG_CORE_ERROR("MaterialAsset::LoadAsync: meta GUID failed for '{}': {}",
-                                   resolvedPath, guidResult.GetError().GetErrorMessage());
-                    return nullptr;
-                }
-                guid = guidResult.GetValue();
-
-                std::ifstream in(resolvedPath, std::ios::in | std::ios::binary);
-                if (!in.is_open())
-                {
-                    AssetLoadProgress::ClearProgress(key);
-                    LOG_CORE_ERROR("MaterialAsset::LoadAsync: failed to open '{}'", resolvedPath);
-                    return nullptr;
-                }
-
-                std::ostringstream ss;
-                ss << in.rdbuf();
-                fileText = ss.str();
-            }
-
-            AssetLoadProgress::SetProgress(key, 0.40f, "Parsing material JSON...");
-
-            auto asset = Ref<MaterialAsset>(
-                new MaterialAsset(key, guid, settings));
-            asset->m_ResolvedPath = resolvedPath;
-
+        return std::async(std::launch::async, [loadKey, loadSettings, generation]() -> Ptr {
+            const std::string& key = *loadKey;
+            const Settings& settings = *loadSettings;
             try
             {
-                json j = json::parse(fileText);
+                AssetLoadProgress::SetProgress(key, 0.05f, "Resolving...");
 
-                if (j.contains("shader") && j["shader"].is_string())
-                    asset->m_Shader = AssetHandle<ShaderAsset>(j["shader"].get<std::string>());
-
-                if (j.contains("mainTexture") && j["mainTexture"].is_string())
-                    asset->m_MainTexture = AssetHandle<TextureAsset>(j["mainTexture"].get<std::string>());
-
-                if (j.contains("normalTexture") && j["normalTexture"].is_string())
-                    asset->m_NormalTexture = AssetHandle<TextureAsset>(j["normalTexture"].get<std::string>());
-
-                asset->m_NormalStrength = j.value("normalStrength", 1.0f);
-                asset->m_Roughness = j.value("roughness", 0.5f);
-                asset->m_SpecularIntensity = j.value("specularIntensity", 0.5f);
-
-                if (j.contains("mainTextureSubRect") && j["mainTextureSubRect"].is_object())
+                if (!AssetLoadCoordinator::IsGenerationCurrent(generation))
                 {
-                    const auto& sub = j["mainTextureSubRect"];
-                    asset->m_HasMainTextureSubRect = true;
-                    asset->m_MainTextureUvMin.x = sub.value("uMin", 0.0f);
-                    asset->m_MainTextureUvMin.y = sub.value("vMin", 0.0f);
-                    asset->m_MainTextureUvMax.x = sub.value("uMax", 1.0f);
-                    asset->m_MainTextureUvMax.y = sub.value("vMax", 1.0f);
+                    AssetLoadProgress::ClearProgress(key);
+                    return nullptr;
                 }
 
-                // Register dependencies in AssetDatabase
-                auto* db = GetServices().TryGet<AssetDatabase>();
-                if (db)
+                bool fromBundle = false;
+                std::string resolvedPath;
+                std::string guid;
+                std::string fileText;
+
+                auto* bundle = GetServices().TryGet<AssetBundle>();
+                if (bundle && bundle->IsEnabled() && bundle->IsLoaded())
                 {
-                    std::vector<std::string> deps;
-                    if (!asset->m_Shader.GetGuid().empty())
-                        deps.push_back(asset->m_Shader.GetGuid());
-                    if (!asset->m_MainTexture.GetGuid().empty())
-                        deps.push_back(asset->m_MainTexture.GetGuid());
-                    if (!asset->m_NormalTexture.GetGuid().empty())
-                        deps.push_back(asset->m_NormalTexture.GetGuid());
-                    db->SetDependencies(guid, deps);
+                    const auto entry = bundle->FindEntryByKey(key);
+                    if (entry.has_value())
+                    {
+                        const auto textResult = bundle->ReadAllTextByKey(key);
+                        if (textResult.IsSuccess())
+                        {
+                            fromBundle = true;
+                            guid = entry->Guid;
+                            resolvedPath = "<AssetBundle>";
+                            fileText = textResult.GetValue();
+                        }
+                    }
                 }
+
+                if (!fromBundle)
+                {
+                    const auto resolvedResult = ResolveAssetKeyToPath(key);
+                    if (resolvedResult.IsFailure())
+                    {
+                        AssetLoadProgress::ClearProgress(key);
+                        LOG_CORE_ERROR("MaterialAsset::LoadAsync: failed to resolve key '{}': {}",
+                                       key, resolvedResult.GetError().GetErrorMessage());
+                        return nullptr;
+                    }
+
+                    resolvedPath = resolvedResult.GetValue().string();
+
+                    const auto guidResult = LoadOrCreateGuid(resolvedPath, {{"key", key}, {"type", "Material"}});
+                    if (guidResult.IsFailure())
+                    {
+                        AssetLoadProgress::ClearProgress(key);
+                        LOG_CORE_ERROR("MaterialAsset::LoadAsync: meta GUID failed for '{}': {}",
+                                       resolvedPath, guidResult.GetError().GetErrorMessage());
+                        return nullptr;
+                    }
+                    guid = guidResult.GetValue();
+
+                    std::ifstream in(resolvedPath, std::ios::in | std::ios::binary);
+                    if (!in.is_open())
+                    {
+                        AssetLoadProgress::ClearProgress(key);
+                        LOG_CORE_ERROR("MaterialAsset::LoadAsync: failed to open '{}'", resolvedPath);
+                        return nullptr;
+                    }
+
+                    std::ostringstream ss;
+                    ss << in.rdbuf();
+                    fileText = ss.str();
+                }
+
+                AssetLoadProgress::SetProgress(key, 0.40f, "Parsing material JSON...");
+
+                auto asset = Ref<MaterialAsset>(
+                    new MaterialAsset(key, guid, settings));
+                asset->m_ResolvedPath = resolvedPath;
+
+                try
+                {
+                    json j = json::parse(fileText);
+
+                    if (j.contains("shader") && j["shader"].is_string())
+                        asset->m_Shader = AssetHandle<ShaderAsset>(j["shader"].get<std::string>());
+
+                    if (j.contains("mainTexture") && j["mainTexture"].is_string())
+                        asset->m_MainTexture = AssetHandle<TextureAsset>(j["mainTexture"].get<std::string>());
+
+                    if (j.contains("normalTexture") && j["normalTexture"].is_string())
+                        asset->m_NormalTexture = AssetHandle<TextureAsset>(j["normalTexture"].get<std::string>());
+
+                    asset->m_NormalStrength = j.value("normalStrength", 1.0f);
+                    asset->m_Roughness = j.value("roughness", 0.5f);
+                    asset->m_SpecularIntensity = j.value("specularIntensity", 0.5f);
+
+                    if (j.contains("mainTextureSubRect") && j["mainTextureSubRect"].is_object())
+                    {
+                        const auto& sub = j["mainTextureSubRect"];
+                        asset->m_HasMainTextureSubRect = true;
+                        asset->m_MainTextureUvMin.x = sub.value("uMin", 0.0f);
+                        asset->m_MainTextureUvMin.y = sub.value("vMin", 0.0f);
+                        asset->m_MainTextureUvMax.x = sub.value("uMax", 1.0f);
+                        asset->m_MainTextureUvMax.y = sub.value("vMax", 1.0f);
+                    }
+
+                    auto* db = GetServices().TryGet<AssetDatabase>();
+                    if (db)
+                    {
+                        std::vector<std::string> deps;
+                        if (!asset->m_Shader.GetGuid().empty())
+                            deps.push_back(asset->m_Shader.GetGuid());
+                        if (!asset->m_MainTexture.GetGuid().empty())
+                            deps.push_back(asset->m_MainTexture.GetGuid());
+                        if (!asset->m_NormalTexture.GetGuid().empty())
+                            deps.push_back(asset->m_NormalTexture.GetGuid());
+                        db->SetDependencies(guid, deps);
+                    }
+                }
+                catch (const std::exception& e)
+                {
+                    AssetLoadProgress::ClearProgress(key);
+                    LOG_CORE_ERROR("MaterialAsset::LoadAsync: JSON parse failed for '{}': {}", key, e.what());
+                    return nullptr;
+                }
+
+                AssetLoadProgress::ClearProgress(key);
+                return asset;
             }
             catch (const std::exception& e)
             {
                 AssetLoadProgress::ClearProgress(key);
-                LOG_CORE_ERROR("MaterialAsset::LoadAsync: JSON parse failed for '{}': {}", key, e.what());
+                LOG_CORE_ERROR("MaterialAsset::LoadAsync: unexpected exception for '{}': {}", key, e.what());
                 return nullptr;
             }
-
-            AssetLoadProgress::ClearProgress(key);
-            return asset;
+            catch (...)
+            {
+                AssetLoadProgress::ClearProgress(key);
+                LOG_CORE_ERROR("MaterialAsset::LoadAsync: unexpected exception for '{}'", key);
+                return nullptr;
+            }
         });
     }
 
