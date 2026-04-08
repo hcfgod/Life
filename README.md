@@ -1,6 +1,6 @@
 # Life Engine
 
-Life is a custom C++ 2D/3D engine workspace focused on building a clean, professional engine foundation with explicit ownership, strong lifecycle boundaries, practical cross-platform tooling, and a host-owned runtime architecture.
+Life is a custom C++ engine focused on building a clean, professional engine foundation with explicit ownership, strong lifecycle boundaries, practical cross-platform tooling, and a host-owned runtime architecture.
 
 ## What This Repository Is
 
@@ -15,13 +15,13 @@ The current platform layer is SDL-backed, with the runtime owning SDL subsystem 
 
 ## Current Engine Capabilities
 
-The workspace now includes a broader custom engine foundation than the original core-only setup.
+Building on the core engine library, the repository now provides a broader engine foundation that includes a range of features and services.
 
 - `ApplicationRunner` and `ApplicationHost` provide the authoritative loop, lifecycle sequencing, and host-owned service model.
 - `ServiceRegistry` is host-owned and exposed through application-facing accessors so runtime systems can be consumed without falling back to globals.
 - `LayerStack` is host-owned and integrated into update, render, and event routing, with distinct layer and overlay ordering semantics.
 - `InputSystem` is host-owned and provides raw-state polling, action-based input, rebinding, and SDL-fed device state.
-- `GraphicsDevice` is the backend abstraction, with `Renderer` as the general rendering service and `Renderer2D` as the first built-in higher-level renderer.
+- `GraphicsDevice` is the backend abstraction, with `Renderer` as the general rendering service and `Renderer2D` as a substantial built-in 2D renderer supporting camera-driven rendering, textured quads, batching, and editor/runtime integration.
 - `Camera` and `CameraManager` provide named camera ownership, orthographic and perspective projections, primary-camera selection, per-camera clear settings, aspect-ratio updates, and viewport handling.
 - `ImGuiSystem` is host-owned and provides the current tooling bridge for docking UI, input capture, and texture-backed editor panels.
 - `Runtime` demonstrates scene-facing rendering, input actions, multi-camera usage, overlays, and host-owned engine services in a normal app context.
@@ -30,7 +30,7 @@ The workspace now includes a broader custom engine foundation than the original 
 
 ## Current Goals
 
-The current direction of the project is to keep turning the workspace into a solid custom 2D/3D engine rather than a narrow engine-core prototype. In practice that means:
+The current direction of the project is to keep turning the repository into a solid custom engine rather than a narrow engine-core prototype. In practice that means:
 
 - keeping ownership and lifetime boundaries explicit
 - maintaining a clean application/runtime API
@@ -191,7 +191,7 @@ At the moment it serves as a practical integration sample for:
 - layer attachment and teardown
 - action-based input
 - host-owned camera registration and switching
-- first-pass 2D rendering through `Renderer2D`
+- camera-driven 2D rendering through `Renderer2D`, including textured quads and batching
 - resize-driven camera aspect-ratio updates
 - runtime overlays and diagnostics logging
 

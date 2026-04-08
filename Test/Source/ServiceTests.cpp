@@ -91,3 +91,46 @@ TEST_CASE("Creating a second ApplicationHost while one is live is rejected")
     host.reset();
     CHECK_FALSE(Life::GetServices().Has<Life::ApplicationHost>());
 }
+
+namespace
+{
+    class ReloadTrackingAsset final : public Life::Asset
+    {
+    public:
+        ReloadTrackingAsset(std::string key, std::string guid)
+            : Life::Asset(std::move(key), std::move(guid))
+        {
+        }
+
+        bool Reload() override
+        {
+            ++ReloadCount;
+            return ReloadResult;
+        }
+
+        int ReloadCount = 0;
+        bool ReloadResult = true;
+    };
+}
+
+TEST_CASE("AssetManager exposes cached assets and reloads live cached instances")
+{
+    Life::Assets::AssetManager assetManager;
+    auto asset = Life::Ref<ReloadTrackingAsset>(new ReloadTrackingAsset("Assets/Test.asset", "guid-test-asset"));
+    assetManager.Cache(asset->GetKey(), asset->GetGuid(), asset);
+
+    REQUIRE(assetManager.GetCachedByKey<ReloadTrackingAsset>(asset->GetKey()) == asset);
+    REQUIRE(assetManager.GetByGuid<ReloadTrackingAsset>(asset->GetGuid()) == asset);
+
+    CHECK(assetManager.ReloadCachedAssetByKey(asset->GetKey()));
+    CHECK(assetManager.ReloadCachedAssetByGuid(asset->GetGuid()));
+    CHECK(asset->ReloadCount == 2);
+
+    asset->ReloadResult = false;
+    CHECK_FALSE(assetManager.ReloadCachedAssetByKey(asset->GetKey()));
+    CHECK(asset->ReloadCount == 3);
+
+    asset.reset();
+    CHECK_FALSE(assetManager.ReloadCachedAssetByKey("Assets/Test.asset"));
+    CHECK_FALSE(assetManager.ReloadCachedAssetByGuid("guid-test-asset"));
+}

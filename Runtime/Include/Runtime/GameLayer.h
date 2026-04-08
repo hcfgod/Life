@@ -20,6 +20,7 @@ namespace RuntimeApp
         void OnEvent(Life::Event& event) override;
 
     private:
+        void TryAcquireCheckerTexture();
         void CacheServices();
         void ResetServices() noexcept;
 

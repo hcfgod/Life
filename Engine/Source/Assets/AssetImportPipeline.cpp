@@ -98,10 +98,13 @@ namespace Life::Assets::AssetImportPipeline
 
         void ReloadIfCached(const std::string& key, AssetManager& mgr)
         {
-            // Try to find and reload a cached asset
-            (void)key;
-            (void)mgr;
-            // TODO: Implement when AssetManager has GetCachedByKey
+            if (key.empty())
+                return;
+
+            if (!mgr.ReloadCachedAssetByKey(key))
+            {
+                LOG_CORE_INFO("AssetImportPipeline: reimport updated key='{}' with no live cached asset to reload.", key);
+            }
         }
 
         bool IsPathUnderRoot(const std::filesystem::path& candidatePath,
@@ -346,6 +349,7 @@ namespace Life::Assets::AssetImportPipeline
                       { return a.Key < b.Key; });
 
             const auto commitStart = std::chrono::steady_clock::now();
+            AssetManager* assetManager = GetServices().TryGet<AssetManager>();
             const auto committed = db.CommitRecordBatch(toCommit);
 
             std::vector<std::string> changedGuids;
@@ -355,6 +359,8 @@ namespace Life::Assets::AssetImportPipeline
                 stats.Imported++;
                 stats.ImportedKeys.push_back(r.Key);
                 changedGuids.push_back(r.Guid);
+                if (assetManager)
+                    ReloadIfCached(r.Key, *assetManager);
             }
 
             LOG_CORE_INFO("AssetImportPipeline: committed {} record(s) (discovered={}, skipped={}, missing={}, errors={})",
@@ -395,7 +401,14 @@ namespace Life::Assets::AssetImportPipeline
                 {
                     if (dep.SourceKind == AssetSourceKind::Generated)
                     {
-                        if (GeneratedAssetRuntimeRegistry::GetInstance().Reload(dep.Key))
+                        bool generatedReloaded = GeneratedAssetRuntimeRegistry::GetInstance().Reload(dep.Key);
+                        if (assetManager)
+                        {
+                            const bool cachedReloaded = assetManager->ReloadCachedAssetByKey(dep.Key);
+                            generatedReloaded = generatedReloaded || cachedReloaded;
+                        }
+
+                        if (generatedReloaded)
                         {
                             stats.Imported++;
                             stats.ImportedKeys.push_back(dep.Key);

@@ -16,21 +16,30 @@ namespace RuntimeApp
     {
     }
 
-    void GameLayer::OnAttach()
+    void GameLayer::TryAcquireCheckerTexture()
     {
-        CacheServices();
+        if (m_CheckerTextureAsset)
+            return;
 
         if (auto* assetManager = GetApplication().TryGetService<Life::Assets::AssetManager>())
         {
             m_CheckerTextureAsset = assetManager->GetOrLoad<Life::Assets::TextureAsset>(m_CheckerTextureKey);
             if (!m_CheckerTextureAsset)
-                LOG_WARN("Runtime failed to load textured quad asset '{}'. Falling back to error texture.", m_CheckerTextureKey);
-            else
-            {
-                m_CheckerTextureAsset->SetFilterModes(Life::TextureFilterMode::Nearest, Life::TextureFilterMode::Nearest);
-                m_CheckerTextureAsset->SetWrapModes(Life::TextureWrapMode::Repeat, Life::TextureWrapMode::Repeat);
-            }
+                return;
+
+            m_CheckerTextureAsset->SetFilterModes(Life::TextureFilterMode::Nearest, Life::TextureFilterMode::Nearest);
+            m_CheckerTextureAsset->SetWrapModes(Life::TextureWrapMode::Repeat, Life::TextureWrapMode::Repeat);
+            LOG_INFO("Runtime recovered textured quad asset '{}'.", m_CheckerTextureKey);
         }
+    }
+
+    void GameLayer::OnAttach()
+    {
+        CacheServices();
+
+        TryAcquireCheckerTexture();
+        if (!m_CheckerTextureAsset)
+            LOG_WARN("Runtime failed to load textured quad asset '{}'. Falling back to error texture.", m_CheckerTextureKey);
 
         LOG_INFO("Runtime boot config: {}", m_StartupConfig.dump());
         if (m_CameraManager)
@@ -98,6 +107,8 @@ namespace RuntimeApp
     void GameLayer::OnUpdate(float timestep)
     {
         m_ElapsedTime += timestep;
+
+        TryAcquireCheckerTexture();
 
         if (!m_HasLoggedRuntime && m_ElapsedTime >= 1.0f)
         {

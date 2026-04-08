@@ -14,11 +14,7 @@ namespace Life
     Shader* ShaderLibrary::Load(const std::string& name, const ShaderDescription& desc,
                                  const void* bytecode, size_t bytecodeSize)
     {
-        if (Exists(name))
-        {
-            LOG_CORE_WARN("ShaderLibrary::Load: Shader '{}' already exists, replacing.", name);
-            Remove(name);
-        }
+        const bool replacingExisting = Exists(name);
 
         auto shader = Shader::CreateFromBytecode(m_Device, desc, bytecode, bytecodeSize);
         if (!shader)
@@ -26,6 +22,9 @@ namespace Life
             LOG_CORE_ERROR("ShaderLibrary::Load: Failed to create shader '{}'.", name);
             return nullptr;
         }
+
+        if (replacingExisting)
+            LOG_CORE_WARN("ShaderLibrary::Load: Shader '{}' already exists, replacing.", name);
 
         Shader* rawPtr = shader.get();
         m_Shaders[name] = std::move(shader);
@@ -35,11 +34,7 @@ namespace Life
     Shader* ShaderLibrary::LoadFromFile(const std::string& name, const ShaderDescription& desc,
                                          const std::string& filePath)
     {
-        if (Exists(name))
-        {
-            LOG_CORE_WARN("ShaderLibrary::LoadFromFile: Shader '{}' already exists, replacing.", name);
-            Remove(name);
-        }
+        const bool replacingExisting = Exists(name);
 
         auto shader = Shader::CreateFromFile(m_Device, desc, filePath);
         if (!shader)
@@ -47,6 +42,9 @@ namespace Life
             LOG_CORE_ERROR("ShaderLibrary::LoadFromFile: Failed to load shader '{}' from '{}'.", name, filePath);
             return nullptr;
         }
+
+        if (replacingExisting)
+            LOG_CORE_WARN("ShaderLibrary::LoadFromFile: Shader '{}' already exists, replacing.", name);
 
         Shader* rawPtr = shader.get();
         m_Shaders[name] = std::move(shader);

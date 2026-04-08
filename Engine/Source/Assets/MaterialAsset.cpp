@@ -213,26 +213,53 @@ namespace Life::Assets
         {
             json j = json::parse(fileText);
 
+            AssetHandle<ShaderAsset> shader = m_Shader;
+            AssetHandle<TextureAsset> mainTexture = m_MainTexture;
+            AssetHandle<TextureAsset> normalTexture = m_NormalTexture;
+            bool hasMainTextureSubRect = false;
+            glm::vec2 mainTextureUvMin = glm::vec2(0.0f, 0.0f);
+            glm::vec2 mainTextureUvMax = glm::vec2(1.0f, 1.0f);
+            float normalStrength = j.value("normalStrength", 1.0f);
+            float roughness = j.value("roughness", 0.5f);
+            float specularIntensity = j.value("specularIntensity", 0.5f);
+
             if (j.contains("shader") && j["shader"].is_string())
-                m_Shader = AssetHandle<ShaderAsset>(j["shader"].get<std::string>());
+                shader = AssetHandle<ShaderAsset>(j["shader"].get<std::string>());
             if (j.contains("mainTexture") && j["mainTexture"].is_string())
-                m_MainTexture = AssetHandle<TextureAsset>(j["mainTexture"].get<std::string>());
+                mainTexture = AssetHandle<TextureAsset>(j["mainTexture"].get<std::string>());
             if (j.contains("normalTexture") && j["normalTexture"].is_string())
-                m_NormalTexture = AssetHandle<TextureAsset>(j["normalTexture"].get<std::string>());
+                normalTexture = AssetHandle<TextureAsset>(j["normalTexture"].get<std::string>());
 
-            m_NormalStrength = j.value("normalStrength", 1.0f);
-            m_Roughness = j.value("roughness", 0.5f);
-            m_SpecularIntensity = j.value("specularIntensity", 0.5f);
-
-            m_HasMainTextureSubRect = false;
             if (j.contains("mainTextureSubRect") && j["mainTextureSubRect"].is_object())
             {
                 const auto& sub = j["mainTextureSubRect"];
-                m_HasMainTextureSubRect = true;
-                m_MainTextureUvMin.x = sub.value("uMin", 0.0f);
-                m_MainTextureUvMin.y = sub.value("vMin", 0.0f);
-                m_MainTextureUvMax.x = sub.value("uMax", 1.0f);
-                m_MainTextureUvMax.y = sub.value("vMax", 1.0f);
+                hasMainTextureSubRect = true;
+                mainTextureUvMin.x = sub.value("uMin", 0.0f);
+                mainTextureUvMin.y = sub.value("vMin", 0.0f);
+                mainTextureUvMax.x = sub.value("uMax", 1.0f);
+                mainTextureUvMax.y = sub.value("vMax", 1.0f);
+            }
+
+            m_Shader = std::move(shader);
+            m_MainTexture = std::move(mainTexture);
+            m_NormalTexture = std::move(normalTexture);
+            m_HasMainTextureSubRect = hasMainTextureSubRect;
+            m_MainTextureUvMin = mainTextureUvMin;
+            m_MainTextureUvMax = mainTextureUvMax;
+            m_NormalStrength = normalStrength;
+            m_Roughness = roughness;
+            m_SpecularIntensity = specularIntensity;
+
+            if (auto* db = GetServices().TryGet<AssetDatabase>())
+            {
+                std::vector<std::string> deps;
+                if (!m_Shader.GetGuid().empty())
+                    deps.push_back(m_Shader.GetGuid());
+                if (!m_MainTexture.GetGuid().empty())
+                    deps.push_back(m_MainTexture.GetGuid());
+                if (!m_NormalTexture.GetGuid().empty())
+                    deps.push_back(m_NormalTexture.GetGuid());
+                (void)db->SetDependencies(GetGuid(), deps);
             }
         }
         catch (const std::exception& e)

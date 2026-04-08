@@ -237,6 +237,21 @@ namespace Life::Assets
         auto decodedResult = DecodeToRGBA8(resolvedPath, m_Specification.FlipVerticallyOnLoad);
         if (decodedResult.IsFailure())
         {
+            auto ppmFallback = TryDecodePpmP3ToRGBA8(resolvedPath);
+            if (ppmFallback.IsSuccess())
+            {
+                if (m_Specification.FlipVerticallyOnLoad)
+                {
+                    auto image = ppmFallback.GetValue();
+                    FlipVerticalRGBA8(image);
+                    ppmFallback = image;
+                }
+                decodedResult = ppmFallback;
+            }
+        }
+
+        if (decodedResult.IsFailure())
+        {
             LOG_CORE_ERROR("TextureAsset::Reload: decode failed for '{}': {}",
                            resolvedPath, decodedResult.GetError().GetErrorMessage());
             return false;

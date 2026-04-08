@@ -153,7 +153,9 @@ Current expectations:
 - if graphics-device creation fails, the application can still continue without GPU rendering
 - if Dear ImGui is unavailable in the build, `ImGuiSystem` remains unavailable rather than crashing the host
 - if the active backend lacks a renderer backend, the editor UI path is unavailable rather than pretending to work
-- if offscreen texture creation or texture-handle acquisition fails, the editor logs the failure and avoids invalid rendering
+- if offscreen texture creation or texture-handle acquisition fails, the editor logs the failure and avoids invalid rendering for that frame
+- if the checker texture or other scene content is missing at attach time, the editor overlay retries acquisition during later updates so scene rendering can recover when content becomes available
+- if `Renderer2D` loses internal GPU resources after an earlier successful initialization, later scene attempts will retry resource creation instead of requiring a process restart
 
 This matches the broader engine policy of visible failures without unnecessary total-runtime collapse.
 

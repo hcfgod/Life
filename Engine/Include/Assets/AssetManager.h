@@ -168,6 +168,80 @@ namespace Life::Assets
             return nullptr;
         }
 
+        template<typename T>
+        Ref<T> GetCachedByKey(const std::string& key)
+        {
+            if (key.empty()) return nullptr;
+
+            std::shared_lock<std::shared_mutex> readLock(m_Mutex);
+            auto it = m_KeyCache.find(key);
+            if (it != m_KeyCache.end())
+            {
+                if (auto locked = it->second.lock())
+                {
+                    return std::static_pointer_cast<T>(locked);
+                }
+            }
+
+            return nullptr;
+        }
+
+        Ref<Asset> GetCachedByKeyAsset(const std::string& key)
+        {
+            if (key.empty()) return nullptr;
+
+            std::shared_lock<std::shared_mutex> readLock(m_Mutex);
+            auto it = m_KeyCache.find(key);
+            if (it != m_KeyCache.end())
+                return it->second.lock();
+
+            return nullptr;
+        }
+
+        bool ReloadCachedAssetByKey(const std::string& key)
+        {
+            Ref<Asset> asset = GetCachedByKeyAsset(key);
+            if (!asset)
+                return false;
+
+            try
+            {
+                return asset->Reload();
+            }
+            catch (const std::exception& exception)
+            {
+                LOG_CORE_ERROR("AssetManager::ReloadCachedAssetByKey: exception while reloading '{}': {}", key, exception.what());
+            }
+            catch (...)
+            {
+                LOG_CORE_ERROR("AssetManager::ReloadCachedAssetByKey: non-standard exception while reloading '{}'", key);
+            }
+
+            return false;
+        }
+
+        bool ReloadCachedAssetByGuid(const std::string& guid)
+        {
+            Ref<Asset> asset = GetByGuidAsset(guid);
+            if (!asset)
+                return false;
+
+            try
+            {
+                return asset->Reload();
+            }
+            catch (const std::exception& exception)
+            {
+                LOG_CORE_ERROR("AssetManager::ReloadCachedAssetByGuid: exception while reloading '{}': {}", guid, exception.what());
+            }
+            catch (...)
+            {
+                LOG_CORE_ERROR("AssetManager::ReloadCachedAssetByGuid: non-standard exception while reloading '{}'", guid);
+            }
+
+            return false;
+        }
+
         // -----------------------------------------------------------------
         // Cache / Register
         // -----------------------------------------------------------------

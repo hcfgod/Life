@@ -90,6 +90,7 @@ namespace Life
         , m_Impl(CreateScope<Impl>())
     {
         m_Impl->Instances.reserve(static_cast<decltype(m_Impl->Instances)::size_type>(MaxQuads));
+        m_Impl->Stats = {};
     }
 
     Renderer2D::~Renderer2D() = default;
@@ -217,7 +218,28 @@ namespace Life
     bool Renderer2D::EnsureResourcesReady()
     {
         if (m_Impl->ResourcesReady)
-            return true;
+        {
+            const bool resourcesStillValid =
+                m_Impl->QuadVertexBuffer != nullptr && m_Impl->QuadVertexBuffer->IsValid() &&
+                m_Impl->InstanceBuffer != nullptr && m_Impl->InstanceBuffer->IsValid() &&
+                m_Impl->SceneConstantBuffer != nullptr && m_Impl->SceneConstantBuffer->IsValid() &&
+                m_Impl->Pipeline != nullptr && m_Impl->Pipeline->IsValid() &&
+                m_Impl->WhiteTexture != nullptr && m_Impl->WhiteTexture->IsValid() &&
+                m_Impl->ErrorTexture != nullptr && m_Impl->ErrorTexture->IsValid();
+
+            if (resourcesStillValid)
+                return true;
+
+            m_Impl->ResourcesReady = false;
+            m_Impl->QuadVertexBuffer.reset();
+            m_Impl->InstanceBuffer.reset();
+            m_Impl->SceneConstantBuffer.reset();
+            m_Impl->Pipeline.reset();
+            m_Impl->WhiteTexture.reset();
+            m_Impl->ErrorTexture.reset();
+            m_Impl->VertexShader = nullptr;
+            m_Impl->PixelShader = nullptr;
+        }
 
         GraphicsDevice& device = m_Renderer.GetGraphicsDevice();
         const std::array<QuadStaticVertex, StaticQuadVertexCount> quadVertices =
@@ -361,6 +383,8 @@ namespace Life
         if (!m_Impl->SceneConstantBuffer->SetData(m_Renderer.GetGraphicsDevice(), &sceneConstants, sizeof(sceneConstants)))
         {
             LOG_CORE_ERROR("Renderer2D failed to upload scene constant data.");
+            m_Impl->ResourcesReady = false;
+            m_Impl->SceneConstantBuffer.reset();
             return false;
         }
 
@@ -386,6 +410,8 @@ namespace Life
         if (!m_Impl->InstanceBuffer->SetData(m_Renderer.GetGraphicsDevice(), m_Impl->Instances.data(), instanceDataSize))
         {
             LOG_CORE_ERROR("Renderer2D failed to upload queued instance data.");
+            m_Impl->ResourcesReady = false;
+            m_Impl->InstanceBuffer.reset();
             ResetQueuedDraws();
             return;
         }

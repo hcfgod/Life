@@ -22,6 +22,7 @@ namespace EditorApp
         void OnEvent(Life::Event& event) override;
 
     private:
+        void TryAcquireCheckerTexture();
         void CacheServices();
         void ReleaseCachedServices() noexcept;
         void EnsureEditorCamera();

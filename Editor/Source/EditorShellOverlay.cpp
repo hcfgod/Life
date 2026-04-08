@@ -15,6 +15,20 @@ namespace EditorApp
     {
     }
 
+    void EditorShellOverlay::TryAcquireCheckerTexture()
+    {
+        if (m_CheckerTextureAsset || !m_AssetManager)
+            return;
+
+        m_CheckerTextureAsset = m_AssetManager->get().GetOrLoad<Life::Assets::TextureAsset>(m_CheckerTextureKey);
+        if (!m_CheckerTextureAsset)
+            return;
+
+        m_CheckerTextureAsset->SetFilterModes(Life::TextureFilterMode::Nearest, Life::TextureFilterMode::Nearest);
+        m_CheckerTextureAsset->SetWrapModes(Life::TextureWrapMode::Repeat, Life::TextureWrapMode::Repeat);
+        LOG_INFO("Editor recovered textured quad asset '{}'.", m_CheckerTextureKey);
+    }
+
     void EditorShellOverlay::CacheServices()
     {
         Life::Application& application = GetApplication();
@@ -43,14 +57,10 @@ namespace EditorApp
         m_LayoutInitialized = false;
         CacheServices();
         EnsureEditorCamera();
-        m_CheckerTextureAsset = m_AssetManager->get().GetOrLoad<Life::Assets::TextureAsset>(m_CheckerTextureKey);
+        TryAcquireCheckerTexture();
+
         if (!m_CheckerTextureAsset)
             LOG_WARN("Editor failed to load textured quad asset '{}'. Falling back to error texture.", m_CheckerTextureKey);
-        else
-        {
-            m_CheckerTextureAsset->SetFilterModes(Life::TextureFilterMode::Nearest, Life::TextureFilterMode::Nearest);
-            m_CheckerTextureAsset->SetWrapModes(Life::TextureWrapMode::Repeat, Life::TextureWrapMode::Repeat);
-        }
 
         if (m_Renderer && m_Renderer2D && m_ImGuiSystem)
         {
@@ -79,6 +89,7 @@ namespace EditorApp
     void EditorShellOverlay::OnUpdate(float timestep)
     {
         m_ElapsedTime += timestep;
+        TryAcquireCheckerTexture();
 
         if (m_InputSystem && m_Application && m_InputSystem->get().WasActionStartedThisFrame("Editor", "Quit"))
             m_Application->get().RequestShutdown();

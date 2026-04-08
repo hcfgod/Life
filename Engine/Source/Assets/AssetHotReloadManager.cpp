@@ -210,27 +210,22 @@ namespace Life::Assets
                 });
 
                 if (m_ReloadThreadStop)
-                {
                     return;
-                }
 
                 auto now = std::chrono::steady_clock::now();
                 auto nextDue = now + std::chrono::hours(24);
-                for (const auto& [key, p] : m_PendingByKey)
+                for (const auto& [key, pending] : m_PendingByKey)
                 {
-                    if (p.dueTime < nextDue)
-                    {
-                        nextDue = p.dueTime;
-                    }
+                    (void)key;
+                    if (pending.dueTime < nextDue)
+                        nextDue = pending.dueTime;
                 }
 
                 if (nextDue > now)
                 {
                     m_ReloadCv.wait_until(lock, nextDue, [this] { return m_ReloadThreadStop; });
                     if (m_ReloadThreadStop)
-                    {
                         return;
-                    }
                 }
 
                 now = std::chrono::steady_clock::now();
@@ -249,18 +244,21 @@ namespace Life::Assets
             }
 
             auto* db = GetServices().TryGet<AssetDatabase>();
-            if (!db) continue;
+            if (!db)
+                continue;
+
+            auto* assetManager = GetServices().TryGet<AssetManager>();
 
             std::unordered_map<std::string, std::vector<AssetDatabase::Record>> dependentsCache;
             auto getDependentsCached = [&](const std::string& guid) -> const std::vector<AssetDatabase::Record>&
             {
                 auto it = dependentsCache.find(guid);
                 if (it != dependentsCache.end())
-                {
                     return it->second;
-                }
+
                 auto deps = db->GetDependentsOf(guid);
-                auto [insIt, _] = dependentsCache.emplace(guid, std::move(deps));
+                auto [insIt, inserted] = dependentsCache.emplace(guid, std::move(deps));
+                (void)inserted;
                 return insIt->second;
             };
 
@@ -272,18 +270,21 @@ namespace Life::Assets
             {
                 auto recordResult = db->FindByKey(job.key);
                 if (recordResult.IsFailure())
-                {
                     continue;
-                }
 
                 const auto record = recordResult.GetValue();
 
                 if (record.SourceKind == AssetSourceKind::Generated)
                 {
-                    if (!GeneratedAssetRuntimeRegistry::GetInstance().Reload(record.Key))
+                    bool generatedReloaded = GeneratedAssetRuntimeRegistry::GetInstance().Reload(record.Key);
+                    if (assetManager)
                     {
-                        LOG_CORE_WARN("AssetHotReload: generated reload failed for '{}'", record.Key);
+                        const bool cachedReloaded = assetManager->ReloadCachedAssetByKey(record.Key);
+                        generatedReloaded = generatedReloaded || cachedReloaded;
                     }
+
+                    if (!generatedReloaded)
+                        LOG_CORE_WARN("AssetHotReload: generated reload failed for '{}'", record.Key);
                 }
                 else
                 {
@@ -297,6 +298,10 @@ namespace Life::Assets
                     {
                         LOG_CORE_WARN("AssetHotReload: reimport failed for '{}': {}", record.Key, reimportResult.GetError().GetErrorMessage());
                     }
+                    else if (assetManager && !assetManager->ReloadCachedAssetByKey(record.Key))
+                    {
+                        LOG_CORE_INFO("AssetHotReload: reimported '{}' with no live cached asset to reload.", record.Key);
+                    }
                 }
 
                 queue.push_back(record);
@@ -308,28 +313,28 @@ namespace Life::Assets
                 queue.pop_front();
 
                 if (current.Guid.empty() || current.Key.empty())
-                {
                     continue;
-                }
 
                 if (!visitedGuids.emplace(current.Guid).second)
-                {
                     continue;
-                }
 
                 bool reloaded = false;
                 if (current.SourceKind == AssetSourceKind::Generated)
                 {
                     reloaded = GeneratedAssetRuntimeRegistry::GetInstance().Reload(current.Key);
+                    if (assetManager)
+                        reloaded = assetManager->ReloadCachedAssetByKey(current.Key) || reloaded;
+                }
+                else if (assetManager)
+                {
+                    reloaded = assetManager->ReloadCachedAssetByKey(current.Key);
                 }
 
                 LOG_CORE_INFO("AssetHotReload: reload key='{}' result={}", current.Key, reloaded ? "success" : "no-op");
 
                 const auto& dependents = getDependentsCached(current.Guid);
                 for (const auto& dep : dependents)
-                {
                     queue.push_back(dep);
-                }
             }
         }
     }

@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Life's current rendering layer is still intentionally conservative, but it is no longer just a raw device wrapper.
+Life's current rendering layer is no longer just a thin wrapper around the backend device.
 
-The active stack now includes a host-owned backend device, a general renderer service, a first-pass 2D renderer, and a host-owned camera system. The goal is still the same: keep ownership and frame sequencing explicit while giving application and layer code a practical rendering path that does not take ownership of swapchain lifetime, backend selection, or platform-specific bring-up.
+The active stack now includes a host-owned backend device, a general renderer service, a substantially fuller built-in `Renderer2D`, engine-owned scene-surface tooling integration, and a host-owned camera system. The goal is still the same: keep ownership and frame sequencing explicit while giving application and layer code a practical rendering path that does not take ownership of swapchain lifetime, backend selection, or platform-specific bring-up.
 
 ## Ownership Model
 
@@ -73,26 +73,31 @@ It currently provides:
 
 `RenderCommand` is a thin static forwarding layer over `Renderer`. It exists as a lightweight command surface for higher-level code without turning rendering into a global singleton.
 
-### `Renderer2D` is currently intended as the first built-in higher-level renderer layered on top of `Renderer`.
+### `Renderer2D`
+
+`Renderer2D` is the current built-in higher-level renderer layered on top of `Renderer`.
 
 It currently provides:
 
 - `BeginScene(...)`
-- color-only quad rendering
-- dynamic CPU-updated vertex streaming
-- batched non-indexed triangle submission
+- color and textured quad rendering
+- rotated quads
+- dynamic instance-data streaming
+- texture-aware batching with multiple texture batch ranges per flush
+- batched draw submission through `RenderCommand::Draw(...)`
 - per-camera viewport/scissor setup
+- scene constant uploads for the active view-projection matrix
 
-During `DrawQuad(...)` and `DrawRotatedQuad(...)`, the renderer builds per-vertex local quad data plus per-quad transform attributes and appends them to the current batch.
+During `DrawQuad(...)` and `DrawRotatedQuad(...)`, the renderer keeps a shared static quad vertex buffer, builds per-instance transform/color/UV data, and appends those instances to the current batch.
 
 During `Flush()` and `EndScene()`, it:
 
-- uploads the batched vertex data into a dynamic vertex buffer
+- uploads the queued instance data into a dynamic instance buffer
 - submits one or more queued texture batch ranges from that shared upload
 - submits the draw through `RenderCommand::Draw(...)`
 - resets the batch for the next scene or flush boundary
 
-The current implementation now uploads a small scene constant buffer containing the view-projection matrix and lets the vertex shader apply per-quad translation, rotation, and size on the GPU. This removes CPU-side transform baking without requiring a full instancing path yet.
+The current implementation uploads a small scene constant buffer containing the view-projection matrix and lets the vertex shader apply per-quad translation, rotation, and size on the GPU. That keeps the higher-level API simple while moving the transform work out of the old CPU-baked path.
 
 ### `SceneSurface`
 
@@ -128,11 +133,12 @@ Current implementation characteristics:
 
 - quad transforms are evaluated on the GPU from per-vertex local positions plus per-quad transform attributes
 - the current camera view-projection matrix is uploaded through a scene constant buffer at scene start
-- batched geometry is uploaded into one dynamic vertex buffer per flush
+- batched instance data is uploaded into one dynamic instance buffer per flush
 - pipeline and shader acquisition are prepared internally before scene submission
 - draw submission now supports multiple texture batch ranges within one queued vertex upload instead of treating a single active texture as the architectural model
+- color-only quads use an internal white texture, while missing-texture draws fall back to an internal magenta error texture
 
-This is still an early renderer, but the resource-ownership and batching seams are now cleaner than the original one-texture-per-flush path.
+`Renderer2D` has moved well beyond a tiny first pass. The current implementation already covers the common 2D path exercised by the runtime and editor samples while preserving clean ownership and batching seams.
 
 ## Shader Assets and Build Flow
 
@@ -148,7 +154,13 @@ On Windows builds, both `Runtime/premake5.lua` and `Editor/premake5.lua` add pos
 
 At runtime, `Renderer2D` loads those compiled shader binaries relative to the executable directory from `Assets/Shaders`.
 
-If the vertex buffer or shader loads fail, `Renderer2D` logs initialization failure and remains unable to render until the process is restarted with a valid runtime asset layout.
+If the initial resource or shader acquisition fails, `Renderer2D` logs the failure, stays inert for that frame, and retries resource creation on later scene attempts once the required runtime assets become available again.
+
+The current recovery policy is intentionally defensive:
+
+- shader-library replacement is transactional, so a failed replacement attempt does not discard the last working shader object
+- `Renderer2D` treats lost or invalid core GPU resources as recoverable and will rebuild them on the next `BeginScene(...)` path instead of treating the first failure as terminal
+- higher-level textured-quad consumers in `Runtime/Source/GameLayer.cpp` and `Editor/Source/EditorShellOverlay.cpp` retry their checker-texture acquisition during later updates so missing content can recover after startup
 
 ## ImGui and Tooling Integration
 
@@ -182,6 +194,12 @@ Tooling code should reason in terms of scene surfaces rather than `TextureResour
 The host wraps `BeginFrame()` and `Present()` in exception handling and logs failures.
 
 At startup, graphics-device creation failures are caught and downgraded to warnings so the application can continue without GPU rendering. Renderer-service creation failures are also caught and logged without tearing down the rest of the runtime.
+
+For content-driven rendering failures after startup, the current policy is last-known-good plus retry:
+
+- cached assets are reloaded explicitly through `AssetManager` when import and hot-reload paths update source content
+- transactional reload paths keep existing asset or shader state alive when a replacement parse or load fails
+- renderers and consumers should no-op or fall back for the current frame, then retry naturally on later frames when content becomes valid again
 
 The intended policy is:
 
@@ -302,4 +320,4 @@ As the rendering stack grows, preserve the following rules unless there is an ex
 - keep application-facing rendering access service-based rather than global
 - let higher-level render systems build on `Renderer` and host-owned services rather than bypassing lifecycle ownership
 
-The current system is intentionally conservative. That is appropriate for this stage of the engine. It establishes predictable runtime behavior first, so that more advanced rendering systems can be added on top of a stable ownership and lifecycle foundation.
+The current system is intentionally ownership-first and still evolving. That is appropriate for this stage of the engine: it preserves predictable runtime behavior while leaving room to keep expanding higher-level rendering systems on top of a stable lifecycle and service foundation.
