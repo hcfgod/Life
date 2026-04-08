@@ -19,7 +19,7 @@ namespace Life::Assets
     class TextureAsset final : public Life::Asset
     {
     public:
-        using Ptr = std::shared_ptr<TextureAsset>;
+        using Ptr = Ref<TextureAsset>;
 
         static std::future<Ptr> LoadAsync(const std::string& assetPath, const TextureSpecification& specification = {});
         static Ptr LoadBlocking(const std::string& assetPath, const TextureSpecification& specification = {});

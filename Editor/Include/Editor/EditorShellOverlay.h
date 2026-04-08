@@ -2,7 +2,9 @@
 
 #include "Engine.h"
 
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace EditorApp
@@ -20,9 +22,11 @@ namespace EditorApp
         void OnEvent(Life::Event& event) override;
 
     private:
+        void CacheServices();
+        void ReleaseCachedServices() noexcept;
         void EnsureEditorCamera();
         void DrawSceneSurfaceContent(Life::Renderer2D& renderer2D);
-        Life::Camera* TryGetEditorCamera();
+        Life::OptionalRef<Life::Camera> TryGetEditorCamera();
         bool RenderSceneSurface(uint32_t width, uint32_t height);
 
         bool m_ShowHierarchyPanel = true;
@@ -35,7 +39,14 @@ namespace EditorApp
         float m_ElapsedTime = 0.0f;
         std::string m_EditorCameraName = "EditorSceneCamera";
         std::string m_CheckerTextureKey = "Assets/Textures/Renderer2DChecker.ppm";
-        std::shared_ptr<Life::Assets::TextureAsset> m_CheckerTextureAsset;
+        Life::OptionalRef<Life::Application> m_Application;
+        Life::OptionalRef<Life::InputSystem> m_InputSystem;
+        Life::OptionalRef<Life::Assets::AssetManager> m_AssetManager;
+        Life::OptionalRef<Life::CameraManager> m_CameraManager;
+        Life::OptionalRef<Life::Renderer> m_Renderer;
+        Life::OptionalRef<Life::Renderer2D> m_Renderer2D;
+        Life::OptionalRef<Life::ImGuiSystem> m_ImGuiSystem;
+        Life::Ref<Life::Assets::TextureAsset> m_CheckerTextureAsset;
         Life::Scope<Life::SceneSurface> m_SceneSurface;
     };
 }

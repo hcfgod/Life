@@ -14,7 +14,7 @@ namespace Life
 {
     namespace
     {
-        std::pair<std::shared_ptr<spdlog::logger>, std::shared_ptr<spdlog::logger>> CreateLoggers(const LogSpecification& specification)
+        std::pair<Ref<spdlog::logger>, Ref<spdlog::logger>> CreateLoggers(const LogSpecification& specification)
         {
             std::vector<spdlog::sink_ptr> sinks;
             if (specification.EnableConsole)
@@ -43,11 +43,11 @@ namespace Life
             for (const auto& sink : sinks)
                 sink->set_pattern(specification.Pattern);
 
-            std::shared_ptr<spdlog::logger> coreLogger = std::make_shared<spdlog::logger>(specification.CoreLoggerName, sinks.begin(), sinks.end());
+            Ref<spdlog::logger> coreLogger = std::make_shared<spdlog::logger>(specification.CoreLoggerName, sinks.begin(), sinks.end());
             coreLogger->set_level(specification.CoreLevel);
             coreLogger->flush_on(specification.FlushLevel);
 
-            std::shared_ptr<spdlog::logger> clientLogger = std::make_shared<spdlog::logger>(specification.ClientLoggerName, sinks.begin(), sinks.end());
+            Ref<spdlog::logger> clientLogger = std::make_shared<spdlog::logger>(specification.ClientLoggerName, sinks.begin(), sinks.end());
             clientLogger->set_level(specification.ClientLevel);
             clientLogger->flush_on(specification.FlushLevel);
 
@@ -89,9 +89,9 @@ namespace Life
         return GetMutableSpecification();
     }
 
-    std::shared_ptr<spdlog::logger> Log::GetCoreLogger()
+    Ref<spdlog::logger> Log::GetCoreLogger()
     {
-        std::shared_ptr<spdlog::logger> logger = s_CoreLogger.Load();
+        Ref<spdlog::logger> logger = s_CoreLogger.Load();
         if (logger != nullptr)
             return logger;
 
@@ -100,9 +100,9 @@ namespace Life
         return s_CoreLogger.Load();
     }
 
-    std::shared_ptr<spdlog::logger> Log::GetClientLogger()
+    Ref<spdlog::logger> Log::GetClientLogger()
     {
-        std::shared_ptr<spdlog::logger> logger = s_ClientLogger.Load();
+        Ref<spdlog::logger> logger = s_ClientLogger.Load();
         if (logger != nullptr)
             return logger;
 

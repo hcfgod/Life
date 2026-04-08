@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Assets/AssetDatabase.h"
+#include "Core/Memory.h"
 
 #include <memory>
 #include <string>
@@ -22,7 +23,7 @@ namespace Life::Assets
     {
         static constexpr uint32_t Version = 1;
 
-        static std::shared_ptr<TAsset> Load(const std::string& key, AssetDatabase& db)
+        static Ref<TAsset> Load(const std::string& key, AssetDatabase& db)
         {
             (void)key;
             (void)db;

@@ -7,10 +7,11 @@ layout(set = 0, binding = 0) uniform SceneConstants
 } sceneConstants;
 
 layout(location = 0) in vec2 inLocalPosition;
-layout(location = 1) in vec4 inQuadTransform;
-layout(location = 2) in vec2 inQuadSize;
-layout(location = 3) in vec4 inColor;
-layout(location = 4) in vec2 inTexCoord;
+layout(location = 1) in vec2 inLocalTexCoord;
+layout(location = 2) in vec4 inQuadTransform;
+layout(location = 3) in vec2 inQuadSize;
+layout(location = 4) in vec4 inColor;
+layout(location = 5) in vec4 inTexRect;
 
 layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
@@ -25,5 +26,5 @@ void main()
 
     gl_Position = sceneConstants.uViewProjection * worldPosition;
     fragColor = inColor;
-    fragTexCoord = inTexCoord;
+    fragTexCoord = mix(inTexRect.xy, inTexRect.zw, inLocalTexCoord);
 }

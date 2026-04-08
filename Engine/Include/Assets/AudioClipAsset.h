@@ -18,7 +18,7 @@ namespace Life::Assets
     class AudioClipAsset final : public Life::Asset
     {
     public:
-        using Ptr = std::shared_ptr<AudioClipAsset>;
+        using Ptr = Ref<AudioClipAsset>;
 
         struct Settings
         {

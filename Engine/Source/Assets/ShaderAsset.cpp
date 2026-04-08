@@ -115,7 +115,7 @@ namespace Life::Assets
 
             parsed = preparedResult.GetValue();
 
-            auto asset = std::shared_ptr<ShaderAsset>(
+            auto asset = Ref<ShaderAsset>(
                 new ShaderAsset(key, guid, std::move(parsed), settings));
 
             AssetLoadProgress::ClearProgress(key);

@@ -94,8 +94,8 @@ namespace Life
             nvrhiAttr.offset = attr.Offset;
             nvrhiAttr.bufferIndex = attr.BufferIndex;
             nvrhiAttr.arraySize = 1;
-            nvrhiAttr.elementStride = desc.Layout.GetStride();
-            nvrhiAttr.isInstanced = false;
+            nvrhiAttr.elementStride = desc.Layout.GetStride(attr.BufferIndex);
+            nvrhiAttr.isInstanced = attr.InputRate == VertexInputRate::PerInstance;
             nvrhiAttributes.push_back(nvrhiAttr);
         }
 

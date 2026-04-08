@@ -9,6 +9,12 @@
 
 namespace Life
 {
+    enum class VertexInputRate : uint8_t
+    {
+        PerVertex = 0,
+        PerInstance
+    };
+
     enum class VertexAttributeSemantic : uint8_t
     {
         Position = 0,
@@ -30,6 +36,13 @@ namespace Life
         TextureFormat Format = TextureFormat::RGBA32_FLOAT;
         uint32_t Offset = 0;
         uint32_t BufferIndex = 0;
+        VertexInputRate InputRate = VertexInputRate::PerVertex;
+    };
+
+    struct VertexBufferLayout
+    {
+        uint32_t Stride = 0;
+        VertexInputRate InputRate = VertexInputRate::PerVertex;
     };
 
     class VertexLayout
@@ -41,6 +54,9 @@ namespace Life
 
         const std::vector<VertexAttribute>& GetAttributes() const noexcept { return m_Attributes; }
         uint32_t GetStride() const noexcept { return m_Stride; }
+        uint32_t GetStride(uint32_t bufferIndex) const noexcept;
+        VertexInputRate GetInputRate(uint32_t bufferIndex) const noexcept;
+        uint32_t GetBufferCount() const noexcept;
         bool IsEmpty() const noexcept { return m_Attributes.empty(); }
 
         auto begin() const noexcept { return m_Attributes.begin(); }
@@ -54,6 +70,7 @@ namespace Life
 
         std::vector<VertexAttribute> m_Attributes;
         uint32_t m_Stride = 0;
+        std::vector<VertexBufferLayout> m_BufferLayouts;
     };
 
     uint32_t GetFormatSizeBytes(TextureFormat format);

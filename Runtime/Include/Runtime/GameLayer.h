@@ -2,10 +2,7 @@
 
 #include "Engine.h"
 
-#include <functional>
-#include <memory>
 #include <nlohmann/json.hpp>
-#include <optional>
 #include <string>
 
 namespace RuntimeApp
@@ -27,10 +24,10 @@ namespace RuntimeApp
         void ResetServices() noexcept;
 
         nlohmann::json m_StartupConfig;
-        std::optional<std::reference_wrapper<Life::InputSystem>> m_InputSystem;
-        std::optional<std::reference_wrapper<Life::CameraManager>> m_CameraManager;
-        std::optional<std::reference_wrapper<Life::Renderer2D>> m_Renderer2D;
-        std::shared_ptr<Life::Assets::TextureAsset> m_CheckerTextureAsset;
+        Life::OptionalRef<Life::InputSystem> m_InputSystem;
+        Life::OptionalRef<Life::CameraManager> m_CameraManager;
+        Life::OptionalRef<Life::Renderer2D> m_Renderer2D;
+        Life::Ref<Life::Assets::TextureAsset> m_CheckerTextureAsset;
         float m_ElapsedTime = 0.0f;
         bool m_HasLoggedRuntime = false;
         bool m_WasMovementInputActive = false;

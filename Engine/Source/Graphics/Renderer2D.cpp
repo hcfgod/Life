@@ -15,6 +15,7 @@
 #include "Graphics/VertexLayout.h"
 #include "Platform/PlatformDetection.h"
 
+#include <array>
 #include <glm/ext/matrix_transform.hpp>
 
 namespace Life
@@ -22,7 +23,7 @@ namespace Life
     namespace
     {
         constexpr uint32_t MaxQuads = 1000;
-        constexpr uint32_t VerticesPerQuad = 6;
+        constexpr uint32_t StaticQuadVertexCount = 6;
 
         struct Renderer2DSceneConstants
         {
@@ -32,19 +33,23 @@ namespace Life
         struct QuadBatchRange
         {
             const TextureResource* Texture = nullptr;
-            uint32_t VertexOffset = 0;
-            uint32_t VertexCount = 0;
-            uint32_t QuadCount = 0;
+            uint32_t InstanceOffset = 0;
+            uint32_t InstanceCount = 0;
         };
 
-        struct QuadVertex
+        struct QuadStaticVertex
         {
             glm::vec2 LocalPosition{ 0.0f, 0.0f };
+            glm::vec2 LocalTexCoord{ 0.0f, 0.0f };
+        };
+
+        struct QuadInstanceData
+        {
             glm::vec3 QuadPosition{ 0.0f, 0.0f, 0.0f };
             float QuadRotation = 0.0f;
             glm::vec2 QuadSize{ 0.0f, 0.0f };
             glm::vec4 Color{ 1.0f, 1.0f, 1.0f, 1.0f };
-            glm::vec2 TexCoord{ 0.0f, 0.0f };
+            glm::vec4 TexRect{ 0.0f, 0.0f, 1.0f, 1.0f };
         };
 
         Scope<TextureResource> CreateSolidTexture(GraphicsDevice& device, const char* debugName,
@@ -62,13 +67,14 @@ namespace Life
 
     struct Renderer2D::Impl
     {
-        Scope<GraphicsBuffer> VertexBuffer;
+        Scope<GraphicsBuffer> QuadVertexBuffer;
+        Scope<GraphicsBuffer> InstanceBuffer;
         Scope<GraphicsBuffer> SceneConstantBuffer;
         Scope<GraphicsPipeline> Pipeline;
         Shader* VertexShader = nullptr;
         Shader* PixelShader = nullptr;
         VertexLayout Layout;
-        std::vector<QuadVertex> Vertices;
+        std::vector<QuadInstanceData> Instances;
         std::vector<QuadBatchRange> Batches;
         Statistics Stats{};
         Scope<TextureResource> WhiteTexture;
@@ -83,9 +89,7 @@ namespace Life
         : m_Renderer(renderer)
         , m_Impl(CreateScope<Impl>())
     {
-        m_Impl->Vertices.reserve(
-            static_cast<decltype(m_Impl->Vertices)::size_type>(MaxQuads)
-            * static_cast<decltype(m_Impl->Vertices)::size_type>(VerticesPerQuad));
+        m_Impl->Instances.reserve(static_cast<decltype(m_Impl->Instances)::size_type>(MaxQuads));
     }
 
     Renderer2D::~Renderer2D() = default;
@@ -118,6 +122,8 @@ namespace Life
     {
         if (!EnsureResourcesReady())
             return;
+
+        ResetStats();
 
         if (!UpdateSceneConstants(viewProjection))
             return;
@@ -214,25 +220,41 @@ namespace Life
             return true;
 
         GraphicsDevice& device = m_Renderer.GetGraphicsDevice();
-        const auto maxVertexCount =
-            static_cast<decltype(m_Impl->Vertices)::size_type>(MaxQuads)
-            * static_cast<decltype(m_Impl->Vertices)::size_type>(VerticesPerQuad);
-        VertexBufferSpecification vertexBufferSpecification;
-        vertexBufferSpecification.SizeInBytes = static_cast<uint32_t>(maxVertexCount * sizeof(QuadVertex));
-        vertexBufferSpecification.Stride = static_cast<uint32_t>(sizeof(QuadVertex));
-        vertexBufferSpecification.DebugName = "Renderer2DVertexBuffer";
+        const std::array<QuadStaticVertex, StaticQuadVertexCount> quadVertices =
+        {
+            QuadStaticVertex{ { -0.5f, -0.5f }, { 0.0f, 1.0f } },
+            QuadStaticVertex{ {  0.5f, -0.5f }, { 1.0f, 1.0f } },
+            QuadStaticVertex{ {  0.5f,  0.5f }, { 1.0f, 0.0f } },
+            QuadStaticVertex{ {  0.5f,  0.5f }, { 1.0f, 0.0f } },
+            QuadStaticVertex{ { -0.5f,  0.5f }, { 0.0f, 0.0f } },
+            QuadStaticVertex{ { -0.5f, -0.5f }, { 0.0f, 1.0f } }
+        };
+
+        VertexBufferSpecification quadVertexBufferSpecification;
+        quadVertexBufferSpecification.SizeInBytes = static_cast<uint32_t>(sizeof(quadVertices));
+        quadVertexBufferSpecification.Stride = static_cast<uint32_t>(sizeof(QuadStaticVertex));
+        quadVertexBufferSpecification.DebugName = "Renderer2DQuadVertexBuffer";
+
+        VertexBufferSpecification instanceBufferSpecification;
+        instanceBufferSpecification.SizeInBytes = static_cast<uint32_t>(MaxQuads * sizeof(QuadInstanceData));
+        instanceBufferSpecification.Stride = static_cast<uint32_t>(sizeof(QuadInstanceData));
+        instanceBufferSpecification.DebugName = "Renderer2DInstanceBuffer";
 
         m_Impl->Layout = VertexLayout
         {
-            { "inLocalPosition", VertexAttributeSemantic::Position, TextureFormat::RG32_FLOAT },
-            { "inQuadTransform", VertexAttributeSemantic::Custom, TextureFormat::RGBA32_FLOAT },
-            { "inQuadSize", VertexAttributeSemantic::Custom, TextureFormat::RG32_FLOAT },
-            { "inColor", VertexAttributeSemantic::Color, TextureFormat::RGBA32_FLOAT },
-            { "inTexCoord", VertexAttributeSemantic::TexCoord0, TextureFormat::RG32_FLOAT }
+            { "inLocalPosition", VertexAttributeSemantic::Position, TextureFormat::RG32_FLOAT, 0, 0, VertexInputRate::PerVertex },
+            { "inLocalTexCoord", VertexAttributeSemantic::TexCoord0, TextureFormat::RG32_FLOAT, 0, 0, VertexInputRate::PerVertex },
+            { "inQuadTransform", VertexAttributeSemantic::Custom, TextureFormat::RGBA32_FLOAT, 0, 1, VertexInputRate::PerInstance },
+            { "inQuadSize", VertexAttributeSemantic::Custom, TextureFormat::RG32_FLOAT, 0, 1, VertexInputRate::PerInstance },
+            { "inColor", VertexAttributeSemantic::Color, TextureFormat::RGBA32_FLOAT, 0, 1, VertexInputRate::PerInstance },
+            { "inTexRect", VertexAttributeSemantic::TexCoord1, TextureFormat::RGBA32_FLOAT, 0, 1, VertexInputRate::PerInstance }
         };
 
-        if (!m_Impl->VertexBuffer)
-            m_Impl->VertexBuffer = GraphicsBuffer::CreateDynamicVertex(device, vertexBufferSpecification);
+        if (!m_Impl->QuadVertexBuffer)
+            m_Impl->QuadVertexBuffer = GraphicsBuffer::CreateVertex(device, quadVertices.data(), quadVertexBufferSpecification);
+
+        if (!m_Impl->InstanceBuffer)
+            m_Impl->InstanceBuffer = GraphicsBuffer::CreateDynamicVertex(device, instanceBufferSpecification);
 
         if (!m_Impl->SceneConstantBuffer)
             m_Impl->SceneConstantBuffer = GraphicsBuffer::CreateConstant(device, sizeof(Renderer2DSceneConstants), "Renderer2DSceneConstants");
@@ -296,7 +318,8 @@ namespace Life
         }
 
         m_Impl->ResourcesReady =
-            m_Impl->VertexBuffer != nullptr &&
+            m_Impl->QuadVertexBuffer != nullptr &&
+            m_Impl->InstanceBuffer != nullptr &&
             m_Impl->SceneConstantBuffer != nullptr &&
             m_Impl->Pipeline != nullptr &&
             m_Impl->VertexShader != nullptr &&
@@ -309,8 +332,9 @@ namespace Life
             if (!m_Impl->ReportedInitializationFailure)
             {
                 LOG_CORE_ERROR(
-                    "Renderer2D failed to initialize required resources (VertexBuffer={}, SceneConstants={}, Pipeline={}, VertexShader={}, PixelShader={}, WhiteTexture={}, ErrorTexture={}).",
-                    m_Impl->VertexBuffer != nullptr,
+                    "Renderer2D failed to initialize required resources (QuadVertexBuffer={}, InstanceBuffer={}, SceneConstants={}, Pipeline={}, VertexShader={}, PixelShader={}, WhiteTexture={}, ErrorTexture={}).",
+                    m_Impl->QuadVertexBuffer != nullptr,
+                    m_Impl->InstanceBuffer != nullptr,
                     m_Impl->SceneConstantBuffer != nullptr,
                     m_Impl->Pipeline != nullptr,
                     m_Impl->VertexShader != nullptr,
@@ -345,23 +369,23 @@ namespace Life
 
     void Renderer2D::ResetQueuedDraws() noexcept
     {
-        m_Impl->Vertices.clear();
+        m_Impl->Instances.clear();
         m_Impl->Batches.clear();
         m_Impl->QueuedQuadCount = 0;
     }
 
     void Renderer2D::SubmitQueuedDraws()
     {
-        if (!m_Impl->Pipeline || !m_Impl->VertexBuffer || m_Impl->Batches.empty() || m_Impl->Vertices.empty())
+        if (!m_Impl->Pipeline || !m_Impl->QuadVertexBuffer || !m_Impl->InstanceBuffer || m_Impl->Batches.empty() || m_Impl->Instances.empty())
         {
             ResetQueuedDraws();
             return;
         }
 
-        const uint32_t vertexDataSize = static_cast<uint32_t>(m_Impl->Vertices.size() * sizeof(QuadVertex));
-        if (!m_Impl->VertexBuffer->SetData(m_Renderer.GetGraphicsDevice(), m_Impl->Vertices.data(), vertexDataSize))
+        const uint32_t instanceDataSize = static_cast<uint32_t>(m_Impl->Instances.size() * sizeof(QuadInstanceData));
+        if (!m_Impl->InstanceBuffer->SetData(m_Renderer.GetGraphicsDevice(), m_Impl->Instances.data(), instanceDataSize))
         {
-            LOG_CORE_ERROR("Renderer2D failed to upload queued vertex data.");
+            LOG_CORE_ERROR("Renderer2D failed to upload queued instance data.");
             ResetQueuedDraws();
             return;
         }
@@ -369,12 +393,16 @@ namespace Life
         for (const QuadBatchRange& batch : m_Impl->Batches)
         {
             DrawParameters drawParameters;
-            drawParameters.VertexCount = batch.VertexCount;
-            drawParameters.VertexOffset = batch.VertexOffset;
+            drawParameters.VertexCount = StaticQuadVertexCount;
+            drawParameters.InstanceCount = batch.InstanceCount;
+            drawParameters.InstanceOffset = batch.InstanceOffset;
 
             RenderCommand::Draw(m_Renderer,
                                 *m_Impl->Pipeline,
-                                *m_Impl->VertexBuffer,
+                                {
+                                    VertexBufferBindingView{ m_Impl->QuadVertexBuffer.get(), 0, 0 },
+                                    VertexBufferBindingView{ m_Impl->InstanceBuffer.get(), 1, 0 }
+                                },
                                 drawParameters,
                                 batch.Texture,
                                 m_Impl->SceneConstantBuffer.get());
@@ -399,45 +427,20 @@ namespace Life
         {
             QuadBatchRange batch;
             batch.Texture = resolvedTexture;
-            batch.VertexOffset = static_cast<uint32_t>(m_Impl->Vertices.size());
+            batch.InstanceOffset = static_cast<uint32_t>(m_Impl->Instances.size());
             m_Impl->Batches.push_back(batch);
         }
 
-        const std::array<glm::vec4, VerticesPerQuad> quadPositions =
-        {
-            glm::vec4(-0.5f, -0.5f, 0.0f, 1.0f),
-            glm::vec4( 0.5f, -0.5f, 0.0f, 1.0f),
-            glm::vec4( 0.5f,  0.5f, 0.0f, 1.0f),
-            glm::vec4( 0.5f,  0.5f, 0.0f, 1.0f),
-            glm::vec4(-0.5f,  0.5f, 0.0f, 1.0f),
-            glm::vec4(-0.5f, -0.5f, 0.0f, 1.0f)
-        };
-
-        const std::array<glm::vec2, VerticesPerQuad> quadTexCoords =
-        {
-            glm::vec2(uvMin.x, uvMax.y),
-            glm::vec2(uvMax.x, uvMax.y),
-            glm::vec2(uvMax.x, uvMin.y),
-            glm::vec2(uvMax.x, uvMin.y),
-            glm::vec2(uvMin.x, uvMin.y),
-            glm::vec2(uvMin.x, uvMax.y)
-        };
-
-        for (size_t vertexIndex = 0; vertexIndex < quadPositions.size(); ++vertexIndex)
-        {
-            QuadVertex vertex;
-            vertex.LocalPosition = glm::vec2(quadPositions[vertexIndex]);
-            vertex.QuadPosition = position;
-            vertex.QuadRotation = rotationRadians;
-            vertex.QuadSize = size;
-            vertex.Color = color;
-            vertex.TexCoord = quadTexCoords[vertexIndex];
-            m_Impl->Vertices.push_back(vertex);
-        }
+        QuadInstanceData instance;
+        instance.QuadPosition = position;
+        instance.QuadRotation = rotationRadians;
+        instance.QuadSize = size;
+        instance.Color = color;
+        instance.TexRect = { uvMin.x, uvMin.y, uvMax.x, uvMax.y };
+        m_Impl->Instances.push_back(instance);
 
         QuadBatchRange& batch = m_Impl->Batches.back();
-        batch.VertexCount += VerticesPerQuad;
-        batch.QuadCount++;
+        batch.InstanceCount++;
         m_Impl->QueuedQuadCount++;
     }
 }

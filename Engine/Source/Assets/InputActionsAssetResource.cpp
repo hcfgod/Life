@@ -15,9 +15,9 @@
 
 namespace Life::Assets
 {
-    static std::shared_ptr<Life::InputActionAsset> DeserializeInputActions(const std::string& jsonText, std::string_view debugName)
+    static Ref<Life::InputActionAsset> DeserializeInputActions(const std::string& jsonText, std::string_view debugName)
     {
-        auto asset = std::make_shared<Life::InputActionAsset>();
+        auto asset = CreateRef<Life::InputActionAsset>();
         InputActionAssetLoadOptions opts;
         opts.DebugName.assign(debugName.begin(), debugName.end());
         const auto result = InputActionAssetSerializer::LoadIntoFromString(*asset, jsonText, opts);
@@ -95,7 +95,7 @@ namespace Life::Assets
                 return nullptr;
             }
 
-            auto asset = std::shared_ptr<InputActionsAssetResource>(
+            auto asset = Ref<InputActionsAssetResource>(
                 new InputActionsAssetResource(key, guid, std::move(value), settings));
 
             AssetLoadProgress::ClearProgress(key);

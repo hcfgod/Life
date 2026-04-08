@@ -18,7 +18,7 @@ namespace Life::Assets
     class ShaderAsset final : public Life::Asset
     {
     public:
-        using Ptr = std::shared_ptr<ShaderAsset>;
+        using Ptr = Ref<ShaderAsset>;
 
         struct Settings
         {

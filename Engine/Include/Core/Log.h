@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Core/Memory.h"
+
 #include <atomic>
 #include <cstddef>
 #include <memory>
@@ -32,8 +34,8 @@ namespace Life
         static void Configure(const LogSpecification& specification);
         static LogSpecification GetSpecification();
 
-        static std::shared_ptr<spdlog::logger> GetCoreLogger();
-        static std::shared_ptr<spdlog::logger> GetClientLogger();
+        static Ref<spdlog::logger> GetCoreLogger();
+        static Ref<spdlog::logger> GetClientLogger();
 
     private:
         template<typename T>
@@ -42,7 +44,7 @@ namespace Life
         public:
             SharedPtrStorage() = default;
 
-            explicit SharedPtrStorage(std::shared_ptr<T> value)
+            explicit SharedPtrStorage(Ref<T> value)
 #if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
                 : m_Value(std::move(value))
 #else
@@ -51,7 +53,7 @@ namespace Life
             {
             }
 
-            std::shared_ptr<T> Load() const
+            Ref<T> Load() const
             {
 #if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
                 return m_Value.load(std::memory_order_acquire);
@@ -60,7 +62,7 @@ namespace Life
 #endif
             }
 
-            void Store(std::shared_ptr<T> value)
+            void Store(Ref<T> value)
             {
 #if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
                 m_Value.store(std::move(value), std::memory_order_release);
@@ -71,9 +73,9 @@ namespace Life
 
         private:
 #if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
-            std::atomic<std::shared_ptr<T>> m_Value;
+            std::atomic<Ref<T>> m_Value;
 #else
-            std::shared_ptr<T> m_Value;
+            Ref<T> m_Value;
 #endif
         };
 

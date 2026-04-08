@@ -25,8 +25,8 @@ namespace Life
         CrashDiagnosticsDetail::CrashDiagnosticsState& state = CrashDiagnosticsDetail::GetState();
         std::scoped_lock lock(state.Mutex);
 
-        const std::shared_ptr<CrashDiagnosticsDetail::CrashDiagnosticsConfigurationSnapshot> currentSnapshot = CrashDiagnosticsDetail::LoadConfigurationSnapshot();
-        std::shared_ptr<CrashDiagnosticsDetail::CrashDiagnosticsConfigurationSnapshot> updatedSnapshot = std::make_shared<CrashDiagnosticsDetail::CrashDiagnosticsConfigurationSnapshot>(*currentSnapshot);
+        const Ref<CrashDiagnosticsDetail::CrashDiagnosticsConfigurationSnapshot> currentSnapshot = CrashDiagnosticsDetail::LoadConfigurationSnapshot();
+        Ref<CrashDiagnosticsDetail::CrashDiagnosticsConfigurationSnapshot> updatedSnapshot = std::make_shared<CrashDiagnosticsDetail::CrashDiagnosticsConfigurationSnapshot>(*currentSnapshot);
         updatedSnapshot->Specification = specification;
         CrashDiagnosticsDetail::StoreConfigurationSnapshot(std::move(updatedSnapshot));
 
@@ -53,8 +53,8 @@ namespace Life
         CrashDiagnosticsDetail::CrashDiagnosticsState& state = CrashDiagnosticsDetail::GetState();
         std::scoped_lock lock(state.Mutex);
 
-        const std::shared_ptr<CrashDiagnosticsDetail::CrashDiagnosticsConfigurationSnapshot> currentSnapshot = CrashDiagnosticsDetail::LoadConfigurationSnapshot();
-        std::shared_ptr<CrashDiagnosticsDetail::CrashDiagnosticsConfigurationSnapshot> updatedSnapshot = std::make_shared<CrashDiagnosticsDetail::CrashDiagnosticsConfigurationSnapshot>(*currentSnapshot);
+        const Ref<CrashDiagnosticsDetail::CrashDiagnosticsConfigurationSnapshot> currentSnapshot = CrashDiagnosticsDetail::LoadConfigurationSnapshot();
+        Ref<CrashDiagnosticsDetail::CrashDiagnosticsConfigurationSnapshot> updatedSnapshot = std::make_shared<CrashDiagnosticsDetail::CrashDiagnosticsConfigurationSnapshot>(*currentSnapshot);
         updatedSnapshot->ApplicationName = applicationName.empty() ? "Life Application" : std::move(applicationName);
         updatedSnapshot->CommandLine = std::move(commandLine);
         CrashDiagnosticsDetail::StoreConfigurationSnapshot(std::move(updatedSnapshot));

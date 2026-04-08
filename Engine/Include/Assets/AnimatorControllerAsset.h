@@ -19,7 +19,7 @@ namespace Life::Assets
     class AnimatorControllerAsset final : public Life::Asset
     {
     public:
-        using Ptr = std::shared_ptr<AnimatorControllerAsset>;
+        using Ptr = Ref<AnimatorControllerAsset>;
 
         enum class ParameterType : uint8_t
         {

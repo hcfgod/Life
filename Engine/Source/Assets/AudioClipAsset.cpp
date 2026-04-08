@@ -103,7 +103,7 @@ namespace Life::Assets
             LOG_CORE_WARN("AudioClipAsset::LoadAsync: audio decoding not yet implemented for '{}' ({} bytes raw)",
                           assetPath, rawBytes.size());
 
-            auto asset = std::shared_ptr<AudioClipAsset>(
+            auto asset = Ref<AudioClipAsset>(
                 new AudioClipAsset(assetPath, guid, std::move(audio), settings));
 
             AssetLoadProgress::ClearProgress(assetPath);

@@ -4,6 +4,8 @@
 
 namespace Life
 {
+    class GraphicsBuffer;
+
     enum class ShaderStage : uint8_t
     {
         None = 0,
@@ -158,15 +160,26 @@ namespace Life
         uint32_t Height = 0;
     };
 
+    struct VertexBufferBindingView
+    {
+        GraphicsBuffer* Buffer = nullptr;
+        uint32_t Slot = 0;
+        uint32_t Offset = 0;
+    };
+
     struct DrawParameters
     {
         uint32_t VertexCount = 0;
         uint32_t VertexOffset = 0;
+        uint32_t InstanceCount = 1;
+        uint32_t InstanceOffset = 0;
     };
 
     struct IndexedDrawParameters
     {
         uint32_t IndexCount = 0;
         uint32_t IndexOffset = 0;
+        uint32_t InstanceCount = 1;
+        uint32_t InstanceOffset = 0;
     };
 }

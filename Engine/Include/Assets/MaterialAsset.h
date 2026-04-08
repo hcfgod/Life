@@ -21,7 +21,7 @@ namespace Life::Assets
     class MaterialAsset final : public Life::Asset
     {
     public:
-        using Ptr = std::shared_ptr<MaterialAsset>;
+        using Ptr = Ref<MaterialAsset>;
 
         struct Settings
         {

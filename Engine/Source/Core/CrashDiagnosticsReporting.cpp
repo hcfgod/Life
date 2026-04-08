@@ -157,7 +157,7 @@ namespace Life::CrashDiagnosticsDetail
         {
             try
             {
-                if (const std::shared_ptr<spdlog::logger> coreLogger = Log::GetCoreLogger())
+                if (const Ref<spdlog::logger> coreLogger = Log::GetCoreLogger())
                     coreLogger->flush();
             }
             catch (const std::exception& exception)
@@ -171,7 +171,7 @@ namespace Life::CrashDiagnosticsDetail
 
             try
             {
-                if (const std::shared_ptr<spdlog::logger> clientLogger = Log::GetClientLogger())
+                if (const Ref<spdlog::logger> clientLogger = Log::GetClientLogger())
                     clientLogger->flush();
             }
             catch (const std::exception& exception)
@@ -496,7 +496,7 @@ namespace Life::CrashDiagnosticsDetail
 #endif
     )
     {
-        const std::shared_ptr<CrashDiagnosticsConfigurationSnapshot> snapshot = LoadConfigurationSnapshot();
+        const Ref<CrashDiagnosticsConfigurationSnapshot> snapshot = LoadConfigurationSnapshot();
         const CrashReportingSpecification& specification = snapshot->Specification;
         if (!specification.Enabled || !specification.WriteReport)
             return {};

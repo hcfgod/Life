@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/CrashDiagnostics.h"
+#include "Core/Memory.h"
 
 #include <atomic>
 #include <cstdint>
@@ -29,7 +30,7 @@ namespace Life::CrashDiagnosticsDetail
     public:
         SharedPtrStorage() = default;
 
-        explicit SharedPtrStorage(std::shared_ptr<T> value)
+        explicit SharedPtrStorage(Ref<T> value)
 #if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
             : m_Value(std::move(value))
 #else
@@ -38,7 +39,7 @@ namespace Life::CrashDiagnosticsDetail
         {
         }
 
-        std::shared_ptr<T> Load() const
+        Ref<T> Load() const
         {
 #if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
             return m_Value.load(std::memory_order_acquire);
@@ -47,7 +48,7 @@ namespace Life::CrashDiagnosticsDetail
 #endif
         }
 
-        void Store(std::shared_ptr<T> value)
+        void Store(Ref<T> value)
         {
 #if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
             m_Value.store(std::move(value), std::memory_order_release);
@@ -58,9 +59,9 @@ namespace Life::CrashDiagnosticsDetail
 
     private:
 #if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
-        std::atomic<std::shared_ptr<T>> m_Value;
+        std::atomic<Ref<T>> m_Value;
 #else
-        std::shared_ptr<T> m_Value;
+        Ref<T> m_Value;
 #endif
     };
 
@@ -86,7 +87,7 @@ namespace Life::CrashDiagnosticsDetail
     struct CrashDiagnosticsState
     {
         std::mutex Mutex;
-        SharedPtrStorage<CrashDiagnosticsConfigurationSnapshot> Snapshot{ std::make_shared<CrashDiagnosticsConfigurationSnapshot>() };
+        SharedPtrStorage<CrashDiagnosticsConfigurationSnapshot> Snapshot{ CreateRef<CrashDiagnosticsConfigurationSnapshot>() };
         std::filesystem::path LastReportPath;
         bool Installed = false;
         std::terminate_handler PreviousTerminateHandler = nullptr;
@@ -105,7 +106,7 @@ namespace Life::CrashDiagnosticsDetail
     };
 
     CrashDiagnosticsState& GetState();
-    std::shared_ptr<CrashDiagnosticsConfigurationSnapshot> LoadConfigurationSnapshot();
-    void StoreConfigurationSnapshot(std::shared_ptr<CrashDiagnosticsConfigurationSnapshot> snapshot);
+    Ref<CrashDiagnosticsConfigurationSnapshot> LoadConfigurationSnapshot();
+    void StoreConfigurationSnapshot(Ref<CrashDiagnosticsConfigurationSnapshot> snapshot);
     void StoreLastReportPath(const std::filesystem::path& reportPath);
 }

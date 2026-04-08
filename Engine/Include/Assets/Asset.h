@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Memory.h"
 #include "Core/Error.h"
 #include "Core/Log.h"
 

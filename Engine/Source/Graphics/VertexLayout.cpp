@@ -37,15 +37,45 @@ namespace Life
         CalculateOffsetsAndStride();
     }
 
+    uint32_t VertexLayout::GetStride(uint32_t bufferIndex) const noexcept
+    {
+        if (bufferIndex < m_BufferLayouts.size())
+            return m_BufferLayouts[bufferIndex].Stride;
+
+        return 0;
+    }
+
+    VertexInputRate VertexLayout::GetInputRate(uint32_t bufferIndex) const noexcept
+    {
+        if (bufferIndex < m_BufferLayouts.size())
+            return m_BufferLayouts[bufferIndex].InputRate;
+
+        return VertexInputRate::PerVertex;
+    }
+
+    uint32_t VertexLayout::GetBufferCount() const noexcept
+    {
+        return static_cast<uint32_t>(m_BufferLayouts.size());
+    }
+
     void VertexLayout::CalculateOffsetsAndStride()
     {
-        uint32_t offset = 0;
+        m_Stride = 0;
+        m_BufferLayouts.clear();
+
         for (auto& attribute : m_Attributes)
         {
-            attribute.Offset = offset;
-            offset += GetFormatSizeBytes(attribute.Format);
+            if (attribute.BufferIndex >= m_BufferLayouts.size())
+                m_BufferLayouts.resize(static_cast<size_t>(attribute.BufferIndex) + 1);
+
+            VertexBufferLayout& bufferLayout = m_BufferLayouts[attribute.BufferIndex];
+            attribute.Offset = bufferLayout.Stride;
+            bufferLayout.Stride += GetFormatSizeBytes(attribute.Format);
+            bufferLayout.InputRate = attribute.InputRate;
         }
-        m_Stride = offset;
+
+        if (!m_BufferLayouts.empty())
+            m_Stride = m_BufferLayouts.front().Stride;
     }
 
     const VertexLayout& VertexLayout::PositionOnly()

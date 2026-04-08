@@ -211,7 +211,7 @@ namespace Life
     }
 
     void Renderer::Submit(GraphicsPipeline& pipeline,
-                          GraphicsBuffer& vertexBuffer,
+                          std::initializer_list<VertexBufferBindingView> vertexBuffers,
                           const DrawParameters& drawParameters,
                           const TextureResource* texture,
                           const GraphicsBuffer* sceneConstants)
@@ -220,20 +220,30 @@ namespace Life
         if (!commandList)
             return;
 
-        if (!pipeline.IsValid() || !vertexBuffer.IsValid())
+        if (!pipeline.IsValid() || vertexBuffers.size() == 0)
         {
-            LOG_CORE_WARN("Renderer::Submit: Invalid pipeline or vertex buffer.");
+            LOG_CORE_WARN("Renderer::Submit: Invalid pipeline or vertex buffer bindings.");
             return;
         }
 
         nvrhi::GraphicsState state;
         state.pipeline = pipeline.GetNativePipelineHandle();
 
-        nvrhi::VertexBufferBinding vbBinding;
-        vbBinding.buffer = vertexBuffer.GetNativeHandle();
-        vbBinding.slot = 0;
-        vbBinding.offset = 0;
-        state.addVertexBuffer(vbBinding);
+        for (const VertexBufferBindingView& bindingView : vertexBuffers)
+        {
+            if (bindingView.Buffer == nullptr || !bindingView.Buffer->IsValid())
+            {
+                LOG_CORE_WARN("Renderer::Submit: Invalid vertex buffer binding in pipeline '{}'.",
+                              pipeline.GetDescription().DebugName);
+                return;
+            }
+
+            nvrhi::VertexBufferBinding vbBinding;
+            vbBinding.buffer = bindingView.Buffer->GetNativeHandle();
+            vbBinding.slot = bindingView.Slot;
+            vbBinding.offset = bindingView.Offset;
+            state.addVertexBuffer(vbBinding);
+        }
 
         EnsureFramebuffer();
         state.framebuffer = m_Impl->CurrentFramebuffer;
@@ -377,11 +387,27 @@ namespace Life
 
         nvrhi::DrawArguments drawArgs;
         drawArgs.vertexCount = drawParameters.VertexCount;
+        drawArgs.instanceCount = drawParameters.InstanceCount;
         drawArgs.startVertexLocation = drawParameters.VertexOffset;
+        drawArgs.startInstanceLocation = drawParameters.InstanceOffset;
         commandList->draw(drawArgs);
 
         m_Stats.DrawCalls++;
-        m_Stats.VerticesSubmitted += drawParameters.VertexCount;
+        m_Stats.VerticesSubmitted += drawParameters.VertexCount * drawParameters.InstanceCount;
+    }
+
+    void Renderer::Submit(GraphicsPipeline& pipeline,
+                          GraphicsBuffer& vertexBuffer,
+                          const DrawParameters& drawParameters,
+                          const TextureResource* texture,
+                          const GraphicsBuffer* sceneConstants)
+    {
+        Submit(
+            pipeline,
+            { VertexBufferBindingView{ &vertexBuffer, 0, 0 } },
+            drawParameters,
+            texture,
+            sceneConstants);
     }
 
     void Renderer::SubmitIndexed(GraphicsPipeline& pipeline,
@@ -437,11 +463,13 @@ namespace Life
 
         nvrhi::DrawArguments drawArgs;
         drawArgs.vertexCount = drawParameters.IndexCount;
+        drawArgs.instanceCount = drawParameters.InstanceCount;
         drawArgs.startIndexLocation = drawParameters.IndexOffset;
+        drawArgs.startInstanceLocation = drawParameters.InstanceOffset;
         commandList->drawIndexed(drawArgs);
 
         m_Stats.DrawCalls++;
-        m_Stats.IndicesSubmitted += drawParameters.IndexCount;
+        m_Stats.IndicesSubmitted += drawParameters.IndexCount * drawParameters.InstanceCount;
     }
 
     bool Renderer::PushRenderTarget(TextureResource& colorTarget)

@@ -182,7 +182,7 @@ namespace Life::Assets
                 return nullptr;
             }
 
-            auto asset = std::shared_ptr<TextureAsset>(
+            auto asset = Ref<TextureAsset>(
                 new TextureAsset(assetPath, guid, std::move(texture), specification));
 
             AssetLoadProgress::ClearProgress(assetPath);

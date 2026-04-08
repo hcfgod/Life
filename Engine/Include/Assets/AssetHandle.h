@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Assets/Asset.h"
+#include "Core/Memory.h"
 #include "Core/ServiceRegistry.h"
 
 #include <nlohmann/json.hpp>
@@ -10,7 +11,7 @@
 
 namespace Life::Assets
 {
-    std::shared_ptr<Life::Asset> ResolveAssetByGuid(const std::string& guid);
+    Life::Ref<Life::Asset> ResolveAssetByGuid(const std::string& guid);
 }
 
 namespace Life
@@ -34,7 +35,7 @@ namespace Life
         {
         }
 
-        explicit AssetHandle(const std::shared_ptr<T>& asset)
+        explicit AssetHandle(const Ref<T>& asset)
         {
             if (asset)
             {
@@ -61,7 +62,7 @@ namespace Life
             m_Cached.reset();
         }
 
-        std::shared_ptr<T> Resolve() const
+        Ref<T> Resolve() const
         {
             if (m_Guid.empty()) return nullptr;
 
@@ -79,7 +80,7 @@ namespace Life
             return asset;
         }
 
-        std::shared_ptr<T> Get() const { return Resolve(); }
+        Ref<T> Get() const { return Resolve(); }
 
         explicit operator bool() const
         {
@@ -117,6 +118,6 @@ namespace Life
 
     private:
         std::string m_Guid;
-        mutable std::weak_ptr<T> m_Cached;
+        mutable WeakRef<T> m_Cached;
     };
 }

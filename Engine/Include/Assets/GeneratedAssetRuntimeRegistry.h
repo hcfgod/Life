@@ -21,9 +21,9 @@ namespace Life::Assets
     class GeneratedAssetRuntimeRegistry final
     {
     public:
-        using FactoryFn = std::function<std::shared_ptr<Asset>()>;
+        using FactoryFn = std::function<Ref<Asset>()>;
         using ReloadFn = std::function<bool(const std::string& virtualKey)>;
-        using LoadFn = std::function<std::shared_ptr<Asset>(const std::string& virtualKey)>;
+        using LoadFn = std::function<Ref<Asset>(const std::string& virtualKey)>;
 
         static GeneratedAssetRuntimeRegistry& GetInstance()
         {
@@ -53,7 +53,7 @@ namespace Life::Assets
             return m_Entries.find(virtualKey) != m_Entries.end();
         }
 
-        std::shared_ptr<Asset> Create(const std::string& virtualKey)
+        Ref<Asset> Create(const std::string& virtualKey)
         {
             std::lock_guard<std::mutex> lock(m_Mutex);
             auto it = m_Entries.find(virtualKey);
@@ -62,7 +62,7 @@ namespace Life::Assets
             return it->second.Factory();
         }
 
-        std::shared_ptr<Asset> Load(const std::string& virtualKey)
+        Ref<Asset> Load(const std::string& virtualKey)
         {
             std::lock_guard<std::mutex> lock(m_Mutex);
             auto it = m_Entries.find(virtualKey);

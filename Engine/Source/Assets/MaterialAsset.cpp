@@ -92,7 +92,7 @@ namespace Life::Assets
 
             AssetLoadProgress::SetProgress(key, 0.40f, "Parsing material JSON...");
 
-            auto asset = std::shared_ptr<MaterialAsset>(
+            auto asset = Ref<MaterialAsset>(
                 new MaterialAsset(key, guid, settings));
             asset->m_ResolvedPath = resolvedPath;
 

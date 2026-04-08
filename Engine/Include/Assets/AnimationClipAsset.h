@@ -21,7 +21,7 @@ namespace Life::Assets
     class AnimationClipAsset final : public Life::Asset
     {
     public:
-        using Ptr = std::shared_ptr<AnimationClipAsset>;
+        using Ptr = Ref<AnimationClipAsset>;
 
         enum class InterpolationMode : uint8_t
         {

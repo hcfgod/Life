@@ -24,6 +24,16 @@ namespace Life
 
     void RenderCommand::Draw(Renderer& renderer,
                              GraphicsPipeline& pipeline,
+                             std::initializer_list<VertexBufferBindingView> vertexBuffers,
+                             const DrawParameters& drawParameters,
+                             const TextureResource* texture,
+                             const GraphicsBuffer* sceneConstants)
+    {
+        renderer.Submit(pipeline, vertexBuffers, drawParameters, texture, sceneConstants);
+    }
+
+    void RenderCommand::Draw(Renderer& renderer,
+                             GraphicsPipeline& pipeline,
                              GraphicsBuffer& vertexBuffer,
                              const DrawParameters& drawParameters,
                              const TextureResource* texture,

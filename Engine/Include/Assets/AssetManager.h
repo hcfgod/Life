@@ -71,7 +71,7 @@ namespace Life::Assets
         // an async import via AssetImporter<T> and caches the result.
         // -----------------------------------------------------------------
         template<typename T>
-        std::shared_ptr<T> GetOrLoad(const std::string& key)
+        Ref<T> GetOrLoad(const std::string& key)
         {
             AssetDatabase* database = nullptr;
             {
@@ -86,7 +86,7 @@ namespace Life::Assets
         }
 
         template<typename T>
-        std::shared_ptr<T> GetOrLoad(const std::string& key, AssetDatabase& db)
+        Ref<T> GetOrLoad(const std::string& key, AssetDatabase& db)
         {
             if (key.empty()) return nullptr;
 
@@ -140,7 +140,7 @@ namespace Life::Assets
         // Returns a cached asset by its GUID, if still alive.
         // -----------------------------------------------------------------
         template<typename T>
-        std::shared_ptr<T> GetByGuid(const std::string& guid)
+        Ref<T> GetByGuid(const std::string& guid)
         {
             if (guid.empty()) return nullptr;
 
@@ -156,7 +156,7 @@ namespace Life::Assets
             return nullptr;
         }
 
-        std::shared_ptr<Asset> GetByGuidAsset(const std::string& guid)
+        Ref<Asset> GetByGuidAsset(const std::string& guid)
         {
             if (guid.empty()) return nullptr;
 
@@ -171,7 +171,7 @@ namespace Life::Assets
         // -----------------------------------------------------------------
         // Cache / Register
         // -----------------------------------------------------------------
-        void Cache(const std::string& key, const std::string& guid, const std::shared_ptr<Asset>& asset)
+        void Cache(const std::string& key, const std::string& guid, const Ref<Asset>& asset)
         {
             if (!asset) return;
             std::unique_lock<std::shared_mutex> writeLock(m_Mutex);
@@ -225,14 +225,14 @@ namespace Life::Assets
 
     private:
         mutable std::shared_mutex m_Mutex;
-        std::unordered_map<std::string, std::weak_ptr<Asset>> m_KeyCache;
-        std::unordered_map<std::string, std::weak_ptr<Asset>> m_GuidCache;
+        std::unordered_map<std::string, WeakRef<Asset>> m_KeyCache;
+        std::unordered_map<std::string, WeakRef<Asset>> m_GuidCache;
         std::unordered_map<std::string, std::chrono::steady_clock::time_point> m_FailedLoadRetryByKey;
         AssetDatabase* m_Database = nullptr;
         std::chrono::milliseconds m_RetryCooldown{1000};
     };
 
-    inline std::shared_ptr<Life::Asset> ResolveAssetByGuid(const std::string& guid)
+    inline Ref<Life::Asset> ResolveAssetByGuid(const std::string& guid)
     {
         auto* mgr = GetServices().TryGet<AssetManager>();
         return mgr ? mgr->GetByGuidAsset(guid) : nullptr;

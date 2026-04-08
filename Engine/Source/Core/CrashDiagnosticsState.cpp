@@ -8,12 +8,12 @@ namespace Life::CrashDiagnosticsDetail
         return state;
     }
 
-    std::shared_ptr<CrashDiagnosticsConfigurationSnapshot> LoadConfigurationSnapshot()
+    Ref<CrashDiagnosticsConfigurationSnapshot> LoadConfigurationSnapshot()
     {
         return GetState().Snapshot.Load();
     }
 
-    void StoreConfigurationSnapshot(std::shared_ptr<CrashDiagnosticsConfigurationSnapshot> snapshot)
+    void StoreConfigurationSnapshot(Ref<CrashDiagnosticsConfigurationSnapshot> snapshot)
     {
         GetState().Snapshot.Store(std::move(snapshot));
     }

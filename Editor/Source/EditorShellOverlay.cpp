@@ -15,13 +15,35 @@ namespace EditorApp
     {
     }
 
+    void EditorShellOverlay::CacheServices()
+    {
+        Life::Application& application = GetApplication();
+        m_Application = Life::MakeOptionalRef(application);
+        m_InputSystem = Life::MakeOptionalRef(application.GetService<Life::InputSystem>());
+        m_AssetManager = Life::MakeOptionalRef(application.GetService<Life::Assets::AssetManager>());
+        m_CameraManager = Life::MakeOptionalRef(application.GetService<Life::CameraManager>());
+        m_Renderer = Life::MakeOptionalRef(application.TryGetService<Life::Renderer>());
+        m_Renderer2D = Life::MakeOptionalRef(application.TryGetService<Life::Renderer2D>());
+        m_ImGuiSystem = Life::MakeOptionalRef(application.TryGetService<Life::ImGuiSystem>());
+    }
+
+    void EditorShellOverlay::ReleaseCachedServices() noexcept
+    {
+        m_ImGuiSystem.reset();
+        m_Renderer2D.reset();
+        m_Renderer.reset();
+        m_CameraManager.reset();
+        m_AssetManager.reset();
+        m_InputSystem.reset();
+        m_Application.reset();
+    }
+
     void EditorShellOverlay::OnAttach()
     {
         m_LayoutInitialized = false;
+        CacheServices();
         EnsureEditorCamera();
-        Life::Application& application = GetApplication();
-        Life::Assets::AssetManager& assetManager = application.GetService<Life::Assets::AssetManager>();
-        m_CheckerTextureAsset = assetManager.GetOrLoad<Life::Assets::TextureAsset>(m_CheckerTextureKey);
+        m_CheckerTextureAsset = m_AssetManager->get().GetOrLoad<Life::Assets::TextureAsset>(m_CheckerTextureKey);
         if (!m_CheckerTextureAsset)
             LOG_WARN("Editor failed to load textured quad asset '{}'. Falling back to error texture.", m_CheckerTextureKey);
         else
@@ -30,12 +52,12 @@ namespace EditorApp
             m_CheckerTextureAsset->SetWrapModes(Life::TextureWrapMode::Repeat, Life::TextureWrapMode::Repeat);
         }
 
-        if (application.HasService<Life::Renderer>() && application.HasService<Life::Renderer2D>())
+        if (m_Renderer && m_Renderer2D && m_ImGuiSystem)
         {
             m_SceneSurface = Life::CreateScope<Life::SceneSurface>(
-                application.GetService<Life::Renderer>(),
-                application.GetService<Life::Renderer2D>(),
-                application.GetService<Life::ImGuiSystem>());
+                m_Renderer->get(),
+                m_Renderer2D->get(),
+                m_ImGuiSystem->get());
         }
 
         LOG_INFO("Editor shell overlay attached.");
@@ -45,11 +67,12 @@ namespace EditorApp
     {
         m_SceneSurface.reset();
 
-        if (m_OwnsCamera)
-            GetApplication().GetService<Life::CameraManager>().DestroyCamera(m_EditorCameraName);
+        if (m_OwnsCamera && m_CameraManager)
+            m_CameraManager->get().DestroyCamera(m_EditorCameraName);
 
         m_OwnsCamera = false;
         m_CheckerTextureAsset.reset();
+        ReleaseCachedServices();
         LOG_INFO("Editor shell overlay detached.");
     }
 
@@ -57,15 +80,18 @@ namespace EditorApp
     {
         m_ElapsedTime += timestep;
 
-        if (GetApplication().GetService<Life::InputSystem>().WasActionStartedThisFrame("Editor", "Quit"))
-            GetApplication().RequestShutdown();
+        if (m_InputSystem && m_Application && m_InputSystem->get().WasActionStartedThisFrame("Editor", "Quit"))
+            m_Application->get().RequestShutdown();
     }
 
     void EditorShellOverlay::OnRender()
     {
 #if __has_include(<imgui.h>)
-        Life::Application& application = GetApplication();
-        Life::ImGuiSystem& imguiSystem = application.GetService<Life::ImGuiSystem>();
+        if (!m_Application || !m_ImGuiSystem)
+            return;
+
+        Life::Application& application = m_Application->get();
+        Life::ImGuiSystem& imguiSystem = m_ImGuiSystem->get();
         if (!imguiSystem.IsInitialized() || !imguiSystem.IsAvailable())
             return;
 
@@ -165,13 +191,14 @@ namespace EditorApp
         {
             if (ImGui::Begin("Inspector", &m_ShowInspectorPanel))
             {
-                if (Life::Camera* editorCamera = TryGetEditorCamera())
+                if (auto editorCamera = TryGetEditorCamera())
                 {
-                    const glm::vec3& position = editorCamera->GetPosition();
-                    ImGui::Text("Camera: %s", editorCamera->GetName().c_str());
-                    ImGui::Text("Projection: %s", editorCamera->GetProjectionType() == Life::ProjectionType::Perspective ? "Perspective" : "Orthographic");
+                    Life::Camera& camera = editorCamera->get();
+                    const glm::vec3& position = camera.GetPosition();
+                    ImGui::Text("Camera: %s", camera.GetName().c_str());
+                    ImGui::Text("Projection: %s", camera.GetProjectionType() == Life::ProjectionType::Perspective ? "Perspective" : "Orthographic");
                     ImGui::Text("Position: %.2f %.2f %.2f", position.x, position.y, position.z);
-                    ImGui::Text("Aspect Ratio: %.3f", editorCamera->GetAspectRatio());
+                    ImGui::Text("Aspect Ratio: %.3f", camera.GetAspectRatio());
                 }
             }
             ImGui::End();
@@ -196,9 +223,9 @@ namespace EditorApp
                 ImGui::Text("Scene Surface Size: %u x %u", m_SceneSurface ? m_SceneSurface->GetWidth() : 0u, m_SceneSurface ? m_SceneSurface->GetHeight() : 0u);
                 ImGui::Text("ImGui Keyboard Capture: %s", imguiSystem.WantsKeyboardCapture() ? "true" : "false");
                 ImGui::Text("ImGui Mouse Capture: %s", imguiSystem.WantsMouseCapture() ? "true" : "false");
-                if (m_SceneSurface)
+                if (m_SceneSurface && m_Renderer2D)
                 {
-                    const Life::Renderer2D::Statistics& stats = application.GetService<Life::Renderer2D>().GetStats();
+                    const Life::Renderer2D::Statistics& stats = m_Renderer2D->get().GetStats();
                     ImGui::Separator();
                     ImGui::Text("Renderer2D Draw Calls: %u", stats.DrawCalls);
                     ImGui::Text("Renderer2D Quads: %u", stats.QuadCount);
@@ -246,7 +273,10 @@ namespace EditorApp
 
     void EditorShellOverlay::EnsureEditorCamera()
     {
-        Life::CameraManager& cameraManager = GetApplication().GetService<Life::CameraManager>();
+        if (!m_CameraManager)
+            return;
+
+        Life::CameraManager& cameraManager = m_CameraManager->get();
 
         Life::CameraSpecification cameraSpecification;
         cameraSpecification.Name = m_EditorCameraName;
@@ -289,9 +319,15 @@ namespace EditorApp
         renderer2D.DrawQuad({ -2.0f, -1.4f, -1.0f }, { 1.25f, 1.25f }, { 0.25f, 0.90f, 0.45f, 0.85f });
     }
 
-    Life::Camera* EditorShellOverlay::TryGetEditorCamera()
+    Life::OptionalRef<Life::Camera> EditorShellOverlay::TryGetEditorCamera()
     {
-        return GetApplication().GetService<Life::CameraManager>().GetCamera(m_EditorCameraName);
+        if (!m_CameraManager)
+            return Life::NullOpt;
+
+        if (Life::Camera* camera = m_CameraManager->get().GetCamera(m_EditorCameraName))
+            return Life::MakeOptionalRef(*camera);
+
+        return Life::NullOpt;
     }
 
     bool EditorShellOverlay::RenderSceneSurface(uint32_t width, uint32_t height)
@@ -299,16 +335,18 @@ namespace EditorApp
         if (!m_SceneSurface)
             return false;
 
-        Life::Camera* editorCamera = TryGetEditorCamera();
-        if (editorCamera == nullptr)
+        auto editorCamera = TryGetEditorCamera();
+        if (!editorCamera)
             return false;
+
+        Life::Camera& camera = editorCamera->get();
 
         if (!m_SceneSurface->Resize(width, height))
             return false;
 
-        editorCamera->SetAspectRatio(static_cast<float>(m_SceneSurface->GetWidth()) / static_cast<float>(m_SceneSurface->GetHeight()));
+        camera.SetAspectRatio(static_cast<float>(m_SceneSurface->GetWidth()) / static_cast<float>(m_SceneSurface->GetHeight()));
 
-        if (!m_SceneSurface->BeginScene2D(*editorCamera))
+        if (!m_SceneSurface->BeginScene2D(camera))
             return false;
 
         DrawSceneSurfaceContent(m_SceneSurface->GetRenderer2D());

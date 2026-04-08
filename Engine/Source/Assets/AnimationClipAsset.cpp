@@ -176,7 +176,7 @@ namespace Life::Assets
                 json j = json::parse(fileText);
                 Data data = ParseAnimationClipJson(j);
 
-                auto asset = std::shared_ptr<AnimationClipAsset>(
+                auto asset = Ref<AnimationClipAsset>(
                     new AnimationClipAsset(key, guid, std::move(data), settings));
 
                 AssetLoadProgress::ClearProgress(key);

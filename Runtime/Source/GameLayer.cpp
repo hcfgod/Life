@@ -191,11 +191,11 @@ namespace RuntimeApp
 
     void GameLayer::CacheServices()
     {
-        m_InputSystem = std::ref(GetApplication().GetService<Life::InputSystem>());
-        m_CameraManager = std::ref(GetApplication().GetService<Life::CameraManager>());
+        m_InputSystem = Life::MakeOptionalRef(GetApplication().GetService<Life::InputSystem>());
+        m_CameraManager = Life::MakeOptionalRef(GetApplication().GetService<Life::CameraManager>());
 
         if (GetApplication().HasService<Life::Renderer2D>())
-            m_Renderer2D = std::ref(GetApplication().GetService<Life::Renderer2D>());
+            m_Renderer2D = Life::MakeOptionalRef(GetApplication().GetService<Life::Renderer2D>());
         else
             m_Renderer2D.reset();
     }

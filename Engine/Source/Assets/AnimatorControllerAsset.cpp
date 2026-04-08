@@ -154,7 +154,7 @@ namespace Life::Assets
                 json j = json::parse(fileText);
                 Data data = ParseAnimatorControllerJson(j);
 
-                auto asset = std::shared_ptr<AnimatorControllerAsset>(
+                auto asset = Ref<AnimatorControllerAsset>(
                     new AnimatorControllerAsset(key, guid, std::move(data), settings));
 
                 AssetLoadProgress::ClearProgress(key);

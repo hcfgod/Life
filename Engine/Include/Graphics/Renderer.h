@@ -8,6 +8,7 @@
 #include "Core/Memory.h"
 
 #include <cstdint>
+#include <initializer_list>
 #include <glm/glm.hpp>
 
 namespace nvrhi
@@ -59,6 +60,12 @@ namespace Life
         void Clear(float r, float g, float b, float a = 1.0f);
         void SetViewport(float x, float y, float width, float height);
         void SetScissor(int32_t x, int32_t y, uint32_t width, uint32_t height);
+
+        void Submit(GraphicsPipeline& pipeline,
+                    std::initializer_list<VertexBufferBindingView> vertexBuffers,
+                    const DrawParameters& drawParameters = {},
+                    const TextureResource* texture = nullptr,
+                    const GraphicsBuffer* sceneConstants = nullptr);
 
         void Submit(GraphicsPipeline& pipeline,
                     GraphicsBuffer& vertexBuffer,
