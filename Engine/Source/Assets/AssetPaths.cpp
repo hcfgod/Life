@@ -20,7 +20,7 @@ namespace Life::Assets
     static bool s_HasCached = false;
     // Keep this as a trivial success value during static initialization.
     // Error object construction may query platform info, which is unsafe this early.
-    static Result<std::filesystem::path> s_CachedResult(std::filesystem::path{});
+    static std::optional<Result<std::filesystem::path>> s_CachedResult;
 
     static std::optional<std::string> TryGetEnvironmentVariable(const char* name)
     {
@@ -194,9 +194,9 @@ namespace Life::Assets
     {
         {
             std::lock_guard<std::mutex> lock(s_CacheMutex);
-            if (s_HasCached)
+            if (s_HasCached && s_CachedResult.has_value())
             {
-                return s_CachedResult;
+                return *s_CachedResult;
             }
         }
 
@@ -325,7 +325,7 @@ namespace Life::Assets
                 return Result<std::filesystem::path>(rootResult.GetError());
             }
 
-            const std::filesystem::path root = rootResult.GetValue();
+            const std::filesystem::path& root = rootResult.GetValue();
             const std::filesystem::path projectResolved = root / keyPath;
 
             // Project assets always win; shared-editor assets are fallback only.
