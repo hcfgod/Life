@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -32,6 +33,8 @@ namespace Life::Assets
         bool IsEnabled() const { return m_Enabled.load(std::memory_order_relaxed); }
 
         void WatchKey(const std::string& key);
+        void RequestReload(const std::string& key, const std::string& guid = {});
+        void Pump();
         void Shutdown();
 
         void SetDebounceWindow(std::chrono::milliseconds window) { m_DebounceWindow = window; }
@@ -71,6 +74,7 @@ namespace Life::Assets
         std::mutex m_Mutex;
         std::unordered_map<std::string, WatchEntry> m_ByResolvedPath;
         std::unordered_map<std::string, PendingReload> m_PendingByKey;
+        std::deque<PendingReload> m_ReadyReloads;
 
         std::unique_ptr<AssetTreeWatcher> m_TreeWatcher;
 

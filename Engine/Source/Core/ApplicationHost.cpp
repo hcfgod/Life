@@ -231,6 +231,8 @@ namespace Life
                     m_Services.Register<Renderer>(*m_Renderer);
                     m_Renderer2D = CreateScope<Renderer2D>(*m_Renderer);
                     m_Services.Register<Renderer2D>(*m_Renderer2D);
+                    m_SceneRenderer2D = CreateScope<SceneRenderer2D>(*m_Renderer2D);
+                    m_Services.Register<SceneRenderer2D>(*m_SceneRenderer2D);
                 }
                 catch (const std::exception& e)
                 {
@@ -314,6 +316,7 @@ namespace Life
         }
 
         m_ImGuiSystem.reset();
+        m_SceneRenderer2D.reset();
         m_Renderer2D.reset();
         m_CameraManager.reset();
         m_Renderer.reset();
@@ -385,6 +388,7 @@ namespace Life
         const bool frameStarted = TryBeginGraphicsFrame();
         BeginImGuiFramePhase(frameStarted);
         RunApplicationUpdatePhase(timestep);
+        RunAssetHotReloadPhase();
         RunLayerUpdatePhase(timestep);
         RunLayerRenderPhase(frameStarted);
         UpdateInputCaptureState();
@@ -424,6 +428,12 @@ namespace Life
     void ApplicationHost::RunApplicationUpdatePhase(float timestep)
     {
         m_Application->OnHostRunFrame(timestep);
+    }
+
+    void ApplicationHost::RunAssetHotReloadPhase()
+    {
+        if (m_Running)
+            Assets::AssetHotReloadManager::GetInstance().Pump();
     }
 
     void ApplicationHost::RunLayerUpdatePhase(float timestep)

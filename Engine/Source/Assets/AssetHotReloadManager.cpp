@@ -16,6 +16,57 @@
 
 namespace Life::Assets
 {
+    namespace
+    {
+        bool ReloadCachedRecord(const AssetDatabase::Record& record, AssetManager* assetManager)
+        {
+            if (assetManager == nullptr)
+                return false;
+
+            if (assetManager->GetCachedByKeyAsset(record.Key) == nullptr)
+            {
+                LOG_CORE_INFO("AssetHotReload: reimported '{}' with no live cached asset to reload.", record.Key);
+                return false;
+            }
+
+            if (!assetManager->ReloadCachedAssetByKey(record.Key))
+            {
+                LOG_CORE_WARN("AssetHotReload: cached reload failed for '{}'.", record.Key);
+                return false;
+            }
+
+            return true;
+        }
+
+        bool ReloadGeneratedRecord(const AssetDatabase::Record& record, AssetManager* assetManager)
+        {
+            bool generatedReloaded = GeneratedAssetRuntimeRegistry::GetInstance().Reload(record.Key);
+            const bool cachedReloaded = ReloadCachedRecord(record, assetManager);
+            return generatedReloaded || cachedReloaded;
+        }
+
+        bool ReimportFileRecord(AssetDatabase& db,
+                                const AssetDatabase::Record& record,
+                                AssetManager* assetManager,
+                                AssetDatabase::Record& updatedRecord)
+        {
+            const auto reimportResult = db.ImportOrUpdate(
+                record.Key,
+                record.Type,
+                record.ImporterSettings,
+                GetCurrentAssetImporterVersion(record.Type));
+            if (reimportResult.IsFailure())
+            {
+                LOG_CORE_WARN("AssetHotReload: reimport failed for '{}': {}", record.Key, reimportResult.GetError().GetErrorMessage());
+                return false;
+            }
+
+            updatedRecord = reimportResult.GetValue();
+            (void)ReloadCachedRecord(updatedRecord, assetManager);
+            return true;
+        }
+    }
+
     void AssetHotReloadManager::Enable(bool enable)
     {
         m_Enabled.store(enable, std::memory_order_relaxed);
@@ -122,6 +173,112 @@ namespace Life::Assets
         }
     }
 
+    void AssetHotReloadManager::RequestReload(const std::string& key, const std::string& guid)
+    {
+        if (!IsEnabled() || key.empty())
+            return;
+
+        bool shouldStartReloadThread = false;
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            if (!m_ReloadThreadRunning)
+            {
+                m_ReloadThreadRunning = true;
+                shouldStartReloadThread = true;
+            }
+
+            EnqueueReloadLocked(key, guid);
+        }
+
+        if (shouldStartReloadThread)
+            m_ReloadThread = std::thread(&AssetHotReloadManager::ReloadThreadMain, this);
+    }
+
+    void AssetHotReloadManager::Pump()
+    {
+        if (!IsEnabled())
+            return;
+
+        std::vector<PendingReload> ready;
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            if (m_ReadyReloads.empty())
+                return;
+
+            ready.assign(m_ReadyReloads.begin(), m_ReadyReloads.end());
+            m_ReadyReloads.clear();
+        }
+
+        auto* db = GetServices().TryGet<AssetDatabase>();
+        if (!db)
+            return;
+
+        auto* assetManager = GetServices().TryGet<AssetManager>();
+
+        std::deque<AssetDatabase::Record> queue;
+        std::unordered_set<std::string> visitedGuids;
+        visitedGuids.reserve(256);
+
+        for (const auto& job : ready)
+        {
+            auto recordResult = db->FindByKey(job.key);
+            if (recordResult.IsFailure())
+                continue;
+
+            const auto record = recordResult.GetValue();
+            if (record.SourceKind == AssetSourceKind::Generated)
+            {
+                const bool reloaded = ReloadGeneratedRecord(record, assetManager);
+                if (!reloaded)
+                {
+                    LOG_CORE_WARN("AssetHotReload: generated reload failed for '{}'", record.Key);
+                    continue;
+                }
+
+                queue.push_back(record);
+                continue;
+            }
+
+            AssetDatabase::Record updatedRecord;
+            LOG_CORE_INFO("AssetHotReload: reimporting key='{}'", record.Key);
+            if (ReimportFileRecord(*db, record, assetManager, updatedRecord))
+                queue.push_back(std::move(updatedRecord));
+        }
+
+        while (!queue.empty())
+        {
+            const auto current = queue.front();
+            queue.pop_front();
+
+            if (current.Guid.empty() || current.Key.empty())
+                continue;
+
+            if (!visitedGuids.emplace(current.Guid).second)
+                continue;
+
+            const auto dependents = db->GetDependentsOf(current.Guid);
+            for (const auto& dep : dependents)
+            {
+                bool reloaded = false;
+                if (dep.SourceKind == AssetSourceKind::Generated)
+                {
+                    reloaded = ReloadGeneratedRecord(dep, assetManager);
+                    if (reloaded)
+                        queue.push_back(dep);
+                }
+                else
+                {
+                    AssetDatabase::Record updatedDependent;
+                    reloaded = ReimportFileRecord(*db, dep, assetManager, updatedDependent);
+                    if (reloaded)
+                        queue.push_back(std::move(updatedDependent));
+                }
+
+                LOG_CORE_INFO("AssetHotReload: reload key='{}' result={}", dep.Key, reloaded ? "success" : "no-op");
+            }
+        }
+    }
+
     void AssetHotReloadManager::Shutdown()
     {
         std::unique_ptr<AssetTreeWatcher> watcherToStop;
@@ -132,6 +289,7 @@ namespace Life::Assets
 
             m_ByResolvedPath.clear();
             m_PendingByKey.clear();
+            m_ReadyReloads.clear();
 
             watcherToStop = std::move(m_TreeWatcher);
 
@@ -189,6 +347,27 @@ namespace Life::Assets
 
     void AssetHotReloadManager::EnqueueReloadLocked(const std::string& key, const std::string& guid)
     {
+        if (m_DebounceWindow.count() <= 0)
+        {
+            PendingReload pending;
+            pending.key = key;
+            pending.guid = guid;
+            pending.generation = 1;
+            pending.dueTime = std::chrono::steady_clock::now();
+
+            for (PendingReload& ready : m_ReadyReloads)
+            {
+                if (ready.key == key)
+                {
+                    ready = std::move(pending);
+                    return;
+                }
+            }
+
+            m_ReadyReloads.push_back(std::move(pending));
+            return;
+        }
+
         auto& pending = m_PendingByKey[key];
         pending.key = key;
         pending.guid = guid;
@@ -201,8 +380,6 @@ namespace Life::Assets
     {
         while (true)
         {
-            std::vector<PendingReload> ready;
-
             {
                 std::unique_lock<std::mutex> lock(m_Mutex);
                 m_ReloadCv.wait(lock, [this] {
@@ -233,7 +410,7 @@ namespace Life::Assets
                 {
                     if (it->second.dueTime <= now)
                     {
-                        ready.push_back(it->second);
+                        m_ReadyReloads.push_back(it->second);
                         it = m_PendingByKey.erase(it);
                     }
                     else
@@ -241,100 +418,6 @@ namespace Life::Assets
                         ++it;
                     }
                 }
-            }
-
-            auto* db = GetServices().TryGet<AssetDatabase>();
-            if (!db)
-                continue;
-
-            auto* assetManager = GetServices().TryGet<AssetManager>();
-
-            std::unordered_map<std::string, std::vector<AssetDatabase::Record>> dependentsCache;
-            auto getDependentsCached = [&](const std::string& guid) -> const std::vector<AssetDatabase::Record>&
-            {
-                auto it = dependentsCache.find(guid);
-                if (it != dependentsCache.end())
-                    return it->second;
-
-                auto deps = db->GetDependentsOf(guid);
-                auto [insIt, inserted] = dependentsCache.emplace(guid, std::move(deps));
-                (void)inserted;
-                return insIt->second;
-            };
-
-            std::deque<AssetDatabase::Record> queue;
-            std::unordered_set<std::string> visitedGuids;
-            visitedGuids.reserve(256);
-
-            for (const auto& job : ready)
-            {
-                auto recordResult = db->FindByKey(job.key);
-                if (recordResult.IsFailure())
-                    continue;
-
-                const auto record = recordResult.GetValue();
-
-                if (record.SourceKind == AssetSourceKind::Generated)
-                {
-                    bool generatedReloaded = GeneratedAssetRuntimeRegistry::GetInstance().Reload(record.Key);
-                    if (assetManager)
-                    {
-                        const bool cachedReloaded = assetManager->ReloadCachedAssetByKey(record.Key);
-                        generatedReloaded = generatedReloaded || cachedReloaded;
-                    }
-
-                    if (!generatedReloaded)
-                        LOG_CORE_WARN("AssetHotReload: generated reload failed for '{}'", record.Key);
-                }
-                else
-                {
-                    LOG_CORE_INFO("AssetHotReload: reimporting key='{}'", record.Key);
-                    const auto reimportResult = db->ImportOrUpdate(
-                        record.Key,
-                        record.Type,
-                        record.ImporterSettings,
-                        GetCurrentAssetImporterVersion(record.Type));
-                    if (reimportResult.IsFailure())
-                    {
-                        LOG_CORE_WARN("AssetHotReload: reimport failed for '{}': {}", record.Key, reimportResult.GetError().GetErrorMessage());
-                    }
-                    else if (assetManager && !assetManager->ReloadCachedAssetByKey(record.Key))
-                    {
-                        LOG_CORE_INFO("AssetHotReload: reimported '{}' with no live cached asset to reload.", record.Key);
-                    }
-                }
-
-                queue.push_back(record);
-            }
-
-            while (!queue.empty())
-            {
-                const auto current = queue.front();
-                queue.pop_front();
-
-                if (current.Guid.empty() || current.Key.empty())
-                    continue;
-
-                if (!visitedGuids.emplace(current.Guid).second)
-                    continue;
-
-                bool reloaded = false;
-                if (current.SourceKind == AssetSourceKind::Generated)
-                {
-                    reloaded = GeneratedAssetRuntimeRegistry::GetInstance().Reload(current.Key);
-                    if (assetManager)
-                        reloaded = assetManager->ReloadCachedAssetByKey(current.Key) || reloaded;
-                }
-                else if (assetManager)
-                {
-                    reloaded = assetManager->ReloadCachedAssetByKey(current.Key);
-                }
-
-                LOG_CORE_INFO("AssetHotReload: reload key='{}' result={}", current.Key, reloaded ? "success" : "no-op");
-
-                const auto& dependents = getDependentsCached(current.Guid);
-                for (const auto& dep : dependents)
-                    queue.push_back(dep);
             }
         }
     }

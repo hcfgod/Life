@@ -43,6 +43,127 @@ namespace
 
         throw std::runtime_error("Failed to locate the Life repository root.");
     }
+
+    bool IsLiveBackendSmokeEnabled()
+    {
+        const auto value = Life::PlatformUtils::GetEnvironmentVariable("LIFE_ENABLE_LIVE_BACKEND_SMOKE");
+        if (!value.has_value())
+            return false;
+
+        return *value != "0" && *value != "false" && *value != "FALSE";
+    }
+
+    class LiveBackendSmokeApplication final : public Life::Application
+    {
+    public:
+        LiveBackendSmokeApplication()
+            : Life::Application(CreateSpecification())
+        {
+        }
+
+        static Life::ApplicationSpecification CreateSpecification()
+        {
+            Life::ApplicationSpecification specification = TestApplication::CreateSpecification();
+            specification.Name = "Live Backend Smoke";
+            specification.Width = 640;
+            specification.Height = 360;
+            specification.VSync = false;
+            return specification;
+        }
+
+        bool SawLiveFrame = false;
+        bool RendererResult = false;
+        bool SurfaceResizeResult = false;
+        bool SurfaceRenderResult = false;
+        bool SurfacePresentResult = false;
+        bool ImGuiWasAvailable = false;
+        bool CompletedFrame = false;
+        int UpdateCount = 0;
+
+    protected:
+        void OnInit() override
+        {
+            m_GraphicsDevice = TryGetService<Life::GraphicsDevice>();
+            m_Renderer = TryGetService<Life::Renderer>();
+            m_SceneRenderer2D = TryGetService<Life::SceneRenderer2D>();
+            m_ImGuiSystem = TryGetService<Life::ImGuiSystem>();
+
+            if (m_Renderer != nullptr && m_SceneRenderer2D != nullptr && m_ImGuiSystem != nullptr)
+            {
+                m_SceneSurface = Life::CreateScope<Life::SceneSurface>(
+                    *m_Renderer,
+                    m_SceneRenderer2D->GetRenderer2D(),
+                    *m_ImGuiSystem);
+            }
+        }
+
+        void OnShutdown() override
+        {
+            m_SceneSurface.reset();
+        }
+
+        void OnUpdate(float timestep) override
+        {
+            (void)timestep;
+            ++UpdateCount;
+
+            if (CompletedFrame)
+            {
+                RequestShutdown();
+                return;
+            }
+
+            if (m_GraphicsDevice == nullptr || m_Renderer == nullptr || m_SceneRenderer2D == nullptr || m_SceneSurface == nullptr)
+                return;
+
+            if (m_GraphicsDevice->GetCurrentCommandList() == nullptr || m_GraphicsDevice->GetCurrentBackBuffer() == nullptr)
+                return;
+
+            SawLiveFrame = true;
+
+            Life::CameraSpecification cameraSpecification;
+            cameraSpecification.Name = "LiveBackendSmokeCamera";
+            cameraSpecification.Projection = Life::ProjectionType::Orthographic;
+            cameraSpecification.AspectRatio = m_GraphicsDevice->GetBackBufferHeight() > 0
+                ? static_cast<float>(m_GraphicsDevice->GetBackBufferWidth()) / static_cast<float>(m_GraphicsDevice->GetBackBufferHeight())
+                : 1.0f;
+            cameraSpecification.OrthoSize = 4.5f;
+            cameraSpecification.OrthoNear = 0.1f;
+            cameraSpecification.OrthoFar = 10.0f;
+            cameraSpecification.ClearColor = { 0.08f, 0.08f, 0.12f, 1.0f };
+            Life::Camera camera(cameraSpecification);
+            camera.SetPosition({ 0.0f, 0.0f, 1.0f });
+            camera.LookAt({ 0.0f, 0.0f, 0.0f });
+
+            Life::SceneRenderer2D::Scene2D scene;
+            scene.Camera = &camera;
+            Life::SceneRenderer2D::QuadCommand quad;
+            quad.Position = { 0.0f, 0.0f, 0.0f };
+            quad.Size = { 1.5f, 1.5f };
+            quad.Color = { 0.9f, 0.4f, 0.2f, 1.0f };
+            scene.Quads.push_back(quad);
+
+            m_Renderer->Clear(0.05f, 0.05f, 0.07f, 1.0f);
+            RendererResult = m_SceneRenderer2D->Render(scene);
+            SurfaceResizeResult = m_SceneSurface->Resize(160, 90);
+            if (SurfaceResizeResult)
+                SurfaceRenderResult = m_SceneRenderer2D->RenderToSurface(*m_SceneSurface, scene);
+
+            ImGuiWasAvailable = m_ImGuiSystem != nullptr && m_ImGuiSystem->IsInitialized() && m_ImGuiSystem->IsAvailable() && m_ImGuiSystem->IsFrameActive();
+            if (SurfaceRenderResult)
+                SurfacePresentResult = m_SceneSurface->Present(160.0f, 90.0f);
+
+            CompletedFrame = true;
+            RequestShutdown();
+        }
+
+    private:
+        Life::GraphicsDevice* m_GraphicsDevice = nullptr;
+        Life::Renderer* m_Renderer = nullptr;
+        Life::SceneRenderer2D* m_SceneRenderer2D = nullptr;
+        Life::ImGuiSystem* m_ImGuiSystem = nullptr;
+        Life::Scope<Life::SceneSurface> m_SceneSurface;
+    };
 }
 
 TEST_CASE("CameraManager supports explicit primary selection and priority fallback")
@@ -130,6 +251,32 @@ TEST_CASE("Renderer and Renderer2D stay safe no-op services without live frame r
     CHECK(renderer2D.GetStats().QuadCount == 0);
 }
 
+TEST_CASE("SceneRenderer2D stays a safe no-op boundary without live frame resources")
+{
+    FakeGraphicsDevice graphicsDevice;
+    Life::Renderer renderer(graphicsDevice);
+    Life::Renderer2D renderer2D(renderer);
+    Life::SceneRenderer2D sceneRenderer(renderer2D);
+
+    Life::CameraSpecification cameraSpecification;
+    cameraSpecification.Projection = Life::ProjectionType::Orthographic;
+    cameraSpecification.AspectRatio = 1.0f;
+    Life::Camera camera(cameraSpecification);
+
+    Life::SceneRenderer2D::Scene2D scene;
+    scene.Camera = &camera;
+
+    Life::SceneRenderer2D::QuadCommand quad;
+    quad.Position = { 0.0f, 0.0f, 0.0f };
+    quad.Size = { 1.0f, 1.0f };
+    quad.Color = { 1.0f, 0.0f, 0.0f, 1.0f };
+    scene.Quads.push_back(quad);
+
+    CHECK_FALSE(sceneRenderer.Render(scene));
+    CHECK(sceneRenderer.GetStats().DrawCalls == 0);
+    CHECK(sceneRenderer.GetStats().QuadCount == 0);
+}
+
 TEST_CASE("SceneSurface stays safe without live frame resources")
 {
     Life::WindowSpecification windowSpecification;
@@ -177,6 +324,37 @@ TEST_CASE("ApplicationHost registers a safe no-op ImGuiSystem service without gr
     CHECK_FALSE(imguiSystem->IsInitialized());
     CHECK_FALSE(imguiSystem->IsAvailable());
     CHECK(imguiSystem->GetBackend() == Life::GraphicsBackend::None);
+
+    host->Finalize();
+}
+
+TEST_CASE("Live backend smoke validates one real host frame when explicitly enabled")
+{
+    if (!IsLiveBackendSmokeEnabled())
+        return;
+
+    Life::Log::Init();
+
+    auto application = Life::CreateScope<LiveBackendSmokeApplication>();
+    auto* applicationInstance = application.get();
+    auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application));
+
+    REQUIRE(host->GetGraphicsDevice() != nullptr);
+    REQUIRE(host->GetRenderer() != nullptr);
+    REQUIRE(host->GetRenderer2D() != nullptr);
+    REQUIRE(host->GetSceneRenderer2D() != nullptr);
+
+    host->Initialize();
+
+    for (int frameIndex = 0; frameIndex < 8 && !applicationInstance->CompletedFrame; ++frameIndex)
+        host->RunFrame(0.0f);
+
+    CHECK(applicationInstance->SawLiveFrame);
+    CHECK(applicationInstance->RendererResult);
+    CHECK(applicationInstance->SurfaceResizeResult);
+    CHECK(applicationInstance->SurfaceRenderResult);
+    if (applicationInstance->ImGuiWasAvailable)
+        CHECK(applicationInstance->SurfacePresentResult);
 
     host->Finalize();
 }

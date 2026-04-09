@@ -118,6 +118,7 @@ namespace Life
         nvrhi::Rect PendingScissor = nvrhi::Rect();
         bool HasPendingViewport = false;
         bool HasPendingScissor = false;
+        bool ReportedFramebufferFailure = false;
     };
 
     Renderer::Renderer(GraphicsDevice& graphicsDevice)
@@ -245,7 +246,8 @@ namespace Life
             state.addVertexBuffer(vbBinding);
         }
 
-        EnsureFramebuffer();
+        if (!EnsureFramebuffer())
+            return;
         state.framebuffer = m_Impl->CurrentFramebuffer;
 
         nvrhi::IDevice* nvrhiDevice = nullptr;
@@ -440,7 +442,8 @@ namespace Life
         ibBinding.offset = 0;
         state.indexBuffer = ibBinding;
 
-        EnsureFramebuffer();
+        if (!EnsureFramebuffer())
+            return;
         state.framebuffer = m_Impl->CurrentFramebuffer;
 
         if (m_Impl->HasPendingViewport)
@@ -549,13 +552,17 @@ namespace Life
 
     Scope<GraphicsPipeline> Renderer::CreatePipeline(const GraphicsPipelineDescription& desc)
     {
-        EnsureFramebuffer();
+        if (!EnsureFramebuffer())
+            return nullptr;
+
         return GraphicsPipeline::Create(m_GraphicsDevice, desc, m_Impl->CurrentFramebuffer.Get());
     }
 
     nvrhi::IFramebuffer* Renderer::GetCurrentFramebuffer()
     {
-        EnsureFramebuffer();
+        if (!EnsureFramebuffer())
+            return nullptr;
+
         return m_Impl->CurrentFramebuffer.Get();
     }
 
@@ -564,7 +571,7 @@ namespace Life
         m_Stats = {};
     }
 
-    void Renderer::EnsureFramebuffer()
+    bool Renderer::EnsureFramebuffer()
     {
         nvrhi::IDevice* nvrhiDevice = m_GraphicsDevice.GetNvrhiDevice();
         nvrhi::ITexture* colorTarget = m_Impl->ActiveColorTarget != nullptr
@@ -579,7 +586,8 @@ namespace Life
             m_Impl->CachedDevice = nullptr;
             m_Impl->CachedFramebufferWidth = 0;
             m_Impl->CachedFramebufferHeight = 0;
-            return;
+            m_Impl->ReportedFramebufferFailure = false;
+            return false;
         }
 
         if (m_Impl->CurrentFramebuffer
@@ -588,7 +596,7 @@ namespace Life
             && m_Impl->CachedFramebufferWidth == framebufferExtent.Width
             && m_Impl->CachedFramebufferHeight == framebufferExtent.Height)
         {
-            return;
+            return true;
         }
 
         nvrhi::FramebufferDesc fbDesc;
@@ -597,16 +605,24 @@ namespace Life
         m_Impl->CurrentFramebuffer = nvrhiDevice->createFramebuffer(fbDesc);
         if (!m_Impl->CurrentFramebuffer)
         {
+            if (!m_Impl->ReportedFramebufferFailure)
+            {
+                LOG_CORE_ERROR("Renderer::EnsureFramebuffer: failed to create framebuffer for the current render target.");
+                m_Impl->ReportedFramebufferFailure = true;
+            }
+
             m_Impl->CachedColorTarget = nullptr;
             m_Impl->CachedDevice = nullptr;
             m_Impl->CachedFramebufferWidth = 0;
             m_Impl->CachedFramebufferHeight = 0;
-            return;
+            return false;
         }
 
         m_Impl->CachedColorTarget = colorTarget;
         m_Impl->CachedDevice = nvrhiDevice;
         m_Impl->CachedFramebufferWidth = framebufferExtent.Width;
         m_Impl->CachedFramebufferHeight = framebufferExtent.Height;
+        m_Impl->ReportedFramebufferFailure = false;
+        return true;
     }
 }

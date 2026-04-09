@@ -26,7 +26,7 @@ namespace EditorApp
         void CacheServices();
         void ReleaseCachedServices() noexcept;
         void EnsureEditorCamera();
-        void DrawSceneSurfaceContent(Life::Renderer2D& renderer2D);
+        Life::SceneRenderer2D::Scene2D BuildScene2D(const Life::Camera& camera) const;
         Life::OptionalRef<Life::Camera> TryGetEditorCamera();
         bool RenderSceneSurface(uint32_t width, uint32_t height);
 
@@ -45,7 +45,7 @@ namespace EditorApp
         Life::OptionalRef<Life::Assets::AssetManager> m_AssetManager;
         Life::OptionalRef<Life::CameraManager> m_CameraManager;
         Life::OptionalRef<Life::Renderer> m_Renderer;
-        Life::OptionalRef<Life::Renderer2D> m_Renderer2D;
+        Life::OptionalRef<Life::SceneRenderer2D> m_SceneRenderer2D;
         Life::OptionalRef<Life::ImGuiSystem> m_ImGuiSystem;
         Life::Ref<Life::Assets::TextureAsset> m_CheckerTextureAsset;
         Life::Scope<Life::SceneSurface> m_SceneSurface;

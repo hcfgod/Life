@@ -56,11 +56,13 @@ namespace Life
         void DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
                              const Assets::TextureAsset& textureAsset, const glm::vec4& color = glm::vec4(1.0f));
 
+        bool IsSceneActive() const noexcept;
         const Statistics& GetStats() const noexcept;
         void ResetStats() noexcept;
 
     private:
         bool EnsureResourcesReady();
+        void InvalidateResources() noexcept;
         bool UpdateSceneConstants(const glm::mat4& viewProjection);
         void ResetQueuedDraws() noexcept;
         void SubmitQueuedDraws();

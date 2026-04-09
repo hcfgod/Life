@@ -122,12 +122,18 @@ namespace Life
     void Renderer2D::BeginScene(const glm::mat4& viewProjection)
     {
         if (!EnsureResourcesReady())
+        {
+            m_Impl->SceneActive = false;
             return;
+        }
 
         ResetStats();
 
         if (!UpdateSceneConstants(viewProjection))
+        {
+            m_Impl->SceneActive = false;
             return;
+        }
 
         ResetQueuedDraws();
         m_Impl->SceneActive = true;
@@ -205,6 +211,11 @@ namespace Life
         DrawRotatedQuad(position, size, rotationRadians, textureAsset.TryGetTextureResource(), color);
     }
 
+    bool Renderer2D::IsSceneActive() const noexcept
+    {
+        return m_Impl->SceneActive;
+    }
+
     const Renderer2D::Statistics& Renderer2D::GetStats() const noexcept
     {
         return m_Impl->Stats;
@@ -230,15 +241,7 @@ namespace Life
             if (resourcesStillValid)
                 return true;
 
-            m_Impl->ResourcesReady = false;
-            m_Impl->QuadVertexBuffer.reset();
-            m_Impl->InstanceBuffer.reset();
-            m_Impl->SceneConstantBuffer.reset();
-            m_Impl->Pipeline.reset();
-            m_Impl->WhiteTexture.reset();
-            m_Impl->ErrorTexture.reset();
-            m_Impl->VertexShader = nullptr;
-            m_Impl->PixelShader = nullptr;
+            InvalidateResources();
         }
 
         GraphicsDevice& device = m_Renderer.GetGraphicsDevice();
@@ -373,6 +376,21 @@ namespace Life
         return true;
     }
 
+    void Renderer2D::InvalidateResources() noexcept
+    {
+        m_Impl->ResourcesReady = false;
+        m_Impl->SceneActive = false;
+        ResetQueuedDraws();
+        m_Impl->QuadVertexBuffer.reset();
+        m_Impl->InstanceBuffer.reset();
+        m_Impl->SceneConstantBuffer.reset();
+        m_Impl->Pipeline.reset();
+        m_Impl->WhiteTexture.reset();
+        m_Impl->ErrorTexture.reset();
+        m_Impl->VertexShader = nullptr;
+        m_Impl->PixelShader = nullptr;
+    }
+
     bool Renderer2D::UpdateSceneConstants(const glm::mat4& viewProjection)
     {
         if (!m_Impl->SceneConstantBuffer)
@@ -383,8 +401,7 @@ namespace Life
         if (!m_Impl->SceneConstantBuffer->SetData(m_Renderer.GetGraphicsDevice(), &sceneConstants, sizeof(sceneConstants)))
         {
             LOG_CORE_ERROR("Renderer2D failed to upload scene constant data.");
-            m_Impl->ResourcesReady = false;
-            m_Impl->SceneConstantBuffer.reset();
+            InvalidateResources();
             return false;
         }
 
@@ -410,9 +427,7 @@ namespace Life
         if (!m_Impl->InstanceBuffer->SetData(m_Renderer.GetGraphicsDevice(), m_Impl->Instances.data(), instanceDataSize))
         {
             LOG_CORE_ERROR("Renderer2D failed to upload queued instance data.");
-            m_Impl->ResourcesReady = false;
-            m_Impl->InstanceBuffer.reset();
-            ResetQueuedDraws();
+            InvalidateResources();
             return;
         }
 

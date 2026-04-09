@@ -28,7 +28,7 @@ namespace Life
     {
         width = std::max(width, 1u);
         height = std::max(height, 1u);
-        if (m_ColorTarget && m_Width == width && m_Height == height)
+        if (m_ColorTarget && m_ColorTarget->IsValid() && m_Width == width && m_Height == height)
             return true;
 
         Reset();
@@ -54,13 +54,19 @@ namespace Life
 
     bool SceneSurface::BeginScene2D(const Camera& camera)
     {
-        if (!m_ColorTarget)
+        if (!IsReady())
             return false;
 
         if (!BeginSurfaceRender())
             return false;
 
         m_Renderer2D.BeginScene(camera);
+        if (!m_Renderer2D.IsSceneActive())
+        {
+            EndSurfaceRender();
+            return false;
+        }
+
         return true;
     }
 
@@ -75,7 +81,7 @@ namespace Life
 
     bool SceneSurface::Present(float width, float height)
     {
-        if (!m_ColorTarget)
+        if (!IsReady() || m_RenderActive)
             return false;
 
         return m_ImGuiSystem.DrawImage(*m_ColorTarget, width, height);
@@ -97,7 +103,7 @@ namespace Life
 
     bool SceneSurface::IsReady() const noexcept
     {
-        return m_ColorTarget != nullptr;
+        return m_ColorTarget != nullptr && m_ColorTarget->IsValid();
     }
 
     bool SceneSurface::BeginSurfaceRender()

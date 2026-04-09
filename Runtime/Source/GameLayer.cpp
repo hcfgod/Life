@@ -33,6 +33,37 @@ namespace RuntimeApp
         }
     }
 
+    Life::SceneRenderer2D::Scene2D GameLayer::BuildScene2D(const Life::Camera& camera) const
+    {
+        Life::SceneRenderer2D::Scene2D scene;
+        scene.Camera = &camera;
+        scene.Quads.reserve(3);
+
+        Life::SceneRenderer2D::QuadCommand checkerQuad;
+        checkerQuad.Position = { 0.0f, 0.0f, 0.0f };
+        checkerQuad.Size = { 3.5f, 3.5f };
+        checkerQuad.Color = m_CheckerTextureAsset
+            ? glm::vec4{ 1.0f, 1.0f, 1.0f, 1.0f }
+            : glm::vec4{ 1.0f, 0.0f, 1.0f, 1.0f };
+        checkerQuad.TextureAsset = m_CheckerTextureAsset ? m_CheckerTextureAsset.get() : nullptr;
+        scene.Quads.push_back(checkerQuad);
+
+        Life::SceneRenderer2D::QuadCommand animatedQuad;
+        animatedQuad.Position = { std::sin(m_ElapsedTime) * 1.75f, std::cos(m_ElapsedTime * 0.75f) * 1.25f, -0.5f };
+        animatedQuad.Size = { 1.35f, 1.35f };
+        animatedQuad.Color = { 0.95f, 0.45f, 0.25f, 0.90f };
+        animatedQuad.RotationRadians = m_ElapsedTime;
+        scene.Quads.push_back(animatedQuad);
+
+        Life::SceneRenderer2D::QuadCommand accentQuad;
+        accentQuad.Position = { -2.0f, -1.4f, -1.0f };
+        accentQuad.Size = { 1.25f, 1.25f };
+        accentQuad.Color = { 0.25f, 0.90f, 0.45f, 0.85f };
+        scene.Quads.push_back(accentQuad);
+
+        return scene;
+    }
+
     void GameLayer::OnAttach()
     {
         CacheServices();
@@ -155,24 +186,12 @@ namespace RuntimeApp
 
     void GameLayer::OnRender()
     {
-        if (m_CameraManager && m_Renderer2D)
+        if (m_CameraManager && m_SceneRenderer2D)
         {
             Life::CameraManager& cameraManager = m_CameraManager.value().get();
-            Life::Renderer2D& renderer2D = m_Renderer2D.value().get();
             if (Life::Camera* activeCamera = cameraManager.GetPrimaryCamera())
             {
-                renderer2D.BeginScene(*activeCamera);
-                if (m_CheckerTextureAsset)
-                    renderer2D.DrawQuad({ 0.0f, 0.0f, 0.0f }, { 3.5f, 3.5f }, *m_CheckerTextureAsset, { 1.0f, 1.0f, 1.0f, 1.0f });
-                else
-                    renderer2D.DrawQuad({ 0.0f, 0.0f, 0.0f }, { 3.5f, 3.5f }, { 1.0f, 0.0f, 1.0f, 1.0f });
-                renderer2D.DrawRotatedQuad(
-                    { std::sin(m_ElapsedTime) * 1.75f, std::cos(m_ElapsedTime * 0.75f) * 1.25f, -0.5f },
-                    { 1.35f, 1.35f },
-                    m_ElapsedTime,
-                    { 0.95f, 0.45f, 0.25f, 0.90f });
-                renderer2D.DrawQuad({ -2.0f, -1.4f, -1.0f }, { 1.25f, 1.25f }, { 0.25f, 0.90f, 0.45f, 0.85f });
-                renderer2D.EndScene();
+                m_SceneRenderer2D->get().Render(BuildScene2D(*activeCamera));
             }
         }
     }
@@ -205,15 +224,15 @@ namespace RuntimeApp
         m_InputSystem = Life::MakeOptionalRef(GetApplication().GetService<Life::InputSystem>());
         m_CameraManager = Life::MakeOptionalRef(GetApplication().GetService<Life::CameraManager>());
 
-        if (GetApplication().HasService<Life::Renderer2D>())
-            m_Renderer2D = Life::MakeOptionalRef(GetApplication().GetService<Life::Renderer2D>());
+        if (GetApplication().HasService<Life::SceneRenderer2D>())
+            m_SceneRenderer2D = Life::MakeOptionalRef(GetApplication().GetService<Life::SceneRenderer2D>());
         else
-            m_Renderer2D.reset();
+            m_SceneRenderer2D.reset();
     }
 
     void GameLayer::ResetServices() noexcept
     {
-        m_Renderer2D.reset();
+        m_SceneRenderer2D.reset();
         m_CameraManager.reset();
         m_InputSystem.reset();
     }

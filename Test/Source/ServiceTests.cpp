@@ -1,4 +1,5 @@
 #include "TestSupport.h"
+#include "Assets/GeneratedAssetRuntimeRegistry.h"
 
 using namespace Life::Tests;
 
@@ -111,6 +112,23 @@ namespace
         int ReloadCount = 0;
         bool ReloadResult = true;
     };
+
+    class GeneratedReloadTrackingAsset final : public Life::Asset
+    {
+    public:
+        GeneratedReloadTrackingAsset(std::string key, std::string guid)
+            : Life::Asset(std::move(key), std::move(guid))
+        {
+        }
+
+        bool Reload() override
+        {
+            ++ReloadCount;
+            return true;
+        }
+
+        int ReloadCount = 0;
+    };
 }
 
 TEST_CASE("AssetManager exposes cached assets and reloads live cached instances")
@@ -133,4 +151,46 @@ TEST_CASE("AssetManager exposes cached assets and reloads live cached instances"
     asset.reset();
     CHECK_FALSE(assetManager.ReloadCachedAssetByKey("Assets/Test.asset"));
     CHECK_FALSE(assetManager.ReloadCachedAssetByGuid("guid-test-asset"));
+}
+
+TEST_CASE("AssetHotReloadManager defers generated reload execution until Pump runs on the host thread")
+{
+    Life::Log::Init();
+
+    auto host = Life::CreateScope<Life::ApplicationHost>(Life::CreateScope<TestApplication>(), Life::CreateScope<TestRuntime>());
+    Life::Assets::AssetHotReloadManager& hotReloadManager = Life::Assets::AssetHotReloadManager::GetInstance();
+    hotReloadManager.SetDebounceWindow(std::chrono::milliseconds(0));
+
+    const std::string key = "Generated/TestHotReload.asset";
+    const std::string guid = "generated-test-hot-reload-guid";
+
+    auto asset = Life::Ref<GeneratedReloadTrackingAsset>(new GeneratedReloadTrackingAsset(key, guid));
+    host->GetAssetManager().Cache(key, guid, asset);
+
+    auto registerResult = host->GetAssetDatabase().RegisterGeneratedAsset(guid, key, Life::Assets::AssetType::Texture2D);
+    REQUIRE(registerResult.IsSuccess());
+
+    int generatedReloadCount = 0;
+    Life::Assets::GeneratedAssetRuntimeRegistry::GetInstance().Register(
+        key,
+        []() -> Life::Ref<Life::Asset> { return nullptr; },
+        [&](const std::string& virtualKey)
+        {
+            CHECK(virtualKey == key);
+            ++generatedReloadCount;
+            return true;
+        });
+
+    hotReloadManager.RequestReload(key, guid);
+
+    CHECK(generatedReloadCount == 0);
+    CHECK(asset->ReloadCount == 0);
+
+    hotReloadManager.Pump();
+
+    CHECK(generatedReloadCount == 1);
+    CHECK(asset->ReloadCount == 1);
+
+    Life::Assets::GeneratedAssetRuntimeRegistry::GetInstance().Unregister(key);
+    hotReloadManager.SetDebounceWindow(std::chrono::milliseconds(300));
 }

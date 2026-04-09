@@ -16,6 +16,7 @@
 #include "Graphics/ImGuiSystem.h"
 #include "Graphics/Renderer.h"
 #include "Graphics/Renderer2D.h"
+#include "Graphics/SceneRenderer2D.h"
 
 namespace Life
 {
@@ -61,6 +62,8 @@ namespace Life
         const ImGuiSystem* GetImGuiSystem() const { return m_ImGuiSystem.get(); }
         Renderer2D* GetRenderer2D() { return m_Renderer2D.get(); }
         const Renderer2D* GetRenderer2D() const { return m_Renderer2D.get(); }
+        SceneRenderer2D* GetSceneRenderer2D() { return m_SceneRenderer2D.get(); }
+        const SceneRenderer2D* GetSceneRenderer2D() const { return m_SceneRenderer2D.get(); }
         Assets::AssetDatabase& GetAssetDatabase() { return m_AssetDatabase; }
         const Assets::AssetDatabase& GetAssetDatabase() const { return m_AssetDatabase; }
         Assets::AssetBundle& GetAssetBundle() { return m_AssetBundle; }
@@ -73,6 +76,7 @@ namespace Life
         bool TryBeginGraphicsFrame() noexcept;
         void BeginImGuiFramePhase(bool frameStarted);
         void RunApplicationUpdatePhase(float timestep);
+        void RunAssetHotReloadPhase();
         void RunLayerUpdatePhase(float timestep);
         void RunLayerRenderPhase(bool frameStarted);
         void RunImGuiRenderPhase(bool frameStarted);
@@ -86,6 +90,7 @@ namespace Life
         Scope<CameraManager> m_CameraManager;
         Scope<ImGuiSystem> m_ImGuiSystem;
         Scope<Renderer2D> m_Renderer2D;
+        Scope<SceneRenderer2D> m_SceneRenderer2D;
         ApplicationContext m_Context;
         ApplicationEventRouter m_EventRouter;
         LayerStack m_LayerStack;

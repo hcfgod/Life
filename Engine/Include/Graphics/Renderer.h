@@ -91,7 +91,7 @@ namespace Life
         void ResetStats() noexcept;
 
     private:
-        void EnsureFramebuffer();
+        bool EnsureFramebuffer();
 
         GraphicsDevice& m_GraphicsDevice;
         ShaderLibrary m_ShaderLibrary;

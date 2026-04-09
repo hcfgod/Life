@@ -47,5 +47,6 @@
 #include "Graphics/RenderCommand.h"
 #include "Graphics/Renderer.h"
 #include "Graphics/Renderer2D.h"
+#include "Graphics/SceneRenderer2D.h"
 #include "Graphics/SceneSurface.h"
 #include "Platform/Platform.h"
