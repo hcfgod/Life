@@ -139,7 +139,6 @@ namespace EditorApp
             return false;
 
         const float requestedAspectRatio = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 16.0f / 9.0f;
-        services.CameraManager->get();
         cameraTool.Ensure(services.CameraManager->get(), requestedAspectRatio);
 
         auto editorCamera = cameraTool.TryGetCamera(services.CameraManager->get());

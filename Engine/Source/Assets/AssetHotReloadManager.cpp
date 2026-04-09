@@ -101,7 +101,7 @@ namespace Life::Assets
             return;
         }
 
-        const auto record = recordResult.GetValue();
+        const auto& record = recordResult.GetValue();
 
         if (record.SourceKind == AssetSourceKind::Generated || record.ResolvedPath.empty())
         {
@@ -225,7 +225,7 @@ namespace Life::Assets
             if (recordResult.IsFailure())
                 continue;
 
-            const auto record = recordResult.GetValue();
+            const auto& record = recordResult.GetValue();
             if (record.SourceKind == AssetSourceKind::Generated)
             {
                 const bool reloaded = ReloadGeneratedRecord(record, assetManager);

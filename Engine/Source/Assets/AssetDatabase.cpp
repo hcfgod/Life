@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <functional>
 
 namespace Life::Assets
 {
@@ -55,34 +56,35 @@ namespace Life::Assets
         snapshot.SourceLastWriteTimeTicks = expectedState.SourceLastWriteTimeTicks;
         snapshot.Entries.reserve(records.size());
 
-        std::vector<const AssetDatabase::Record*> sortedRecords;
+        std::vector<std::reference_wrapper<const AssetDatabase::Record>> sortedRecords;
         sortedRecords.reserve(records.size());
         for (const auto& [guid, record] : records)
         {
             (void)guid;
-            sortedRecords.push_back(&record);
+            sortedRecords.emplace_back(record);
         }
 
-        std::sort(sortedRecords.begin(), sortedRecords.end(), [](const AssetDatabase::Record* lhs, const AssetDatabase::Record* rhs) {
-            if (lhs->Key != rhs->Key)
-                return lhs->Key < rhs->Key;
-            return lhs->Guid < rhs->Guid;
+        std::sort(sortedRecords.begin(), sortedRecords.end(), [](const auto& lhs, const auto& rhs) {
+            if (lhs.get().Key != rhs.get().Key)
+                return lhs.get().Key < rhs.get().Key;
+            return lhs.get().Guid < rhs.get().Guid;
         });
 
-        for (const AssetDatabase::Record* record : sortedRecords)
+        for (const auto& recordRef : sortedRecords)
         {
+            const AssetDatabase::Record& record = recordRef.get();
             AssetRegistryCacheEntry entry{};
-            entry.Guid = record->Guid;
-            entry.Key = record->Key;
-            entry.ResolvedPath = record->ResolvedPath;
-            entry.Type = record->Type;
-            entry.ImporterSettingsJson = record->ImporterSettings.dump();
-            entry.Dependencies = record->Dependencies;
-            entry.SourceSizeBytes = record->SourceSizeBytes;
-            entry.SourceLastWriteTimeTicks = record->SourceLastWriteTimeTicks;
-            entry.ImporterSettingsHash64 = record->ImporterSettingsHash64;
-            entry.ImporterVersion = record->ImporterVersion;
-            entry.SourceKind = static_cast<uint8_t>(record->SourceKind);
+            entry.Guid = record.Guid;
+            entry.Key = record.Key;
+            entry.ResolvedPath = record.ResolvedPath;
+            entry.Type = record.Type;
+            entry.ImporterSettingsJson = record.ImporterSettings.dump();
+            entry.Dependencies = record.Dependencies;
+            entry.SourceSizeBytes = record.SourceSizeBytes;
+            entry.SourceLastWriteTimeTicks = record.SourceLastWriteTimeTicks;
+            entry.ImporterSettingsHash64 = record.ImporterSettingsHash64;
+            entry.ImporterVersion = record.ImporterVersion;
+            entry.SourceKind = static_cast<uint8_t>(record.SourceKind);
             snapshot.Entries.push_back(std::move(entry));
         }
 

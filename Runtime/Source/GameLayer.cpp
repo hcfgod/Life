@@ -76,7 +76,7 @@ namespace RuntimeApp
         if (m_CameraManager)
         {
             const auto& specification = GetApplication().GetSpecification();
-            Life::CameraManager& cameraManager = m_CameraManager.value().get();
+            Life::CameraManager& cameraManager = m_CameraManager->get();
             const float aspectRatio = specification.Height > 0
                 ? static_cast<float>(specification.Width) / static_cast<float>(specification.Height)
                 : 1.0f;
