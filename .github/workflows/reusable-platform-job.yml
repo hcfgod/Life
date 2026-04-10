@@ -92,6 +92,12 @@ jobs:
       - name: Install Linux build dependencies
         if: inputs.dependency_profile == 'linux'
         run: |
+          if [ -d /etc/apt/sources.list.d ]; then
+            while IFS= read -r source_file; do
+              sudo rm -f "$source_file"
+            done < <(grep -l "packages.microsoft.com" /etc/apt/sources.list.d/* 2>/dev/null || true)
+          fi
+
           sudo apt-get update
 
           VULKAN_VALIDATION_PACKAGE=vulkan-utility-libraries-dev
@@ -137,6 +143,12 @@ jobs:
       - name: Install Linux quality dependencies
         if: inputs.dependency_profile == 'linux-quality'
         run: |
+          if [ -d /etc/apt/sources.list.d ]; then
+            while IFS= read -r source_file; do
+              sudo rm -f "$source_file"
+            done < <(grep -l "packages.microsoft.com" /etc/apt/sources.list.d/* 2>/dev/null || true)
+          fi
+
           sudo apt-get update
 
           VULKAN_VALIDATION_PACKAGE=vulkan-utility-libraries-dev
