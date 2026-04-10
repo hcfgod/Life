@@ -73,10 +73,11 @@ namespace RuntimeApp
             LOG_WARN("Runtime failed to load textured quad asset '{}'. Falling back to error texture.", m_CheckerTextureKey);
 
         LOG_INFO("Runtime boot config: {}", m_StartupConfig.dump());
-        if (m_CameraManager)
+        const Life::OptionalRef<Life::CameraManager> cameraManagerRef = m_CameraManager;
+        if (cameraManagerRef.has_value())
         {
+            Life::CameraManager& cameraManager = cameraManagerRef.value().get();
             const auto& specification = GetApplication().GetSpecification();
-            Life::CameraManager& cameraManager = m_CameraManager->get();
             const float aspectRatio = specification.Height > 0
                 ? static_cast<float>(specification.Width) / static_cast<float>(specification.Height)
                 : 1.0f;
@@ -121,9 +122,10 @@ namespace RuntimeApp
 
     void GameLayer::OnDetach()
     {
-        if (m_CameraManager)
+        const Life::OptionalRef<Life::CameraManager> cameraManagerRef = m_CameraManager;
+        if (cameraManagerRef.has_value())
         {
-            Life::CameraManager& cameraManager = m_CameraManager.value().get();
+            Life::CameraManager& cameraManager = cameraManagerRef.value().get();
             cameraManager.DestroyCamera(m_OrthographicCameraName);
             cameraManager.DestroyCamera(m_PerspectiveCameraName);
         }
@@ -170,28 +172,36 @@ namespace RuntimeApp
 
             m_WasMovementInputActive = movementActive;
 
-            if (input.WasActionStartedThisFrame("Gameplay", "ToggleCamera") && m_CameraManager)
+            if (input.WasActionStartedThisFrame("Gameplay", "ToggleCamera"))
             {
-                Life::CameraManager& cameraManager = m_CameraManager.value().get();
-                m_IsUsingPerspectiveCamera = !m_IsUsingPerspectiveCamera;
-                const std::string& activeCameraName = m_IsUsingPerspectiveCamera
-                    ? m_PerspectiveCameraName
-                    : m_OrthographicCameraName;
+                const Life::OptionalRef<Life::CameraManager> cameraManagerRef = m_CameraManager;
+                if (cameraManagerRef.has_value())
+                {
+                    Life::CameraManager& cameraManager = cameraManagerRef.value().get();
+                    m_IsUsingPerspectiveCamera = !m_IsUsingPerspectiveCamera;
+                    const std::string& activeCameraName = m_IsUsingPerspectiveCamera
+                        ? m_PerspectiveCameraName
+                        : m_OrthographicCameraName;
 
-                if (cameraManager.SetPrimaryCamera(activeCameraName))
-                    LOG_INFO("Active camera switched to '{}'.", activeCameraName);
+                    if (cameraManager.SetPrimaryCamera(activeCameraName))
+                        LOG_INFO("Active camera switched to '{}'.", activeCameraName);
+                }
             }
         }
     }
 
     void GameLayer::OnRender()
     {
-        if (m_CameraManager && m_SceneRenderer2D)
+        if (m_SceneRenderer2D)
         {
-            Life::CameraManager& cameraManager = m_CameraManager.value().get();
-            if (Life::Camera* activeCamera = cameraManager.GetPrimaryCamera())
+            const Life::OptionalRef<Life::CameraManager> cameraManagerRef = m_CameraManager;
+            if (cameraManagerRef.has_value())
             {
-                m_SceneRenderer2D->get().Render(BuildScene2D(*activeCamera));
+                Life::CameraManager& cameraManager = cameraManagerRef.value().get();
+                if (Life::Camera* activeCamera = cameraManager.GetPrimaryCamera())
+                {
+                    m_SceneRenderer2D->get().Render(BuildScene2D(*activeCamera));
+                }
             }
         }
     }
@@ -202,9 +212,10 @@ namespace RuntimeApp
         dispatcher.Dispatch<Life::WindowResizeEvent>([&](Life::WindowResizeEvent& resizeEvent)
         {
             LOG_INFO("Runtime window resized to {}x{}.", resizeEvent.GetWidth(), resizeEvent.GetHeight());
-            if (m_CameraManager)
+            const Life::OptionalRef<Life::CameraManager> cameraManagerRef = m_CameraManager;
+            if (cameraManagerRef.has_value())
             {
-                Life::CameraManager& cameraManager = m_CameraManager.value().get();
+                Life::CameraManager& cameraManager = cameraManagerRef.value().get();
                 const float aspectRatio = resizeEvent.GetHeight() > 0
                     ? static_cast<float>(resizeEvent.GetWidth()) / static_cast<float>(resizeEvent.GetHeight())
                     : 1.0f;
