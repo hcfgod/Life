@@ -3,6 +3,7 @@
 #include "Editor/Camera/EditorCameraTool.h"
 #include "Editor/EditorServices.h"
 #include "Editor/Panels/ConsolePanel.h"
+ #include "Editor/Panels/FpsOverlayPanel.h"
 #include "Editor/Panels/HierarchyPanel.h"
 #include "Editor/Panels/InspectorPanel.h"
 #include "Editor/Panels/StatsPanel.h"
@@ -33,6 +34,7 @@ namespace EditorApp
         HierarchyPanel m_HierarchyPanel;
         InspectorPanel m_InspectorPanel;
         ConsolePanel m_ConsolePanel;
+        FpsOverlayPanel m_FpsOverlayPanel;
         StatsPanel m_StatsPanel;
     };
 }

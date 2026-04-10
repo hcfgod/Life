@@ -497,6 +497,12 @@ namespace Life
     {
         m_FrameActive = false;
 
+        if (m_Device == VK_NULL_HANDLE || m_Swapchain == VK_NULL_HANDLE)
+            return false;
+
+        if (m_SwapchainWidth == 0 || m_SwapchainHeight == 0 || m_SwapchainImages.empty())
+            return false;
+
         vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
         VkResult result = vkAcquireNextImageKHR(
@@ -509,6 +515,9 @@ namespace Life
             RecreateSwapchain();
             return false;
         }
+
+        if (result == VK_NOT_READY || result == VK_TIMEOUT)
+            return false;
 
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         {

@@ -7,8 +7,10 @@ namespace EditorApp
         bool ShowHierarchy = true;
         bool ShowInspector = true;
         bool ShowConsole = true;
+        bool ShowRendererStress = true;
         bool ShowStats = true;
         bool ShowScene = true;
+        bool ShowFpsOverlay = false;
     };
 
     class EditorShell

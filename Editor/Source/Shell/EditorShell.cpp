@@ -72,6 +72,7 @@ namespace EditorApp
 
         ImGui::DockBuilderDockWindow("Hierarchy", leftDockId);
         ImGui::DockBuilderDockWindow("Inspector", rightDockId);
+        ImGui::DockBuilderDockWindow("Renderer Stress", rightDockId);
         ImGui::DockBuilderDockWindow("Console", bottomDockId);
         ImGui::DockBuilderDockWindow("Stats", rightDockId);
         ImGui::DockBuilderDockWindow("Scene", rootDockId);
@@ -90,8 +91,10 @@ namespace EditorApp
             ImGui::MenuItem("Hierarchy", nullptr, &visibility.ShowHierarchy);
             ImGui::MenuItem("Inspector", nullptr, &visibility.ShowInspector);
             ImGui::MenuItem("Console", nullptr, &visibility.ShowConsole);
+            ImGui::MenuItem("Renderer Stress", nullptr, &visibility.ShowRendererStress);
             ImGui::MenuItem("Stats", nullptr, &visibility.ShowStats);
             ImGui::MenuItem("Scene", nullptr, &visibility.ShowScene);
+            ImGui::MenuItem("FPS Overlay", nullptr, &visibility.ShowFpsOverlay);
             ImGui::EndMenu();
         }
 

@@ -34,6 +34,7 @@ namespace EditorApp
     void EditorShellOverlay::OnUpdate(float timestep)
     {
         m_SceneViewportPanel.Update(m_Services, timestep);
+        m_FpsOverlayPanel.Update(timestep);
 
         if (m_Services.InputSystem && m_Services.Application && m_Services.InputSystem->get().WasActionStartedThisFrame("Editor", "Quit"))
             m_Services.Application->get().RequestShutdown();
@@ -48,8 +49,10 @@ namespace EditorApp
         m_HierarchyPanel.Render(m_PanelVisibility.ShowHierarchy, m_Services.Application->get());
         m_InspectorPanel.Render(m_PanelVisibility.ShowInspector, m_Services, m_CameraTool);
         m_ConsolePanel.Render(m_PanelVisibility.ShowConsole);
+        m_SceneViewportPanel.RenderStressPanel(m_PanelVisibility.ShowRendererStress);
         m_StatsPanel.Render(m_PanelVisibility.ShowStats, m_Services, m_SceneViewportPanel.GetState());
         m_SceneViewportPanel.Render(m_PanelVisibility.ShowScene, m_Services, m_CameraTool);
+        m_FpsOverlayPanel.Render(m_PanelVisibility.ShowFpsOverlay);
         m_Shell.End();
     }
 

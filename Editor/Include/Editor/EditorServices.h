@@ -7,6 +7,7 @@ namespace EditorApp
     struct EditorServices
     {
         Life::OptionalRef<Life::Application> Application;
+        Life::OptionalRef<Life::Window> Window;
         Life::OptionalRef<Life::InputSystem> InputSystem;
         Life::OptionalRef<Life::Assets::AssetManager> AssetManager;
         Life::OptionalRef<Life::CameraManager> CameraManager;

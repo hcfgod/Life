@@ -15,6 +15,7 @@
 #include "Graphics/VertexLayout.h"
 #include "Platform/PlatformDetection.h"
 
+#include <algorithm>
 #include <array>
 #include <glm/ext/matrix_transform.hpp>
 
@@ -22,7 +23,8 @@ namespace Life
 {
     namespace
     {
-        constexpr uint32_t MaxQuads = 1000;
+        constexpr uint32_t MaxQuads = 16384;
+        constexpr uint32_t BufferVersionCount = 4;
         constexpr uint32_t StaticQuadVertexCount = 6;
 
         struct Renderer2DSceneConstants
@@ -68,8 +70,8 @@ namespace Life
     struct Renderer2D::Impl
     {
         Scope<GraphicsBuffer> QuadVertexBuffer;
-        Scope<GraphicsBuffer> InstanceBuffer;
-        Scope<GraphicsBuffer> SceneConstantBuffer;
+        std::vector<Scope<GraphicsBuffer>> InstanceBuffers;
+        std::vector<Scope<GraphicsBuffer>> SceneConstantBuffers;
         Scope<GraphicsPipeline> Pipeline;
         Shader* VertexShader = nullptr;
         Shader* PixelShader = nullptr;
@@ -79,6 +81,9 @@ namespace Life
         Statistics Stats{};
         Scope<TextureResource> WhiteTexture;
         Scope<TextureResource> ErrorTexture;
+        GraphicsBuffer* ActiveInstanceBuffer = nullptr;
+        GraphicsBuffer* ActiveSceneConstantBuffer = nullptr;
+        uint32_t ActiveBufferVersion = BufferVersionCount - 1u;
         uint32_t QueuedQuadCount = 0;
         bool ResourcesReady = false;
         bool ReportedInitializationFailure = false;
@@ -126,6 +131,10 @@ namespace Life
             m_Impl->SceneActive = false;
             return;
         }
+
+        m_Impl->ActiveBufferVersion = (m_Impl->ActiveBufferVersion + 1u) % static_cast<uint32_t>(m_Impl->InstanceBuffers.size());
+        m_Impl->ActiveInstanceBuffer = m_Impl->InstanceBuffers[m_Impl->ActiveBufferVersion].get();
+        m_Impl->ActiveSceneConstantBuffer = m_Impl->SceneConstantBuffers[m_Impl->ActiveBufferVersion].get();
 
         ResetStats();
 
@@ -232,8 +241,12 @@ namespace Life
         {
             const bool resourcesStillValid =
                 m_Impl->QuadVertexBuffer != nullptr && m_Impl->QuadVertexBuffer->IsValid() &&
-                m_Impl->InstanceBuffer != nullptr && m_Impl->InstanceBuffer->IsValid() &&
-                m_Impl->SceneConstantBuffer != nullptr && m_Impl->SceneConstantBuffer->IsValid() &&
+                m_Impl->InstanceBuffers.size() == BufferVersionCount &&
+                m_Impl->SceneConstantBuffers.size() == BufferVersionCount &&
+                std::all_of(m_Impl->InstanceBuffers.begin(), m_Impl->InstanceBuffers.end(), [](const Scope<GraphicsBuffer>& buffer) { return buffer != nullptr && buffer->IsValid(); }) &&
+                std::all_of(m_Impl->SceneConstantBuffers.begin(), m_Impl->SceneConstantBuffers.end(), [](const Scope<GraphicsBuffer>& buffer) { return buffer != nullptr && buffer->IsValid(); }) &&
+                m_Impl->ActiveInstanceBuffer != nullptr && m_Impl->ActiveInstanceBuffer->IsValid() &&
+                m_Impl->ActiveSceneConstantBuffer != nullptr && m_Impl->ActiveSceneConstantBuffer->IsValid() &&
                 m_Impl->Pipeline != nullptr && m_Impl->Pipeline->IsValid() &&
                 m_Impl->WhiteTexture != nullptr && m_Impl->WhiteTexture->IsValid() &&
                 m_Impl->ErrorTexture != nullptr && m_Impl->ErrorTexture->IsValid();
@@ -278,11 +291,29 @@ namespace Life
         if (!m_Impl->QuadVertexBuffer)
             m_Impl->QuadVertexBuffer = GraphicsBuffer::CreateVertex(device, quadVertices.data(), quadVertexBufferSpecification);
 
-        if (!m_Impl->InstanceBuffer)
-            m_Impl->InstanceBuffer = GraphicsBuffer::CreateDynamicVertex(device, instanceBufferSpecification);
+        if (m_Impl->InstanceBuffers.empty())
+        {
+            m_Impl->InstanceBuffers.reserve(BufferVersionCount);
+            for (uint32_t bufferIndex = 0; bufferIndex < BufferVersionCount; ++bufferIndex)
+            {
+                VertexBufferSpecification versionedInstanceBufferSpecification = instanceBufferSpecification;
+                versionedInstanceBufferSpecification.DebugName = "Renderer2DInstanceBuffer" + std::to_string(bufferIndex);
+                m_Impl->InstanceBuffers.push_back(GraphicsBuffer::CreateDynamicVertex(device, versionedInstanceBufferSpecification));
+            }
+        }
 
-        if (!m_Impl->SceneConstantBuffer)
-            m_Impl->SceneConstantBuffer = GraphicsBuffer::CreateConstant(device, sizeof(Renderer2DSceneConstants), "Renderer2DSceneConstants");
+        if (m_Impl->SceneConstantBuffers.empty())
+        {
+            m_Impl->SceneConstantBuffers.reserve(BufferVersionCount);
+            for (uint32_t bufferIndex = 0; bufferIndex < BufferVersionCount; ++bufferIndex)
+                m_Impl->SceneConstantBuffers.push_back(GraphicsBuffer::CreateConstant(device, sizeof(Renderer2DSceneConstants), "Renderer2DSceneConstants" + std::to_string(bufferIndex)));
+        }
+
+        if (m_Impl->ActiveInstanceBuffer == nullptr && !m_Impl->InstanceBuffers.empty())
+            m_Impl->ActiveInstanceBuffer = m_Impl->InstanceBuffers.front().get();
+
+        if (m_Impl->ActiveSceneConstantBuffer == nullptr && !m_Impl->SceneConstantBuffers.empty())
+            m_Impl->ActiveSceneConstantBuffer = m_Impl->SceneConstantBuffers.front().get();
 
         if (!m_Impl->WhiteTexture)
             m_Impl->WhiteTexture = CreateSolidTexture(device, "Renderer2DWhiteTexture", { 255, 255, 255, 255 });
@@ -344,23 +375,27 @@ namespace Life
 
         m_Impl->ResourcesReady =
             m_Impl->QuadVertexBuffer != nullptr &&
-            m_Impl->InstanceBuffer != nullptr &&
-            m_Impl->SceneConstantBuffer != nullptr &&
-            m_Impl->Pipeline != nullptr &&
+            m_Impl->InstanceBuffers.size() == BufferVersionCount &&
+            m_Impl->SceneConstantBuffers.size() == BufferVersionCount &&
+            std::all_of(m_Impl->InstanceBuffers.begin(), m_Impl->InstanceBuffers.end(), [](const Scope<GraphicsBuffer>& buffer) { return buffer != nullptr && buffer->IsValid(); }) &&
+            std::all_of(m_Impl->SceneConstantBuffers.begin(), m_Impl->SceneConstantBuffers.end(), [](const Scope<GraphicsBuffer>& buffer) { return buffer != nullptr && buffer->IsValid(); }) &&
+            m_Impl->ActiveInstanceBuffer != nullptr && m_Impl->ActiveInstanceBuffer->IsValid() &&
+            m_Impl->ActiveSceneConstantBuffer != nullptr && m_Impl->ActiveSceneConstantBuffer->IsValid() &&
+            m_Impl->Pipeline != nullptr && m_Impl->Pipeline->IsValid() &&
             m_Impl->VertexShader != nullptr &&
             m_Impl->PixelShader != nullptr &&
-            m_Impl->WhiteTexture != nullptr &&
-            m_Impl->ErrorTexture != nullptr;
+            m_Impl->WhiteTexture != nullptr && m_Impl->WhiteTexture->IsValid() &&
+            m_Impl->ErrorTexture != nullptr && m_Impl->ErrorTexture->IsValid();
 
         if (!m_Impl->ResourcesReady)
         {
             if (!m_Impl->ReportedInitializationFailure)
             {
                 LOG_CORE_ERROR(
-                    "Renderer2D failed to initialize required resources (QuadVertexBuffer={}, InstanceBuffer={}, SceneConstants={}, Pipeline={}, VertexShader={}, PixelShader={}, WhiteTexture={}, ErrorTexture={}).",
+                    "Renderer2D failed to initialize required resources (QuadVertexBuffer={}, InstanceBuffers={}, SceneConstants={}, Pipeline={}, VertexShader={}, PixelShader={}, WhiteTexture={}, ErrorTexture={}).",
                     m_Impl->QuadVertexBuffer != nullptr,
-                    m_Impl->InstanceBuffer != nullptr,
-                    m_Impl->SceneConstantBuffer != nullptr,
+                    m_Impl->InstanceBuffers.size() == BufferVersionCount,
+                    m_Impl->SceneConstantBuffers.size() == BufferVersionCount,
                     m_Impl->Pipeline != nullptr,
                     m_Impl->VertexShader != nullptr,
                     m_Impl->PixelShader != nullptr,
@@ -382,23 +417,26 @@ namespace Life
         m_Impl->SceneActive = false;
         ResetQueuedDraws();
         m_Impl->QuadVertexBuffer.reset();
-        m_Impl->InstanceBuffer.reset();
-        m_Impl->SceneConstantBuffer.reset();
+        m_Impl->InstanceBuffers.clear();
+        m_Impl->SceneConstantBuffers.clear();
         m_Impl->Pipeline.reset();
         m_Impl->WhiteTexture.reset();
         m_Impl->ErrorTexture.reset();
+        m_Impl->ActiveInstanceBuffer = nullptr;
+        m_Impl->ActiveSceneConstantBuffer = nullptr;
+        m_Impl->ActiveBufferVersion = BufferVersionCount - 1u;
         m_Impl->VertexShader = nullptr;
         m_Impl->PixelShader = nullptr;
     }
 
     bool Renderer2D::UpdateSceneConstants(const glm::mat4& viewProjection)
     {
-        if (!m_Impl->SceneConstantBuffer)
+        if (!m_Impl->ActiveSceneConstantBuffer)
             return false;
 
         Renderer2DSceneConstants sceneConstants;
         sceneConstants.ViewProjection = viewProjection;
-        if (!m_Impl->SceneConstantBuffer->SetData(m_Renderer.GetGraphicsDevice(), &sceneConstants, sizeof(sceneConstants)))
+        if (!m_Impl->ActiveSceneConstantBuffer->SetData(m_Renderer.GetGraphicsDevice(), &sceneConstants, sizeof(sceneConstants)))
         {
             LOG_CORE_ERROR("Renderer2D failed to upload scene constant data.");
             InvalidateResources();
@@ -417,14 +455,14 @@ namespace Life
 
     void Renderer2D::SubmitQueuedDraws()
     {
-        if (!m_Impl->Pipeline || !m_Impl->QuadVertexBuffer || !m_Impl->InstanceBuffer || m_Impl->Batches.empty() || m_Impl->Instances.empty())
+        if (!m_Impl->Pipeline || !m_Impl->QuadVertexBuffer || !m_Impl->ActiveInstanceBuffer || !m_Impl->ActiveSceneConstantBuffer || m_Impl->Batches.empty() || m_Impl->Instances.empty())
         {
             ResetQueuedDraws();
             return;
         }
 
         const uint32_t instanceDataSize = static_cast<uint32_t>(m_Impl->Instances.size() * sizeof(QuadInstanceData));
-        if (!m_Impl->InstanceBuffer->SetData(m_Renderer.GetGraphicsDevice(), m_Impl->Instances.data(), instanceDataSize))
+        if (!m_Impl->ActiveInstanceBuffer->SetData(m_Renderer.GetGraphicsDevice(), m_Impl->Instances.data(), instanceDataSize))
         {
             LOG_CORE_ERROR("Renderer2D failed to upload queued instance data.");
             InvalidateResources();
@@ -442,11 +480,11 @@ namespace Life
                                 *m_Impl->Pipeline,
                                 {
                                     VertexBufferBindingView{ m_Impl->QuadVertexBuffer.get(), 0, 0 },
-                                    VertexBufferBindingView{ m_Impl->InstanceBuffer.get(), 1, 0 }
+                                    VertexBufferBindingView{ m_Impl->ActiveInstanceBuffer, 1, 0 }
                                 },
                                 drawParameters,
                                 batch.Texture,
-                                m_Impl->SceneConstantBuffer.get());
+                                m_Impl->ActiveSceneConstantBuffer);
         }
 
         m_Impl->Stats.DrawCalls += static_cast<uint32_t>(m_Impl->Batches.size());

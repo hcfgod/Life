@@ -3,6 +3,7 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Core/Log.h"
 
+#include <cstring>
 #include <nvrhi/nvrhi.h>
 
 namespace Life
@@ -217,6 +218,21 @@ namespace Life
 
         if (sizeInBytes > (m_Description.SizeInBytes - destinationOffset))
             return false;
+
+        if (m_Description.CPUAccess)
+        {
+            nvrhi::IDevice* nvrhiDevice = device.GetNvrhiDevice();
+            if (!nvrhiDevice)
+                return false;
+
+            void* mappedBuffer = nvrhiDevice->mapBuffer(m_Impl->Handle.Get(), nvrhi::CpuAccessMode::Write);
+            if (!mappedBuffer)
+                return false;
+
+            std::memcpy(static_cast<char*>(mappedBuffer) + destinationOffset, data, sizeInBytes);
+            nvrhiDevice->unmapBuffer(m_Impl->Handle.Get());
+            return true;
+        }
 
         return UploadBufferData(device, m_Impl->Handle.Get(), data, sizeInBytes, destinationOffset);
     }
