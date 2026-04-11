@@ -569,6 +569,13 @@ namespace Life
         }
 
         m_FrameActive = false;
+
+        if (m_SwapchainRecreationPending)
+        {
+            RecreateSwapchain();
+            m_SwapchainRecreationPending = false;
+        }
+
         m_CurrentFrame = (m_CurrentFrame + 1) % MaxFramesInFlight;
     }
 
@@ -588,6 +595,22 @@ namespace Life
     nvrhi::ICommandList* VulkanGraphicsDevice::GetCurrentCommandList()
     {
         return m_FrameActive ? m_CommandList.Get() : nullptr;
+    }
+
+    void VulkanGraphicsDevice::RequestVSync(bool enabled)
+    {
+        if (m_VSync == enabled)
+            return;
+
+        m_VSync = enabled;
+        m_SwapchainRecreationPending = true;
+        LOG_CORE_INFO("Vulkan VSync {} requested.", m_VSync ? "enabled" : "disabled");
+
+        if (!m_FrameActive)
+        {
+            RecreateSwapchain();
+            m_SwapchainRecreationPending = false;
+        }
     }
 
     void VulkanGraphicsDevice::RecreateSwapchain()

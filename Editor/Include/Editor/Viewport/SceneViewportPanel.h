@@ -32,7 +32,6 @@ namespace EditorApp
         uint32_t RequestedQuadCount = 0;
         uint32_t TexturedQuadCount = 0;
         uint32_t UntexturedQuadCount = 0;
-        bool RequestedQuadCountClamped = false;
         Life::Renderer2D::Statistics RendererStats{};
     };
 
@@ -54,7 +53,7 @@ namespace EditorApp
         void RenderStressControls();
         void UpdateCameraNavigation(EditorCameraTool& cameraTool, Life::Camera& camera, bool viewportHovered, bool viewportFocused);
         void SetCameraNavigationActive(bool active) noexcept;
-        uint32_t GetConfiguredQuadCount(bool* wasClamped = nullptr) const noexcept;
+        uint32_t GetConfiguredQuadCount() const noexcept;
         Life::SceneRenderer2D::Scene2D BuildScene2D(const Life::Camera& camera);
         bool RenderSceneSurface(uint32_t width, uint32_t height, const EditorServices& services, EditorCameraTool& cameraTool, bool viewportHovered, bool viewportFocused);
 

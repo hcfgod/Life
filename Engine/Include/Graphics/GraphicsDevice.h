@@ -43,7 +43,9 @@ namespace Life
         virtual uint32_t GetBackBufferWidth() const = 0;
         virtual uint32_t GetBackBufferHeight() const = 0;
         virtual GraphicsBackend GetBackend() const = 0;
+        virtual bool IsVSyncEnabled() const = 0;
 
+        virtual void RequestVSync(bool enabled) = 0;
         virtual void Resize(uint32_t width, uint32_t height) = 0;
 
     protected:

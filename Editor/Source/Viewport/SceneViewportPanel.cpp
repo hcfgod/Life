@@ -14,7 +14,6 @@
 namespace
 {
     constexpr uint32_t MaxStressGridDimension = 512;
-    constexpr uint32_t MaxStressQuadCount = 100000;
 }
 
 namespace EditorApp
@@ -177,9 +176,8 @@ namespace EditorApp
         ImGui::SliderFloat("Rotation Speed", &m_StressSettings.RotationSpeed, 0.0f, 4.0f, "%.2f");
         ImGui::SliderFloat("Depth Step", &m_StressSettings.DepthStep, 0.0f, 0.01f, "%.4f");
 
-        bool requestedQuadCountClamped = false;
-        const uint32_t configuredQuadCount = GetConfiguredQuadCount(&requestedQuadCountClamped);
-        ImGui::Text("Configured Quads: %u%s", configuredQuadCount, requestedQuadCountClamped ? " (clamped)" : "");
+        const uint32_t configuredQuadCount = GetConfiguredQuadCount();
+        ImGui::Text("Configured Quads: %u", configuredQuadCount);
         ImGui::Text("Checker Texture: %s", m_CheckerTextureAsset ? "Loaded" : "Unavailable");
 
         if (ImGui::Button("Reset Stress Settings"))
@@ -222,26 +220,17 @@ namespace EditorApp
             SDL_SetWindowRelativeMouseMode(sdlWindow, active);
     }
 
-    uint32_t SceneViewportPanel::GetConfiguredQuadCount(bool* wasClamped) const noexcept
+    uint32_t SceneViewportPanel::GetConfiguredQuadCount() const noexcept
     {
         const bool isEnabled = m_StressSettings.Enabled && (m_StressSettings.DrawTexturedQuads || m_StressSettings.DrawColoredQuads);
         if (!isEnabled)
-        {
-            if (wasClamped != nullptr)
-                *wasClamped = false;
-
             return 0;
-        }
 
         const uint32_t columns = std::clamp(m_StressSettings.Columns, 1u, MaxStressGridDimension);
         const uint32_t rows = std::clamp(m_StressSettings.Rows, 1u, MaxStressGridDimension);
         const uint64_t requestedQuadCount = static_cast<uint64_t>(columns) * static_cast<uint64_t>(rows);
-        const bool clamped = requestedQuadCount > MaxStressQuadCount;
 
-        if (wasClamped != nullptr)
-            *wasClamped = clamped;
-
-        return static_cast<uint32_t>(clamped ? MaxStressQuadCount : requestedQuadCount);
+        return static_cast<uint32_t>(requestedQuadCount);
     }
 
     void SceneViewportPanel::TryAcquireCheckerTexture(const EditorServices& services)
@@ -266,11 +255,8 @@ namespace EditorApp
         m_State.RequestedQuadCount = 0;
         m_State.TexturedQuadCount = 0;
         m_State.UntexturedQuadCount = 0;
-        m_State.RequestedQuadCountClamped = false;
 
-        bool requestedQuadCountClamped = false;
-        const uint32_t configuredQuadCount = GetConfiguredQuadCount(&requestedQuadCountClamped);
-        m_State.RequestedQuadCountClamped = requestedQuadCountClamped;
+        const uint32_t configuredQuadCount = GetConfiguredQuadCount();
         if (configuredQuadCount == 0)
             return scene;
 
@@ -350,7 +336,6 @@ namespace EditorApp
         m_State.RequestedQuadCount = 0;
         m_State.TexturedQuadCount = 0;
         m_State.UntexturedQuadCount = 0;
-        m_State.RequestedQuadCountClamped = false;
         m_State.RendererStats = {};
 
         if (!m_SceneSurface || !services.SceneRenderer2D || !services.CameraManager)

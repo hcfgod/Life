@@ -27,6 +27,9 @@ namespace Life
         uint32_t GetBackBufferWidth() const override { return m_SwapchainWidth; }
         uint32_t GetBackBufferHeight() const override { return m_SwapchainHeight; }
         GraphicsBackend GetBackend() const override { return GraphicsBackend::Vulkan; }
+        bool IsVSyncEnabled() const override { return m_VSync; }
+
+        void RequestVSync(bool enabled) override;
 
         VkInstance GetInstance() const noexcept { return m_Instance; }
         VkPhysicalDevice GetPhysicalDevice() const noexcept { return m_PhysicalDevice; }
@@ -82,6 +85,7 @@ namespace Life
         std::vector<VkFence> m_InFlightFences;
         uint32_t m_CurrentFrame = 0;
         bool m_FrameActive = false;
+        bool m_SwapchainRecreationPending = false;
         static constexpr uint32_t MaxFramesInFlight = 2;
 
         vkb::Instance m_VkbInstance;

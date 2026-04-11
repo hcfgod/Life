@@ -21,6 +21,12 @@ namespace EditorApp
                 : Life::GraphicsBackend::None;
 
             ImGui::Text("Graphics Backend: %s", backend == Life::GraphicsBackend::Vulkan ? "Vulkan" : backend == Life::GraphicsBackend::D3D12 ? "D3D12" : "None");
+            if (services.GraphicsDevice)
+            {
+                bool vsyncEnabled = services.GraphicsDevice->get().IsVSyncEnabled();
+                if (ImGui::Checkbox("VSync", &vsyncEnabled))
+                    services.GraphicsDevice->get().RequestVSync(vsyncEnabled);
+            }
             ImGui::Text("Scene Surface Size: %u x %u", viewportState.SurfaceWidth, viewportState.SurfaceHeight);
             ImGui::Text("Scene Surface Ready: %s", viewportState.SurfaceReady ? "true" : "false");
             ImGui::Text("Scene Render Succeeded: %s", viewportState.LastRenderSucceeded ? "true" : "false");
@@ -32,7 +38,7 @@ namespace EditorApp
             }
 
             ImGui::Separator();
-            ImGui::Text("Configured Quads: %u%s", viewportState.RequestedQuadCount, viewportState.RequestedQuadCountClamped ? " (clamped)" : "");
+            ImGui::Text("Configured Quads: %u", viewportState.RequestedQuadCount);
             ImGui::Text("Configured Textured Quads: %u", viewportState.TexturedQuadCount);
             ImGui::Text("Configured Colored Quads: %u", viewportState.UntexturedQuadCount);
             ImGui::Text("Renderer2D Draw Calls: %u", viewportState.RendererStats.DrawCalls);

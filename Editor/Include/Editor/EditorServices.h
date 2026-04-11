@@ -8,6 +8,7 @@ namespace EditorApp
     {
         Life::OptionalRef<Life::Application> Application;
         Life::OptionalRef<Life::Window> Window;
+        Life::OptionalRef<Life::GraphicsDevice> GraphicsDevice;
         Life::OptionalRef<Life::InputSystem> InputSystem;
         Life::OptionalRef<Life::Assets::AssetManager> AssetManager;
         Life::OptionalRef<Life::CameraManager> CameraManager;
