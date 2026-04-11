@@ -13,6 +13,7 @@
 namespace Life::Assets
 {
     static std::optional<std::filesystem::path> s_AssetRootOverride;
+    static std::optional<std::filesystem::path> s_ActiveProjectRootOverride;
 
     // Cache `FindProjectRootFromWorkingDirectory()` because it is called frequently during asset loads.
     // IMPORTANT: this cache must be invalidated when callers set an explicit override.
@@ -48,6 +49,31 @@ namespace Life::Assets
 
         return std::string(value);
 #endif
+    }
+
+    static std::filesystem::path NormalizeRootPath(const std::filesystem::path& path)
+    {
+        if (path.empty())
+            return {};
+
+        std::error_code ec;
+        const std::filesystem::path weaklyCanonical = std::filesystem::weakly_canonical(path, ec);
+        if (!ec)
+            return weaklyCanonical;
+
+        ec.clear();
+        const std::filesystem::path absolutePath = std::filesystem::absolute(path, ec);
+        if (!ec)
+            return absolutePath.lexically_normal();
+
+        return path.lexically_normal();
+    }
+
+    static void InvalidateCachedProjectRoot()
+    {
+        std::lock_guard<std::mutex> lock(s_CacheMutex);
+        s_HasCached = false;
+        s_CachedResult.reset();
     }
 
     static std::optional<std::filesystem::path> TryResolveSharedEditorRoot()
@@ -180,14 +206,35 @@ namespace Life::Assets
         if (rootDirectory.empty())
         {
             s_AssetRootOverride.reset();
-            std::lock_guard<std::mutex> lock(s_CacheMutex);
-            s_HasCached = false;
+            InvalidateCachedProjectRoot();
             return;
         }
 
-        s_AssetRootOverride = std::filesystem::weakly_canonical(rootDirectory);
-        std::lock_guard<std::mutex> lock(s_CacheMutex);
-        s_HasCached = false;
+        s_AssetRootOverride = NormalizeRootPath(rootDirectory);
+        InvalidateCachedProjectRoot();
+    }
+
+    void SetActiveProjectRootDirectory(const std::filesystem::path& rootDirectory)
+    {
+        if (rootDirectory.empty())
+        {
+            ClearActiveProjectRootDirectory();
+            return;
+        }
+
+        s_ActiveProjectRootOverride = NormalizeRootPath(rootDirectory);
+        InvalidateCachedProjectRoot();
+    }
+
+    void ClearActiveProjectRootDirectory()
+    {
+        s_ActiveProjectRootOverride.reset();
+        InvalidateCachedProjectRoot();
+    }
+
+    std::optional<std::filesystem::path> TryGetActiveProjectRootDirectory()
+    {
+        return s_ActiveProjectRootOverride;
     }
 
     Result<std::filesystem::path> FindProjectRootFromWorkingDirectory()
@@ -200,7 +247,15 @@ namespace Life::Assets
             }
         }
 
-        // Explicit override (preferred).
+        if (s_ActiveProjectRootOverride.has_value())
+        {
+            Result<std::filesystem::path> ok = s_ActiveProjectRootOverride.value();
+            std::lock_guard<std::mutex> lock(s_CacheMutex);
+            s_CachedResult = ok;
+            s_HasCached = true;
+            return ok;
+        }
+
         if (s_AssetRootOverride.has_value())
         {
             Result<std::filesystem::path> ok = s_AssetRootOverride.value();
@@ -210,8 +265,6 @@ namespace Life::Assets
             return ok;
         }
 
-        // Environment override (optional):
-        // Set `LIFE_ASSET_ROOT` to a directory that contains `Assets/`.
         if (const auto env = TryGetEnvironmentVariable("LIFE_ASSET_ROOT"); env.has_value())
         {
             std::filesystem::path candidate = std::filesystem::weakly_canonical(std::filesystem::path(*env));
@@ -246,7 +299,6 @@ namespace Life::Assets
             return fail;
         }
 
-        // Preferred (Unity-grade): a project marker file makes project discovery deterministic.
         if (auto markerRoot = TryFindProjectRootByMarker(current); markerRoot.has_value())
         {
             Result<std::filesystem::path> ok = markerRoot.value();
@@ -256,7 +308,6 @@ namespace Life::Assets
             return ok;
         }
 
-        // Walk upward until we find a directory containing `Assets/`.
         std::filesystem::path probeAssets = current;
         for (int depth = 0; depth < 32; ++depth)
         {
@@ -306,7 +357,6 @@ namespace Life::Assets
             return std::filesystem::weakly_canonical(keyPath);
         }
 
-        // Unity-style keys.
         if (assetKey.rfind("Assets/", 0) == 0 || assetKey.rfind("Assets\\", 0) == 0)
         {
             auto rootResult = FindProjectRootFromWorkingDirectory();
@@ -328,7 +378,6 @@ namespace Life::Assets
             const std::filesystem::path& root = rootResult.GetValue();
             const std::filesystem::path projectResolved = root / keyPath;
 
-            // Project assets always win; shared-editor assets are fallback only.
             std::error_code ec;
             if (std::filesystem::exists(projectResolved, ec))
                 return std::filesystem::weakly_canonical(projectResolved);
@@ -344,11 +393,9 @@ namespace Life::Assets
             if (const auto builtIn = TryResolveBuiltInDefaultAsset(assetKey); builtIn.has_value())
                 return std::filesystem::weakly_canonical(*builtIn);
 
-            // Return the project path even when it does not exist yet (important for save paths).
             return std::filesystem::weakly_canonical(projectResolved);
         }
 
-        // Otherwise: relative to CWD.
         std::error_code ec;
         const std::filesystem::path cwd = std::filesystem::current_path(ec);
         if (ec)

@@ -3,6 +3,7 @@
 #include "Core/Error.h"
 
 #include <filesystem>
+#include <optional>
 #include <string>
 
 namespace Life::Assets
@@ -20,6 +21,10 @@ namespace Life::Assets
     // -----------------------------------------------------------------------------
 
     void SetAssetRootDirectory(const std::filesystem::path& rootDirectory);
+    void SetActiveProjectRootDirectory(const std::filesystem::path& rootDirectory);
+    void ClearActiveProjectRootDirectory();
+
+    [[nodiscard]] std::optional<std::filesystem::path> TryGetActiveProjectRootDirectory();
 
     [[nodiscard]] Result<std::filesystem::path> FindProjectRootFromWorkingDirectory();
 

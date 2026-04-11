@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <utility>
 
@@ -41,6 +42,7 @@ namespace Life
         LogSpecification Logging;
         CrashReportingSpecification CrashReporting;
         ApplicationCommandLineArgs CommandLineArgs;
+        std::filesystem::path ProjectDescriptorPath;
     };
 
     class Layer;

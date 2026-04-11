@@ -3,6 +3,7 @@
 #include "Core/ApplicationHost.h"
 
 #include "Assets/AssetHotReloadManager.h"
+#include "Assets/ProjectService.h"
 #include "Core/ApplicationRuntime.h"
 #include "Core/Concurrency/AsyncIO.h"
 #include "Core/Concurrency/JobSystem.h"
@@ -163,6 +164,9 @@ namespace Life
 
         void ApplicationHostConstruction::CleanupFailure() noexcept
         {
+            const auto closeProjectResult = m_Host.m_ProjectService.CloseProject();
+            (void)closeProjectResult;
+            m_Host.m_ProjectService.UnbindAssetSystems();
             DisableGlobalServices();
             ReleaseSharedSystems();
             UnregisterActiveHost();
@@ -170,6 +174,9 @@ namespace Life
 
         void ApplicationHostConstruction::Teardown() noexcept
         {
+            const auto closeProjectResult = m_Host.m_ProjectService.CloseProject();
+            (void)closeProjectResult;
+            m_Host.m_ProjectService.UnbindAssetSystems();
             DisableGlobalServices();
             ReleaseSharedSystems();
             UnregisterActiveHost();
@@ -226,10 +233,27 @@ namespace Life
                 Async::GetAsyncIO(),
                 *m_Host.m_Runtime,
                 *m_Host.m_Window);
+
             m_Host.m_Services.Register<Assets::AssetDatabase>(m_Host.m_AssetDatabase);
             m_Host.m_Services.Register<Assets::AssetBundle>(m_Host.m_AssetBundle);
             m_Host.m_AssetManager.BindDatabase(m_Host.m_AssetDatabase);
             m_Host.m_Services.Register<Assets::AssetManager>(m_Host.m_AssetManager);
+            m_Host.m_ProjectService.BindAssetSystems(m_Host.m_AssetDatabase, m_Host.m_AssetManager);
+            m_Host.m_Services.Register<Assets::ProjectService>(m_Host.m_ProjectService);
+
+            if (!specification.ProjectDescriptorPath.empty())
+            {
+                const auto openProjectResult = m_Host.m_ProjectService.OpenProject(specification.ProjectDescriptorPath);
+                if (openProjectResult.IsFailure())
+                {
+                    throw Error(
+                        openProjectResult.GetError().GetCode(),
+                        "Failed to open project descriptor '" + specification.ProjectDescriptorPath.string() + "': " +
+                            openProjectResult.GetError().GetErrorMessage(),
+                        std::source_location::current(),
+                        openProjectResult.GetError().GetSeverity());
+                }
+            }
         }
 
         void ApplicationHostConstruction::CreateAndRegisterHostServices()

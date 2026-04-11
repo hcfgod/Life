@@ -3,6 +3,7 @@
 #include "Assets/AssetBundle.h"
 #include "Assets/AssetDatabase.h"
 #include "Assets/AssetManager.h"
+#include "Assets/ProjectService.h"
 #include "Core/Application.h"
 #include "Core/ApplicationContext.h"
 #include "Core/ApplicationEventRouter.h"
@@ -80,6 +81,8 @@ namespace Life
         const Assets::AssetBundle& GetAssetBundle() const { return m_AssetBundle; }
         Assets::AssetManager& GetAssetManager() { return m_AssetManager; }
         const Assets::AssetManager& GetAssetManager() const { return m_AssetManager; }
+        Assets::ProjectService& GetProjectService() { return m_ProjectService; }
+        const Assets::ProjectService& GetProjectService() const { return m_ProjectService; }
 
     private:
         friend class Detail::ApplicationHostConstruction;
@@ -107,6 +110,7 @@ namespace Life
         Assets::AssetDatabase m_AssetDatabase;
         Assets::AssetBundle m_AssetBundle;
         Assets::AssetManager m_AssetManager;
+        Assets::ProjectService m_ProjectService;
         ServiceRegistry m_Services;
         bool m_Running = false;
         bool m_Initialized = false;

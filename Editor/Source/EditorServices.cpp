@@ -10,6 +10,7 @@ namespace EditorApp
         services.GraphicsDevice = Life::MakeOptionalRef(application.TryGetService<Life::GraphicsDevice>());
         services.InputSystem = Life::MakeOptionalRef(application.GetService<Life::InputSystem>());
         services.AssetManager = Life::MakeOptionalRef(application.GetService<Life::Assets::AssetManager>());
+        services.ProjectService = Life::MakeOptionalRef(application.GetService<Life::Assets::ProjectService>());
         services.CameraManager = Life::MakeOptionalRef(application.GetService<Life::CameraManager>());
         services.Renderer = Life::MakeOptionalRef(application.TryGetService<Life::Renderer>());
         services.SceneRenderer2D = Life::MakeOptionalRef(application.TryGetService<Life::SceneRenderer2D>());
@@ -23,6 +24,7 @@ namespace EditorApp
         SceneRenderer2D.reset();
         Renderer.reset();
         CameraManager.reset();
+        ProjectService.reset();
         AssetManager.reset();
         InputSystem.reset();
         GraphicsDevice.reset();

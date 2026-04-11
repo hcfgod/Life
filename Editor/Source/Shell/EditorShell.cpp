@@ -12,7 +12,7 @@ namespace EditorApp
         m_LayoutInitialized = false;
     }
 
-    void EditorShell::Begin(EditorPanelVisibility& visibility)
+    void EditorShell::Begin(EditorPanelVisibility& visibility, EditorShellActions& actions, const char* activeProjectName)
     {
 #if __has_include(<imgui.h>)
         ImGuiWindowFlags dockspaceWindowFlags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
@@ -36,12 +36,14 @@ namespace EditorApp
         ImGui::PopStyleVar(3);
 
         BuildDefaultLayout();
-        RenderMenuBar(visibility);
+        RenderMenuBar(visibility, actions, activeProjectName);
 
         const ImGuiID dockspaceId = ImGui::GetID("EditorDockspace");
         ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
 #else
         (void)visibility;
+        (void)actions;
+        (void)activeProjectName;
 #endif
     }
 
@@ -80,11 +82,18 @@ namespace EditorApp
 #endif
     }
 
-    void EditorShell::RenderMenuBar(EditorPanelVisibility& visibility)
+    void EditorShell::RenderMenuBar(EditorPanelVisibility& visibility, EditorShellActions& actions, const char* activeProjectName)
     {
 #if __has_include(<imgui.h>)
         if (!ImGui::BeginMenuBar())
             return;
+
+        if (ImGui::BeginMenu("Project"))
+        {
+            if (ImGui::MenuItem("Close Project"))
+                actions.RequestCloseProject = true;
+            ImGui::EndMenu();
+        }
 
         if (ImGui::BeginMenu("Window"))
         {
@@ -100,9 +109,16 @@ namespace EditorApp
 
         ImGui::Separator();
         ImGui::TextUnformatted("Life Editor");
+        if (activeProjectName != nullptr && activeProjectName[0] != '\0')
+        {
+            ImGui::Separator();
+            ImGui::TextUnformatted(activeProjectName);
+        }
         ImGui::EndMenuBar();
 #else
         (void)visibility;
+        (void)actions;
+        (void)activeProjectName;
 #endif
     }
 }

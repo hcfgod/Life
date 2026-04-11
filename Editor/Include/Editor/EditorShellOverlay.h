@@ -3,10 +3,11 @@
 #include "Editor/Camera/EditorCameraTool.h"
 #include "Editor/EditorServices.h"
 #include "Editor/Panels/ConsolePanel.h"
- #include "Editor/Panels/FpsOverlayPanel.h"
+#include "Editor/Panels/FpsOverlayPanel.h"
 #include "Editor/Panels/HierarchyPanel.h"
 #include "Editor/Panels/InspectorPanel.h"
 #include "Editor/Panels/StatsPanel.h"
+#include "Editor/ProjectHub/EditorProjectHub.h"
 #include "Editor/Shell/EditorShell.h"
 #include "Editor/Viewport/SceneViewportPanel.h"
 #include "Engine.h"
@@ -26,9 +27,18 @@ namespace EditorApp
         void OnEvent(Life::Event& event) override;
 
     private:
+        enum class Mode
+        {
+            ProjectHub,
+            Workspace
+        };
+
+        void SetMode(Mode mode);
+
         EditorServices m_Services;
         EditorPanelVisibility m_PanelVisibility;
         EditorShell m_Shell;
+        EditorProjectHub m_ProjectHub;
         EditorCameraTool m_CameraTool;
         SceneViewportPanel m_SceneViewportPanel;
         HierarchyPanel m_HierarchyPanel;
@@ -36,5 +46,6 @@ namespace EditorApp
         ConsolePanel m_ConsolePanel;
         FpsOverlayPanel m_FpsOverlayPanel;
         StatsPanel m_StatsPanel;
+        Mode m_Mode = Mode::ProjectHub;
     };
 }
