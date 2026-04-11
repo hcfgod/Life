@@ -15,7 +15,7 @@ During host construction, the engine:
 - creates the platform window
 - attempts to create a `GraphicsDevice`
 - registers `GraphicsDevice` only when device creation succeeds
-- creates and registers `Renderer` and `Renderer2D` only when rendering services can be constructed successfully
+- creates and registers `Renderer`, `Renderer2D`, and `SceneRenderer2D` only when rendering services can be constructed successfully
 - always creates and registers `CameraManager` as a host-owned service
 - always creates and registers `ImGuiSystem` as a host-owned tooling service, even when graphics are unavailable
 - keeps the rest of the runtime running even if graphics initialization fails
@@ -31,11 +31,11 @@ The preferred access path is owner-bound service lookup from application-facing 
 In practice:
 
 - application and layer code should prefer `Application::TryGetService<T>()`, `GetService<T>()`, or `HasService<T>()`
-- rendering consumers should normally ask for `CameraManager`, `Renderer2D`, `Renderer`, or `GraphicsDevice` through the bound application
+- rendering consumers should normally ask for `CameraManager`, `SceneRenderer2D`, `Renderer2D`, `Renderer`, or `GraphicsDevice` through the bound application
 - host-owned infrastructure may use `ApplicationHost::GetServices()` or host-owned direct state
 - global service lookup should remain a last resort for ambient integration boundaries
 
-The current runtime sample in `Runtime/Source/GameLayer.cpp` follows that model: it resolves `CameraManager` and `Renderer2D` from the bound application, performs camera selection in update/event paths, and renders during `OnRender()`.
+The current runtime sample in `Runtime/Source/GameLayer.cpp` follows that model: it resolves `CameraManager` and `SceneRenderer2D` from the bound application, builds a `SceneRenderer2D::Scene2D`, performs camera selection in update and event paths, and renders during `OnRender()`.
 
 ## Current Render Stack
 
@@ -99,6 +99,19 @@ During `Flush()` and `EndScene()`, it:
 
 The current implementation uploads a small scene constant buffer containing the view-projection matrix and lets the vertex shader apply per-quad translation, rotation, and size on the GPU. That keeps the higher-level API simple while moving the transform work out of the old CPU-baked path.
 
+### `SceneRenderer2D`
+
+`SceneRenderer2D` is the current engine-owned scene submission service layered above `Renderer2D`.
+
+It currently provides:
+
+- a lightweight `Scene2D` description with a required camera plus queued `QuadCommand` values
+- direct scene rendering through `Render(...)`
+- offscreen scene rendering through `RenderToSurface(...)`
+- a stable consumer-facing seam for runtime and editor code that should not manually sequence `Renderer2D::BeginScene(...)` and `EndScene()`
+
+In practice, `SceneRenderer2D` keeps scene assembly in higher-level code while centralizing the actual `Renderer2D` submission path in one host-owned service.
+
 ### `SceneSurface`
 
 `SceneSurface` is the current engine-owned abstraction for offscreen scene rendering into tooling UI.
@@ -133,12 +146,21 @@ Current implementation characteristics:
 
 - quad transforms are evaluated on the GPU from per-vertex local positions plus per-quad transform attributes
 - the current camera view-projection matrix is uploaded through a scene constant buffer at scene start
-- batched instance data is uploaded into one dynamic instance buffer per flush
+- batched instance data is uploaded into one dynamic instance buffer per flush, selected from a rotating set of per-scene buffer versions to avoid reusing in-flight GPU data too aggressively
+- scene constant uploads also rotate across a matching set of constant-buffer versions per scene
 - pipeline and shader acquisition are prepared internally before scene submission
 - draw submission now supports multiple texture batch ranges within one queued vertex upload instead of treating a single active texture as the architectural model
 - color-only quads use an internal white texture, while missing-texture draws fall back to an internal magenta error texture
 
 `Renderer2D` has moved well beyond a tiny first pass. The current implementation already covers the common 2D path exercised by the runtime and editor samples while preserving clean ownership and batching seams.
+
+For most higher-level engine consumers, the intended path is now:
+
+1. choose or build a `Camera`
+2. assemble a `SceneRenderer2D::Scene2D`
+3. render through `SceneRenderer2D::Render(...)` for back-buffer rendering or `SceneRenderer2D::RenderToSurface(...)` for an offscreen `SceneSurface`
+
+That keeps application and tooling code focused on scene intent rather than low-level render sequencing.
 
 ## Shader Assets and Build Flow
 
@@ -160,7 +182,7 @@ The current recovery policy is intentionally defensive:
 
 - shader-library replacement is transactional, so a failed replacement attempt does not discard the last working shader object
 - `Renderer2D` treats lost or invalid core GPU resources as recoverable and will rebuild them on the next `BeginScene(...)` path instead of treating the first failure as terminal
-- higher-level textured-quad consumers in `Runtime/Source/GameLayer.cpp` and `Editor/Source/EditorShellOverlay.cpp` retry their checker-texture acquisition during later updates so missing content can recover after startup
+- higher-level textured-quad consumers in `Runtime/Source/GameLayer.cpp` and `Editor/Source/Viewport/SceneViewportPanel.cpp` retry their checker-texture acquisition during later updates so missing content can recover after startup
 
 ## ImGui and Tooling Integration
 
@@ -301,9 +323,10 @@ In other words, resize events are for gameplay and engine systems; swapchain rec
 
 For current application-facing rendering code, the safest pattern is:
 
-- query `CameraManager` and `Renderer2D` from the bound application or layer owner
-- treat `Renderer2D`, `Renderer`, and `GraphicsDevice` as optional services when startup rendering failed
+- query `CameraManager` and `SceneRenderer2D` from the bound application or layer owner
+- treat `SceneRenderer2D`, `Renderer2D`, `Renderer`, and `GraphicsDevice` as optional services when startup rendering failed
 - render from `Layer::OnRender()` or another host-driven render callback that executes inside the active frame
+- prefer assembling scene data through `SceneRenderer2D::Scene2D` rather than manually sequencing `Renderer2D` in normal runtime or editor code
 - do nothing when the relevant rendering services or per-frame objects are unavailable
 - avoid caching backend-owned per-frame GPU objects across frames
 - keep swapchain, command-list lifetime, and backend synchronization details out of gameplay code

@@ -108,25 +108,29 @@ It uses the normal `Layer`/`LayerStack` model rather than a separate editor-only
 Current behavior includes:
 
 - creating a root dockspace window
-- building a default docking layout for `Hierarchy`, `Inspector`, `Console`, `Stats`, and `Scene`
+- building a default docking layout for `Hierarchy`, `Inspector`, `Console`, `Stats`, `Renderer Stress`, and `Scene`
 - reporting renderer and ImGui capture state in the stats panel
 - inspecting camera state through `CameraManager`
 - managing a dedicated editor camera
 - rendering an offscreen scene-surface and displaying it as an ImGui image
 
-This is important architecturally. The editor is using the same host-owned services as runtime code: `CameraManager`, `Renderer`, `Renderer2D`, `GraphicsDevice`, `ImGuiSystem`, and `LayerStack`.
+This is important architecturally. The editor is using the same host-owned services as runtime code: `AssetManager`, `CameraManager`, `Renderer`, `SceneRenderer2D`, `GraphicsDevice`, `ImGuiSystem`, and `LayerStack`.
+
+The overlay acquires those dependencies once through `EditorServices::Acquire(...)`, stores optional references for the lifetime of the overlay attachment, and clears them on detach. That keeps normal editor code owner-bound without repeatedly resolving services on hot paths.
 
 ## Scene Surface Path
 
 The current editor scene-surface is a real engine rendering path, not a placeholder image.
 
-At a high level, `EditorShellOverlay` currently:
+At a high level, `EditorShellOverlay` delegates scene-panel rendering to `SceneViewportPanel`, which currently:
 
-1. creates or resizes an engine-owned `SceneSurface`
-2. updates the editor camera aspect ratio to match the scene-surface size
-3. asks the scene-surface to begin offscreen scene rendering
-4. renders scene content through `Renderer2D`
-5. asks the scene-surface to end rendering and present the completed image through `ImGuiSystem`
+1. acquires or retries the checker texture asset through the host-bound `AssetManager`
+2. creates a `SceneSurface` once renderer, scene-renderer, and ImGui services are available
+3. creates or resizes that engine-owned `SceneSurface` to the current viewport region
+4. ensures the dedicated editor camera exists and updates its aspect ratio to match the actual surface size
+5. assembles a `SceneRenderer2D::Scene2D` describing the current stress-scene content
+6. renders that scene through `SceneRenderer2D::RenderToSurface(...)`
+7. presents the completed surface through `ImGuiSystem`
 
 This gives the editor a proper offscreen-rendered scene-surface panel while still staying inside the same frame and renderer ownership model as the runtime.
 
@@ -136,10 +140,13 @@ The editor currently uses a dedicated camera managed through the normal `CameraM
 
 Current behavior:
 
-- the overlay ensures the editor camera exists on attach and before rendering
-- the camera is orthographic in the current implementation
-- the overlay updates its aspect ratio to match the current scene-surface size
-- the overlay makes it the primary camera while the editor shell is active
+- the editor camera tool ensures the editor camera exists on attach and before rendering
+- the camera is perspective in the current implementation
+- the camera is made primary while the editor shell is active
+- the camera's aspect ratio is updated to match the current scene-surface size
+- right mouse inside the `Scene` viewport enables fly-camera look with SDL relative mouse mode
+- movement uses `W`, `A`, `S`, `D`, vertical motion uses `Q` and `E`, and `Shift` applies a speed boost
+- the camera tool maintains yaw and pitch state and updates the persistent camera orientation and position over time
 - the overlay destroys the camera on detach if it created it
 
 That keeps camera ownership consistent across runtime and tooling code.
@@ -154,14 +161,15 @@ Current expectations:
 - if Dear ImGui is unavailable in the build, `ImGuiSystem` remains unavailable rather than crashing the host
 - if the active backend lacks a renderer backend, the editor UI path is unavailable rather than pretending to work
 - if offscreen texture creation or texture-handle acquisition fails, the editor logs the failure and avoids invalid rendering for that frame
-- if the checker texture or other scene content is missing at attach time, the editor overlay retries acquisition during later updates so scene rendering can recover when content becomes available
+- if the checker texture or other scene content is missing at attach time, `SceneViewportPanel` retries acquisition during later updates so scene rendering can recover when content becomes available
+- if `SceneSurface::BeginScene2D(...)` cannot start a valid 2D scene, it unwinds the offscreen render state instead of leaving the surface mid-frame
 - if `Renderer2D` loses internal GPU resources after an earlier successful initialization, later scene attempts will retry resource creation instead of requiring a process restart
 
 This matches the broader engine policy of visible failures without unnecessary total-runtime collapse.
 
 ## Build and Asset Flow
 
-The editor shares the same shader assets used by the runtime's first-pass renderer.
+The editor shares the same shader assets used by the runtime rendering path.
 
 Current behavior on Windows builds:
 

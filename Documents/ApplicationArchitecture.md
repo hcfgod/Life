@@ -53,8 +53,9 @@ It owns:
 - the `ApplicationEventRouter`
 - the authoritative `ServiceRegistry`
 - the host-owned `LayerStack` and `InputSystem`
+- the host-owned `AssetDatabase`, `AssetBundle`, and `AssetManager`
 - the host-owned `CameraManager`
-- optional graphics and tooling services including `GraphicsDevice`, `Renderer`, `Renderer2D`, and `ImGuiSystem`
+- optional graphics and tooling services including `GraphicsDevice`, `Renderer`, `Renderer2D`, `SceneRenderer2D`, and `ImGuiSystem`
 
 The host also becomes the point where application specification values become operational. In practice that means logging is configured here, crash diagnostics are re-bound to application-specific settings here, and platform detection is initialized here before the window is created.
 
@@ -182,10 +183,15 @@ Host-managed registrations currently include:
 - `Async::AsyncIO`
 - `ApplicationRuntime`
 - `Window`
+- `Assets::AssetDatabase`
+- `Assets::AssetBundle`
+- `Assets::AssetManager`
 - `CameraManager`
+- `ImGuiSystem`
 - `GraphicsDevice` when device creation succeeds
 - `Renderer` when renderer creation succeeds
 - `Renderer2D` when renderer-service creation succeeds
+- `SceneRenderer2D` when renderer-service creation succeeds
 
 When no host is active, `GetServices()` falls back to a process-local empty compatibility registry.
 
@@ -209,10 +215,10 @@ At a high level, the normal lifecycle is:
 6. the platform window is created
 7. graphics-device creation is attempted and may fail without aborting the rest of the runtime
 8. shared engine systems such as the job system and async I/O are acquired
-9. core services are registered, then host-owned camera, tooling, and optional rendering services are registered
+9. core services are registered, then host-owned asset, camera, tooling, and optional rendering services are registered
 10. the context is bound to the host-owned state and service registry
 11. `ApplicationHost::Initialize()` enters the running phase, invokes application initialization, and marks the host initialized only after initialization completes successfully
-12. each runner iteration dispatches queued events, polls runtime events if needed, updates input actions, begins graphics and ImGui frames when available, and runs one host-owned frame update
+12. each runner iteration dispatches queued events, polls runtime events if needed, updates input-capture state, updates input actions, begins graphics and ImGui frames when available, runs the application update phase, pumps host-thread asset hot reload, runs layer update and render phases, refreshes input-capture state, renders ImGui, and presents when a graphics frame is active
 13. shutdown clears the running state
 14. finalization invokes host/application teardown, clears layers, resets optional rendering services, and releases shared systems
 

@@ -21,7 +21,7 @@ Building on the core engine library, the repository now provides a broader engin
 - `ServiceRegistry` is host-owned and exposed through application-facing accessors so runtime systems can be consumed without falling back to globals.
 - `LayerStack` is host-owned and integrated into update, render, and event routing, with distinct layer and overlay ordering semantics.
 - `InputSystem` is host-owned and provides raw-state polling, action-based input, rebinding, and SDL-fed device state.
-- `GraphicsDevice` is the backend abstraction, with `Renderer` as the general rendering service and `Renderer2D` as a substantial built-in 2D renderer supporting camera-driven rendering, textured quads, batching, and editor/runtime integration.
+- `GraphicsDevice` is the backend abstraction, with `Renderer` as the general rendering service, `Renderer2D` as the built-in quad renderer, `SceneRenderer2D` as the higher-level scene submission seam, and `SceneSurface` as the engine-owned offscreen tooling surface.
 - `Camera` and `CameraManager` provide named camera ownership, orthographic and perspective projections, primary-camera selection, per-camera clear settings, aspect-ratio updates, and viewport handling.
 - `ImGuiSystem` is host-owned and provides the current tooling bridge for docking UI, input capture, and texture-backed editor panels.
 - `Runtime` demonstrates scene-facing rendering, input actions, multi-camera usage, overlays, and host-owned engine services in a normal app context.
@@ -191,7 +191,7 @@ At the moment it serves as a practical integration sample for:
 - layer attachment and teardown
 - action-based input
 - host-owned camera registration and switching
-- camera-driven 2D rendering through `Renderer2D`, including textured quads and batching
+- camera-driven 2D scene submission through `SceneRenderer2D`, backed by `Renderer2D` textured-quad batching
 - resize-driven camera aspect-ratio updates
 - runtime overlays and diagnostics logging
 
@@ -205,8 +205,8 @@ At the moment it serves as a practical integration sample for:
 
 - host-owned `ImGuiSystem` initialization and docking UI
 - overlay-driven editor shell composition
-- offscreen scene-surface rendering into the editor `Scene` panel
-- camera inspection and editor-camera ownership through `CameraManager`
+- offscreen scene-surface rendering into the editor `Scene` panel through `SceneRenderer2D` and `SceneSurface`
+- camera inspection and perspective editor-camera ownership through `CameraManager`
 - tooling input capture layered on top of the normal event and input pipeline
 
 ## What `Test` Is For
@@ -229,8 +229,8 @@ At the moment it serves as a practical integration sample for:
 - `Documents/ApplicationArchitecture.md` - the canonical startup path, ownership model, service registry boundaries, and authoritative loop structure.
 - `Documents/EntryPointsAndBootstrap.md` - executable entry, SDL callback bootstrap, runner state, exception phases, and teardown boundaries.
 - `Documents/LayersAndOverlays.md` - the host-owned layer model, overlay ordering, traversal rules, and attach/detach semantics.
-- `Documents/Rendering.md` - rendering ownership, service boundaries, `GraphicsDevice`, `Renderer`, `Renderer2D`, cameras, and current Vulkan/NVRHI behavior.
-- `Documents/EditorAndTooling.md` - the dedicated editor app, host-owned `ImGuiSystem`, tooling event/frame integration, and the current scene-surface path.
+- `Documents/Rendering.md` - rendering ownership, service boundaries, `GraphicsDevice`, `Renderer`, `Renderer2D`, `SceneRenderer2D`, scene surfaces, cameras, and current Vulkan/NVRHI behavior.
+- `Documents/EditorAndTooling.md` - the dedicated editor app, host-owned `ImGuiSystem`, tooling event/frame integration, cached editor services, and the current scene-surface path.
 - `Documents/InputSystem.md` - host-owned input architecture, action assets, rebinding, and frame semantics.
 - `Documents/EventThreadingInvariants.md` - runtime ownership, event ordering, and thread-safety boundaries.
 - `Documents/Logging.md` - logging configuration, sink behavior, reconfiguration, and integration guidance.

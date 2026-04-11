@@ -121,6 +121,17 @@ namespace Life::Tests
             return Backend;
         }
 
+        bool IsVSyncEnabled() const override
+        {
+            return VSyncEnabled;
+        }
+
+        void RequestVSync(bool enabled) override
+        {
+            ++RequestVSyncCallCount;
+            VSyncEnabled = enabled;
+        }
+
         void Resize(uint32_t width, uint32_t height) override
         {
             ++ResizeCallCount;
@@ -140,9 +151,11 @@ namespace Life::Tests
         uint32_t LastResizeHeight = 0;
         int BeginFrameCallCount = 0;
         int PresentCallCount = 0;
+        int RequestVSyncCallCount = 0;
         int ResizeCallCount = 0;
         bool BeginFrameResult = false;
         bool FrameActive = false;
+        bool VSyncEnabled = false;
     };
 
     class TestApplication final : public Life::Application
