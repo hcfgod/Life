@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core/Events/Event.h"
+#include "Core/Events/EventBase.h"
 #include "Core/Input/InputCodes.h"
 
 #include <cstdint>

@@ -4,22 +4,32 @@
 #include "Assets/AssetDatabase.h"
 #include "Assets/AssetManager.h"
 #include "Core/Application.h"
+#include "Core/ApplicationContext.h"
 #include "Core/ApplicationEventRouter.h"
 #include "Core/Input/InputSystem.h"
 #include "Core/LayerStack.h"
-#include "Core/ApplicationRuntime.h"
 #include "Core/Memory.h"
 #include "Core/ServiceRegistry.h"
-#include "Core/Window.h"
-#include "Graphics/CameraManager.h"
-#include "Graphics/GraphicsDevice.h"
-#include "Graphics/ImGuiSystem.h"
-#include "Graphics/Renderer.h"
-#include "Graphics/Renderer2D.h"
-#include "Graphics/SceneRenderer2D.h"
 
 namespace Life
 {
+    class ApplicationRuntime;
+    class CameraManager;
+    class Event;
+    class GraphicsDevice;
+    class ImGuiSystem;
+    class Renderer;
+    class Renderer2D;
+    class SceneRenderer2D;
+    class Window;
+
+    namespace Detail
+    {
+        class ApplicationHostConstruction;
+        class ApplicationHostFrameController;
+        class ApplicationHostLifecycleController;
+    }
+
     class ApplicationHost
     {
     public:
@@ -72,15 +82,14 @@ namespace Life
         const Assets::AssetManager& GetAssetManager() const { return m_AssetManager; }
 
     private:
-        void UpdateInputCaptureState() noexcept;
-        bool TryBeginGraphicsFrame() noexcept;
-        void BeginImGuiFramePhase(bool frameStarted);
-        void RunApplicationUpdatePhase(float timestep);
-        void RunAssetHotReloadPhase();
-        void RunLayerUpdatePhase(float timestep);
-        void RunLayerRenderPhase(bool frameStarted);
-        void RunImGuiRenderPhase(bool frameStarted);
-        void RunPresentPhase(bool frameStarted) noexcept;
+        friend class Detail::ApplicationHostConstruction;
+        friend class Detail::ApplicationHostFrameController;
+        friend class Detail::ApplicationHostLifecycleController;
+
+        void BindApplicationHostState();
+        void RunApplicationInitializeHook();
+        void RunApplicationUpdateHook(float timestep);
+        void RunApplicationFinalizeHook();
 
         Scope<Application> m_Application;
         Scope<ApplicationRuntime> m_Runtime;

@@ -50,3 +50,5 @@
 #include "Graphics/SceneRenderer2D.h"
 #include "Graphics/SceneSurface.h"
 #include "Platform/Platform.h"
+#include "Graphics/GraphicsDevice.h"
+

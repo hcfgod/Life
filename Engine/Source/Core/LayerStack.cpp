@@ -1,7 +1,7 @@
 #include "Core/LayerStack.h"
 
 #include "Core/Application.h"
-#include "Core/Events/Event.h"
+#include "Core/Events/EventBase.h"
 #include "Core/Log.h"
 
 #include <algorithm>

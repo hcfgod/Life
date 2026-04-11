@@ -5,6 +5,7 @@
 #include "Core/ApplicationHost.h"
 #include "Core/ApplicationRunner.h"
 #include "Engine.h"
+#include "Graphics/GraphicsDevice.h"
 #include "Platform/SDL/SDLEvent.h"
 
 #include <atomic>

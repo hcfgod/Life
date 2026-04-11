@@ -3,7 +3,7 @@
 #include "Core/ApplicationContext.h"
 #include "Core/CrashDiagnostics.h"
 #include "Core/ApplicationEventRouter.h"
-#include "Core/Events/Event.h"
+#include "Core/Events/EventBase.h"
 #include "Core/Log.h"
 #include "Core/Memory.h"
 

@@ -13,6 +13,14 @@ namespace Life
         class TextureAsset;
     }
 
+    namespace Detail
+    {
+        class Renderer2DBatching;
+        class Renderer2DPipeline;
+        class Renderer2DResources;
+        class Renderer2DSubmission;
+    }
+
     class Camera;
     class GraphicsBuffer;
     class GraphicsPipeline;
@@ -61,13 +69,10 @@ namespace Life
         void ResetStats() noexcept;
 
     private:
-        bool EnsureResourcesReady();
-        void InvalidateResources() noexcept;
-        bool UpdateSceneConstants(const glm::mat4& viewProjection);
-        void ResetQueuedDraws() noexcept;
-        void SubmitQueuedDraws();
-        void PushQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians, const glm::vec4& color,
-                      const glm::vec2& uvMin, const glm::vec2& uvMax, const TextureResource* texture);
+        friend class Detail::Renderer2DBatching;
+        friend class Detail::Renderer2DPipeline;
+        friend class Detail::Renderer2DResources;
+        friend class Detail::Renderer2DSubmission;
 
         Renderer& m_Renderer;
 
