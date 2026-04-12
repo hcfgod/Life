@@ -69,7 +69,7 @@ namespace Life::Assets
                                            "Project descriptor file name must use the .lifeproject extension");
             }
 
-            const std::string resolved = descriptorFileName.string();
+            std::string resolved = descriptorFileName.string();
             if (resolved.empty())
             {
                 return Result<std::string>(ErrorCode::InvalidArgument,
@@ -178,7 +178,7 @@ namespace Life::Assets
             project.Paths.AssetsDirectory = project.Paths.RootDirectory / project.Descriptor.Paths.Assets;
             project.Paths.SettingsDirectory = project.Paths.RootDirectory / project.Descriptor.Paths.Settings;
 
-            const auto validateResult = ValidateProject(project);
+            auto validateResult = ValidateProject(project);
             if (validateResult.IsFailure())
                 return Result<Project>(validateResult.GetError());
 
@@ -193,11 +193,11 @@ namespace Life::Assets
 
     Result<void> ProjectSerializer::Save(const Project& project)
     {
-        const auto validateResult = ValidateProject(project);
+        auto validateResult = ValidateProject(project);
         if (validateResult.IsFailure())
             return validateResult;
 
-        const auto ensureDirectoriesResult = EnsureProjectDirectoriesExist(project);
+        auto ensureDirectoriesResult = EnsureProjectDirectoriesExist(project);
         if (ensureDirectoriesResult.IsFailure())
             return ensureDirectoriesResult;
 
@@ -255,16 +255,16 @@ namespace Life::Assets
 
     Result<Project> ProjectSerializer::CreateOnDisk(const ProjectCreateOptions& options)
     {
-        const auto projectResult = CreateProjectFromOptions(options);
+        auto projectResult = CreateProjectFromOptions(options);
         if (projectResult.IsFailure())
             return projectResult;
 
         Project project = projectResult.GetValue();
-        const auto ensureDirectoriesResult = EnsureProjectDirectoriesExist(project);
+        auto ensureDirectoriesResult = EnsureProjectDirectoriesExist(project);
         if (ensureDirectoriesResult.IsFailure())
             return Result<Project>(ensureDirectoriesResult.GetError());
 
-        const auto saveResult = Save(project);
+        auto saveResult = Save(project);
         if (saveResult.IsFailure())
             return Result<Project>(saveResult.GetError());
 
@@ -301,7 +301,7 @@ namespace Life::Assets
 
         project.Descriptor.Startup.Scene = Trim(options.StartupScene);
 
-        const auto descriptorFileNameResult = ResolveDescriptorFileName(options);
+        auto descriptorFileNameResult = ResolveDescriptorFileName(options);
         if (descriptorFileNameResult.IsFailure())
             return Result<Project>(descriptorFileNameResult.GetError());
 
@@ -310,7 +310,7 @@ namespace Life::Assets
         project.Paths.AssetsDirectory = project.Paths.RootDirectory / project.Descriptor.Paths.Assets;
         project.Paths.SettingsDirectory = project.Paths.RootDirectory / project.Descriptor.Paths.Settings;
 
-        const auto validateResult = ValidateProject(project);
+        auto validateResult = ValidateProject(project);
         if (validateResult.IsFailure())
             return Result<Project>(validateResult.GetError());
 
@@ -355,7 +355,7 @@ namespace Life::Assets
 
     Result<void> ProjectSerializer::ValidateProject(const Project& project)
     {
-        const auto validateDescriptorResult = ValidateDescriptor(project.Descriptor);
+        auto validateDescriptorResult = ValidateDescriptor(project.Descriptor);
         if (validateDescriptorResult.IsFailure())
             return validateDescriptorResult;
 
@@ -382,7 +382,7 @@ namespace Life::Assets
 
     Result<void> ProjectSerializer::EnsureProjectDirectoriesExist(const Project& project)
     {
-        const auto validateResult = ValidateProject(project);
+        auto validateResult = ValidateProject(project);
         if (validateResult.IsFailure())
             return validateResult;
 

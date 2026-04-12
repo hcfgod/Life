@@ -505,6 +505,9 @@ namespace Life
 
         vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
+        if (m_NvrhiDevice)
+            m_NvrhiDevice->runGarbageCollection();
+
         VkResult result = vkAcquireNextImageKHR(
             m_Device, m_Swapchain, UINT64_MAX,
             m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE,

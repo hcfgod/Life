@@ -108,12 +108,9 @@ namespace Life
         nvrhi::FramebufferHandle CurrentFramebuffer;
         TextureResource* ActiveColorTarget = nullptr;
         std::vector<TextureResource*> RenderTargetStack;
-        nvrhi::ITexture* CachedColorTarget = nullptr;
-        nvrhi::IDevice* CachedDevice = nullptr;
+        std::unordered_map<nvrhi::ITexture*, nvrhi::FramebufferHandle> FramebufferCache;
         std::unordered_map<TextureSamplerDescription, nvrhi::SamplerHandle, TextureSamplerDescriptionHasher> TextureSamplers;
         std::unordered_map<TextureBindingCacheKey, nvrhi::BindingSetHandle, TextureBindingCacheKeyHasher> TextureBindingSets;
-        uint32_t CachedFramebufferWidth = 0;
-        uint32_t CachedFramebufferHeight = 0;
         nvrhi::Viewport PendingViewport = nvrhi::Viewport();
         nvrhi::Rect PendingScissor = nvrhi::Rect();
         bool HasPendingViewport = false;
@@ -139,12 +136,9 @@ namespace Life
                 m_Impl->CurrentFramebuffer = nullptr;
                 m_Impl->ActiveColorTarget = nullptr;
                 m_Impl->RenderTargetStack.clear();
-                m_Impl->CachedColorTarget = nullptr;
-                m_Impl->CachedDevice = nullptr;
+                m_Impl->FramebufferCache.clear();
                 m_Impl->TextureSamplers.clear();
                 m_Impl->TextureBindingSets.clear();
-                m_Impl->CachedFramebufferWidth = 0;
-                m_Impl->CachedFramebufferHeight = 0;
             }
             LOG_CORE_INFO("Renderer destroyed.");
         }
@@ -521,10 +515,6 @@ namespace Life
 
         m_Impl->ActiveColorTarget = colorTarget;
         m_Impl->CurrentFramebuffer = nullptr;
-        m_Impl->CachedColorTarget = nullptr;
-        m_Impl->CachedDevice = nullptr;
-        m_Impl->CachedFramebufferWidth = 0;
-        m_Impl->CachedFramebufferHeight = 0;
     }
 
     TextureResource* Renderer::GetRenderTarget() const noexcept
@@ -577,33 +567,25 @@ namespace Life
         nvrhi::ITexture* colorTarget = m_Impl->ActiveColorTarget != nullptr
             ? m_Impl->ActiveColorTarget->GetNativeHandle()
             : m_GraphicsDevice.GetCurrentBackBuffer();
-        const FramebufferExtent framebufferExtent = GetFramebufferExtent();
 
         if (!nvrhiDevice || !colorTarget)
         {
             m_Impl->CurrentFramebuffer = nullptr;
-            m_Impl->CachedColorTarget = nullptr;
-            m_Impl->CachedDevice = nullptr;
-            m_Impl->CachedFramebufferWidth = 0;
-            m_Impl->CachedFramebufferHeight = 0;
             m_Impl->ReportedFramebufferFailure = false;
             return false;
         }
 
-        if (m_Impl->CurrentFramebuffer
-            && m_Impl->CachedColorTarget == colorTarget
-            && m_Impl->CachedDevice == nvrhiDevice
-            && m_Impl->CachedFramebufferWidth == framebufferExtent.Width
-            && m_Impl->CachedFramebufferHeight == framebufferExtent.Height)
+        if (auto framebufferIt = m_Impl->FramebufferCache.find(colorTarget); framebufferIt != m_Impl->FramebufferCache.end())
         {
+            m_Impl->CurrentFramebuffer = framebufferIt->second;
             return true;
         }
 
         nvrhi::FramebufferDesc fbDesc;
         fbDesc.addColorAttachment(colorTarget);
 
-        m_Impl->CurrentFramebuffer = nvrhiDevice->createFramebuffer(fbDesc);
-        if (!m_Impl->CurrentFramebuffer)
+        nvrhi::FramebufferHandle framebuffer = nvrhiDevice->createFramebuffer(fbDesc);
+        if (!framebuffer)
         {
             if (!m_Impl->ReportedFramebufferFailure)
             {
@@ -611,17 +593,12 @@ namespace Life
                 m_Impl->ReportedFramebufferFailure = true;
             }
 
-            m_Impl->CachedColorTarget = nullptr;
-            m_Impl->CachedDevice = nullptr;
-            m_Impl->CachedFramebufferWidth = 0;
-            m_Impl->CachedFramebufferHeight = 0;
+            m_Impl->CurrentFramebuffer = nullptr;
             return false;
         }
 
-        m_Impl->CachedColorTarget = colorTarget;
-        m_Impl->CachedDevice = nvrhiDevice;
-        m_Impl->CachedFramebufferWidth = framebufferExtent.Width;
-        m_Impl->CachedFramebufferHeight = framebufferExtent.Height;
+        m_Impl->CurrentFramebuffer = framebuffer;
+        m_Impl->FramebufferCache.emplace(colorTarget, std::move(framebuffer));
         m_Impl->ReportedFramebufferFailure = false;
         return true;
     }

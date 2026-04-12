@@ -57,7 +57,7 @@ namespace Life::Assets
             return {};
 
         std::error_code ec;
-        const std::filesystem::path weaklyCanonical = std::filesystem::weakly_canonical(path, ec);
+        std::filesystem::path weaklyCanonical = std::filesystem::weakly_canonical(path, ec);
         if (!ec)
             return weaklyCanonical;
 

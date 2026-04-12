@@ -24,14 +24,14 @@ namespace Life::Assets
 
     Result<Project> ProjectService::CreateProject(const ProjectCreateOptions& options, bool makeActive)
     {
-        const auto projectResult = ProjectSerializer::CreateOnDisk(options);
+        auto projectResult = ProjectSerializer::CreateOnDisk(options);
         if (projectResult.IsFailure())
             return projectResult;
 
         Project project = projectResult.GetValue();
         if (makeActive)
         {
-            const auto activateResult = SetActiveProject(project);
+            auto activateResult = SetActiveProject(project);
             if (activateResult.IsFailure())
                 return Result<Project>(activateResult.GetError());
         }
@@ -41,12 +41,12 @@ namespace Life::Assets
 
     Result<Project> ProjectService::OpenProject(const std::filesystem::path& descriptorPath)
     {
-        const auto projectResult = ProjectSerializer::Load(descriptorPath);
+        auto projectResult = ProjectSerializer::Load(descriptorPath);
         if (projectResult.IsFailure())
             return projectResult;
 
         Project project = projectResult.GetValue();
-        const auto activateResult = SetActiveProject(project);
+        auto activateResult = SetActiveProject(project);
         if (activateResult.IsFailure())
             return Result<Project>(activateResult.GetError());
 
@@ -84,7 +84,7 @@ namespace Life::Assets
         updatedProject.Paths.AssetsDirectory = updatedProject.Paths.RootDirectory / updatedProject.Descriptor.Paths.Assets;
         updatedProject.Paths.SettingsDirectory = updatedProject.Paths.RootDirectory / updatedProject.Descriptor.Paths.Settings;
 
-        const auto saveResult = ProjectSerializer::Save(updatedProject);
+        auto saveResult = ProjectSerializer::Save(updatedProject);
         if (saveResult.IsFailure())
             return saveResult;
 
@@ -95,13 +95,13 @@ namespace Life::Assets
     {
         if (!m_HasActiveProject)
         {
-            const auto rebindResult = RebindProjectRoot(nullptr);
+            auto rebindResult = RebindProjectRoot(nullptr);
             if (rebindResult.IsFailure())
                 return rebindResult;
             return Result<void>();
         }
 
-        const auto rebindResult = RebindProjectRoot(nullptr);
+        auto rebindResult = RebindProjectRoot(nullptr);
         if (rebindResult.IsFailure())
             return rebindResult;
 
@@ -143,7 +143,7 @@ namespace Life::Assets
 
     Result<void> ProjectService::SetActiveProject(Project project)
     {
-        const auto rebindResult = RebindProjectRoot(&project);
+        auto rebindResult = RebindProjectRoot(&project);
         if (rebindResult.IsFailure())
             return rebindResult;
 
