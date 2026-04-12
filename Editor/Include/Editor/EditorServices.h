@@ -14,6 +14,7 @@ namespace EditorApp
         Life::OptionalRef<Life::Assets::ProjectService> ProjectService;
         Life::OptionalRef<Life::CameraManager> CameraManager;
         Life::OptionalRef<Life::Renderer> Renderer;
+        Life::OptionalRef<Life::SceneService> SceneService;
         Life::OptionalRef<Life::SceneRenderer2D> SceneRenderer2D;
         Life::OptionalRef<Life::ImGuiSystem> ImGuiSystem;
 

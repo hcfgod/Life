@@ -328,6 +328,15 @@ EOF
 
 ensure_stb_image_premake
 
+ensure_entt_vendor() {
+    if [ ! -f "$REPO_ROOT/Vendor/entt/src/entt/entt.hpp" ]; then
+        echo "[Setup] Vendor/entt was not found after submodule sync."
+        exit 1
+    fi
+}
+
+ensure_entt_vendor
+
 resolve_cmake() {
     if command -v cmake >/dev/null 2>&1; then
         CMAKE_CMD="cmake"

@@ -141,6 +141,7 @@ TEST_CASE("ApplicationHost opens configured project descriptor before exposing s
     Life::Assets::ProjectCreateOptions options;
     options.RootDirectory = projectRoot;
     options.Name = "HostBackedProject";
+    options.StartupScene = "Assets/Scenes/Bootstrap.scene";
     const auto createResult = Life::Assets::ProjectSerializer::CreateOnDisk(options);
     REQUIRE(createResult.IsSuccess());
 
@@ -152,9 +153,14 @@ TEST_CASE("ApplicationHost opens configured project descriptor before exposing s
     auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<Life::Tests::TestRuntime>());
 
     REQUIRE(host->GetServices().Has<Life::Assets::ProjectService>());
+    REQUIRE(host->GetServices().Has<Life::SceneService>());
     CHECK(host->GetProjectService().HasActiveProject());
     CHECK(host->GetProjectService().GetActiveProject().Descriptor.Name == "HostBackedProject");
     CHECK(host->GetApplication().GetService<Life::Assets::ProjectService>().HasActiveProject());
+    REQUIRE(host->GetSceneService() != nullptr);
+    CHECK(host->GetSceneService()->HasActiveScene());
+    CHECK(host->GetSceneService()->GetActiveScene().GetSourcePath().filename() == "Bootstrap.scene");
+    CHECK(host->GetApplication().GetService<Life::SceneService>().HasActiveScene());
     CHECK(Life::Assets::TryGetActiveProjectRootDirectory().has_value());
     CHECK(Life::Assets::TryGetActiveProjectRootDirectory().value() == createResult.GetValue().Paths.RootDirectory);
 

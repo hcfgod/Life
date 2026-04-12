@@ -277,6 +277,45 @@ TEST_CASE("SceneRenderer2D stays a safe no-op boundary without live frame resour
     CHECK(sceneRenderer.GetStats().QuadCount == 0);
 }
 
+TEST_CASE("SceneRenderer2D builds stable submission order from quad Z")
+{
+    Life::SceneRenderer2D::Scene2D scene;
+
+    Life::SceneRenderer2D::QuadCommand nearQuad;
+    nearQuad.Position = { 0.0f, 0.0f, 0.25f };
+
+    Life::SceneRenderer2D::QuadCommand middleQuad;
+    middleQuad.Position = { 0.0f, 0.0f, -0.5f };
+
+    Life::SceneRenderer2D::QuadCommand farQuad;
+    farQuad.Position = { 0.0f, 0.0f, -1.5f };
+
+    scene.Quads.push_back(nearQuad);
+    scene.Quads.push_back(middleQuad);
+    scene.Quads.push_back(farQuad);
+
+    scene.SortMode = Life::SceneRenderer2D::QuadSortMode::BackToFront;
+    auto orderedQuads = Life::SceneRenderer2D::BuildSubmissionOrder(scene);
+    REQUIRE(orderedQuads.size() == 3);
+    CHECK(orderedQuads[0]->Position.z == doctest::Approx(-1.5f));
+    CHECK(orderedQuads[1]->Position.z == doctest::Approx(-0.5f));
+    CHECK(orderedQuads[2]->Position.z == doctest::Approx(0.25f));
+
+    scene.SortMode = Life::SceneRenderer2D::QuadSortMode::FrontToBack;
+    orderedQuads = Life::SceneRenderer2D::BuildSubmissionOrder(scene);
+    REQUIRE(orderedQuads.size() == 3);
+    CHECK(orderedQuads[0]->Position.z == doctest::Approx(0.25f));
+    CHECK(orderedQuads[1]->Position.z == doctest::Approx(-0.5f));
+    CHECK(orderedQuads[2]->Position.z == doctest::Approx(-1.5f));
+
+    scene.SortMode = Life::SceneRenderer2D::QuadSortMode::SubmissionOrder;
+    orderedQuads = Life::SceneRenderer2D::BuildSubmissionOrder(scene);
+    REQUIRE(orderedQuads.size() == 3);
+    CHECK(orderedQuads[0]->Position.z == doctest::Approx(0.25f));
+    CHECK(orderedQuads[1]->Position.z == doctest::Approx(-0.5f));
+    CHECK(orderedQuads[2]->Position.z == doctest::Approx(-1.5f));
+}
+
 TEST_CASE("SceneSurface stays safe without live frame resources")
 {
     Life::WindowSpecification windowSpecification;

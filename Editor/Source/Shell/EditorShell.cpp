@@ -12,7 +12,7 @@ namespace EditorApp
         m_LayoutInitialized = false;
     }
 
-    void EditorShell::Begin(EditorPanelVisibility& visibility, EditorShellActions& actions, const char* activeProjectName)
+    void EditorShell::Begin(EditorPanelVisibility& visibility, EditorShellActions& actions, const FrameContext& context)
     {
 #if __has_include(<imgui.h>)
         ImGuiWindowFlags dockspaceWindowFlags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
@@ -36,14 +36,14 @@ namespace EditorApp
         ImGui::PopStyleVar(3);
 
         BuildDefaultLayout();
-        RenderMenuBar(visibility, actions, activeProjectName);
+        RenderMenuBar(visibility, actions, context);
 
         const ImGuiID dockspaceId = ImGui::GetID("EditorDockspace");
         ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
 #else
         (void)visibility;
         (void)actions;
-        (void)activeProjectName;
+        (void)context;
 #endif
     }
 
@@ -82,11 +82,26 @@ namespace EditorApp
 #endif
     }
 
-    void EditorShell::RenderMenuBar(EditorPanelVisibility& visibility, EditorShellActions& actions, const char* activeProjectName)
+    void EditorShell::RenderMenuBar(EditorPanelVisibility& visibility, EditorShellActions& actions, const FrameContext& context)
     {
 #if __has_include(<imgui.h>)
         if (!ImGui::BeginMenuBar())
             return;
+
+        if (ImGui::BeginMenu("Scene"))
+        {
+            if (ImGui::MenuItem("New Scene"))
+                actions.RequestNewScene = true;
+            if (ImGui::MenuItem("Open Scene"))
+                actions.RequestOpenScene = true;
+            if (ImGui::MenuItem("Save Scene", nullptr, false, context.HasActiveScene))
+                actions.RequestSaveScene = true;
+            if (ImGui::MenuItem("Save Scene As", nullptr, false, context.HasActiveScene))
+                actions.RequestSaveSceneAs = true;
+            if (ImGui::MenuItem("Close Scene", nullptr, false, context.HasActiveScene))
+                actions.RequestCloseScene = true;
+            ImGui::EndMenu();
+        }
 
         if (ImGui::BeginMenu("Project"))
         {
@@ -109,16 +124,21 @@ namespace EditorApp
 
         ImGui::Separator();
         ImGui::TextUnformatted("Life Editor");
-        if (activeProjectName != nullptr && activeProjectName[0] != '\0')
+        if (context.ActiveProjectName != nullptr && context.ActiveProjectName[0] != '\0')
         {
             ImGui::Separator();
-            ImGui::TextUnformatted(activeProjectName);
+            ImGui::TextUnformatted(context.ActiveProjectName);
+        }
+        if (context.ActiveSceneName != nullptr && context.ActiveSceneName[0] != '\0')
+        {
+            ImGui::Separator();
+            ImGui::Text("%s%s", context.ActiveSceneName, context.IsSceneDirty ? " *" : "");
         }
         ImGui::EndMenuBar();
 #else
         (void)visibility;
         (void)actions;
-        (void)activeProjectName;
+        (void)context;
 #endif
     }
 }

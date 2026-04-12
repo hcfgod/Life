@@ -40,6 +40,7 @@ TEST_CASE("ApplicationHost registers built-in and custom services")
     CHECK(host->GetServices().Has<Life::Async::AsyncIO>());
     CHECK(host->GetServices().Has<Life::ApplicationRuntime>());
     CHECK(host->GetServices().Has<Life::Window>());
+    CHECK(host->GetServices().Has<Life::SceneService>());
 
     CHECK(&host->GetServices().Get<Life::ApplicationHost>() == host.get());
     CHECK(&host->GetServices().Get<Life::Application>() == applicationInstance);
@@ -48,10 +49,12 @@ TEST_CASE("ApplicationHost registers built-in and custom services")
     CHECK(&host->GetServices().Get<Life::InputSystem>() == &host->GetInputSystem());
     CHECK(&host->GetServices().Get<Life::Async::AsyncIO>() == &Life::Async::GetAsyncIO());
     CHECK(&host->GetServices().Get<Life::ApplicationRuntime>() == &host->GetRuntime());
+    CHECK(&host->GetServices().Get<Life::SceneService>() == host->GetSceneService());
     CHECK(&applicationInstance->GetService<Life::Async::AsyncIO>() == &Life::Async::GetAsyncIO());
     CHECK(&applicationInstance->GetService<Life::ApplicationHost>() == host.get());
     CHECK(&applicationInstance->GetService<Life::InputSystem>() == &host->GetInputSystem());
     CHECK(&applicationInstance->GetService<Life::Window>() == &host->GetWindow());
+    CHECK(&applicationInstance->GetService<Life::SceneService>() == host->GetSceneService());
 
     TestService service{ 7 };
     host->GetServices().Register<TestService>(service);

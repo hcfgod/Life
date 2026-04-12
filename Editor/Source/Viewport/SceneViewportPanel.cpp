@@ -368,8 +368,36 @@ namespace EditorApp
         camera.SetAspectRatio(actualAspectRatio);
         UpdateCameraNavigation(cameraTool, camera, viewportHovered, viewportFocused);
 
-        Life::SceneRenderer2D::Scene2D scene = BuildScene2D(camera);
-        if (!services.SceneRenderer2D->get().RenderToSurface(*m_SceneSurface, scene))
+        bool renderSucceeded = false;
+        if (services.SceneService && services.SceneService->get().HasActiveScene())
+        {
+            m_State.RequestedQuadCount = static_cast<uint32_t>(services.SceneService->get().GetActiveScene().GetEntityCount());
+            m_State.TexturedQuadCount = 0;
+            m_State.UntexturedQuadCount = 0;
+
+            for (const Life::Entity entity : services.SceneService->get().GetActiveScene().GetEntities())
+            {
+                if (const Life::SpriteComponent* sprite = entity.TryGetComponent<Life::SpriteComponent>())
+                {
+                    if (sprite->TextureAsset)
+                        ++m_State.TexturedQuadCount;
+                    else
+                        ++m_State.UntexturedQuadCount;
+                }
+            }
+
+            renderSucceeded = services.SceneRenderer2D->get().RenderToSurface(
+                *m_SceneSurface,
+                services.SceneService->get().GetActiveScene(),
+                camera);
+        }
+        else
+        {
+            Life::SceneRenderer2D::Scene2D scene = BuildScene2D(camera);
+            renderSucceeded = services.SceneRenderer2D->get().RenderToSurface(*m_SceneSurface, scene);
+        }
+
+        if (!renderSucceeded)
             return false;
 
         m_State.SurfaceReady = m_SceneSurface->IsReady();

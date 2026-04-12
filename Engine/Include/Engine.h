@@ -52,6 +52,10 @@
 #include "Graphics/Renderer2D.h"
 #include "Graphics/SceneRenderer2D.h"
 #include "Graphics/SceneSurface.h"
-#include "Platform/Platform.h"
 #include "Graphics/GraphicsDevice.h"
-
+#include "Scene/Components.h"
+#include "Scene/Entity.h"
+#include "Scene/Scene.h"
+#include "Scene/SceneSerializer.h"
+#include "Scene/SceneService.h"
+#include "Platform/Platform.h"

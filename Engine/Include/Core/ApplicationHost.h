@@ -21,6 +21,7 @@ namespace Life
     class ImGuiSystem;
     class Renderer;
     class Renderer2D;
+    class SceneService;
     class SceneRenderer2D;
     class Window;
 
@@ -73,6 +74,8 @@ namespace Life
         const ImGuiSystem* GetImGuiSystem() const { return m_ImGuiSystem.get(); }
         Renderer2D* GetRenderer2D() { return m_Renderer2D.get(); }
         const Renderer2D* GetRenderer2D() const { return m_Renderer2D.get(); }
+        SceneService* GetSceneService() { return m_SceneService.get(); }
+        const SceneService* GetSceneService() const { return m_SceneService.get(); }
         SceneRenderer2D* GetSceneRenderer2D() { return m_SceneRenderer2D.get(); }
         const SceneRenderer2D* GetSceneRenderer2D() const { return m_SceneRenderer2D.get(); }
         Assets::AssetDatabase& GetAssetDatabase() { return m_AssetDatabase; }
@@ -102,6 +105,7 @@ namespace Life
         Scope<CameraManager> m_CameraManager;
         Scope<ImGuiSystem> m_ImGuiSystem;
         Scope<Renderer2D> m_Renderer2D;
+        Scope<SceneService> m_SceneService;
         Scope<SceneRenderer2D> m_SceneRenderer2D;
         ApplicationContext m_Context;
         ApplicationEventRouter m_EventRouter;

@@ -4,6 +4,9 @@
 #include "Assets/TextureAsset.h"
 #include "Graphics/Camera.h"
 #include "Graphics/SceneSurface.h"
+#include "Scene/Scene.h"
+
+#include <algorithm>
 
 namespace Life
 {
@@ -26,6 +29,11 @@ namespace Life
         return true;
     }
 
+    bool SceneRenderer2D::Render(const Scene& scene, const Camera& camera, QuadSortMode sortMode)
+    {
+        return Render(BuildScene2D(scene, camera, sortMode));
+    }
+
     bool SceneRenderer2D::RenderToSurface(SceneSurface& surface, const Scene2D& scene)
     {
         if (scene.Camera == nullptr)
@@ -39,21 +47,89 @@ namespace Life
         return true;
     }
 
+    bool SceneRenderer2D::RenderToSurface(SceneSurface& surface, const Scene& scene, const Camera& camera, QuadSortMode sortMode)
+    {
+        return RenderToSurface(surface, BuildScene2D(scene, camera, sortMode));
+    }
+
+    SceneRenderer2D::Scene2D SceneRenderer2D::BuildScene2D(const Scene& scene, const Camera& camera, QuadSortMode sortMode)
+    {
+        Scene2D renderScene;
+        renderScene.Camera = &camera;
+        renderScene.SortMode = sortMode;
+
+        const auto view = scene.GetRegistry().view<TransformComponent, SpriteComponent>();
+        renderScene.Quads.reserve(view.size_hint());
+        for (const entt::entity handle : view)
+        {
+            const auto& [transform, sprite] = view.get<TransformComponent, SpriteComponent>(handle);
+            const Entity entity = scene.WrapEntity(handle);
+            const glm::mat4 worldTransform = scene.GetWorldTransformMatrix(entity);
+
+            QuadCommand quad;
+            quad.Position = glm::vec3(worldTransform[3]);
+            quad.Size = sprite.Size;
+            quad.Color = sprite.Color;
+            quad.RotationRadians = transform.LocalRotation.z;
+            quad.TextureAsset = sprite.TextureAsset.get();
+            renderScene.Quads.push_back(std::move(quad));
+        }
+
+        return renderScene;
+    }
+
+    std::vector<const SceneRenderer2D::QuadCommand*> SceneRenderer2D::BuildSubmissionOrder(const Scene2D& scene)
+    {
+        std::vector<const QuadCommand*> orderedQuads;
+        orderedQuads.reserve(scene.Quads.size());
+        for (const QuadCommand& quad : scene.Quads)
+            orderedQuads.push_back(&quad);
+
+        switch (scene.SortMode)
+        {
+            case QuadSortMode::SubmissionOrder:
+                break;
+
+            case QuadSortMode::BackToFront:
+                std::stable_sort(
+                    orderedQuads.begin(),
+                    orderedQuads.end(),
+                    [](const QuadCommand* left, const QuadCommand* right)
+                    {
+                        return left->Position.z < right->Position.z;
+                    });
+                break;
+
+            case QuadSortMode::FrontToBack:
+                std::stable_sort(
+                    orderedQuads.begin(),
+                    orderedQuads.end(),
+                    [](const QuadCommand* left, const QuadCommand* right)
+                    {
+                        return left->Position.z > right->Position.z;
+                    });
+                break;
+        }
+
+        return orderedQuads;
+    }
+
     void SceneRenderer2D::SubmitScene(Renderer2D& renderer2D, const Scene2D& scene)
     {
-        for (const QuadCommand& quad : scene.Quads)
+        const std::vector<const QuadCommand*> orderedQuads = BuildSubmissionOrder(scene);
+        for (const QuadCommand* quad : orderedQuads)
         {
-            if (quad.TextureAsset != nullptr)
+            if (quad->TextureAsset != nullptr)
             {
-                renderer2D.DrawRotatedQuad(quad.Position, quad.Size, quad.RotationRadians, *quad.TextureAsset, quad.Color);
+                renderer2D.DrawRotatedQuad(quad->Position, quad->Size, quad->RotationRadians, *quad->TextureAsset, quad->Color);
             }
-            else if (quad.Texture != nullptr)
+            else if (quad->Texture != nullptr)
             {
-                renderer2D.DrawRotatedQuad(quad.Position, quad.Size, quad.RotationRadians, quad.Texture, quad.Color);
+                renderer2D.DrawRotatedQuad(quad->Position, quad->Size, quad->RotationRadians, quad->Texture, quad->Color);
             }
             else
             {
-                renderer2D.DrawRotatedQuad(quad.Position, quad.Size, quad.RotationRadians, quad.Color);
+                renderer2D.DrawRotatedQuad(quad->Position, quad->Size, quad->RotationRadians, quad->Color);
             }
         }
     }

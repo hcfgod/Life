@@ -53,6 +53,9 @@ if errorlevel 1 goto :error
 call :ensure_stb_image_premake
 if errorlevel 1 goto :error
 
+call :ensure_entt_vendor
+if errorlevel 1 goto :error
+
 call :resolve_premake "%PREMAKE_ACTION_ARG%"
 if errorlevel 1 goto :error
 
@@ -197,6 +200,14 @@ if not exist "Vendor\stb_image\" (
 >> "Vendor\stb_image\premake5.lua" echo     ConfigureCommonProject()
 
 if not exist "Vendor\stb_image\premake5.lua" exit /b 1
+
+exit /b 0
+
+:ensure_entt_vendor
+if not exist "Vendor\entt\src\entt\entt.hpp" (
+    echo [Setup] Vendor\entt was not found after submodule sync.
+    exit /b 1
+)
 
 exit /b 0
 

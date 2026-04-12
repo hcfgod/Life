@@ -111,6 +111,7 @@ newoption
  IncludeDir["doctest"] = path.join(RootDir, "Vendor/doctest")
  IncludeDir["imgui"] = path.join(RootDir, "Vendor/imgui")
  IncludeDir["stb_image"] = path.join(RootDir, "Vendor/stb_image")
+ IncludeDir["entt"] = path.join(RootDir, "Vendor/entt/src")
  IncludeDir["VulkanHeaders"] = path.join(RootDir, "Vendor/nvrhi/thirdparty/Vulkan-Headers/include")
  IncludeDir["DirectXHeaders"] = path.join(RootDir, "Vendor/nvrhi/thirdparty/DirectX-Headers/include/directx")
  IncludeDir["vk_bootstrap"] = path.join(RootDir, "Vendor/vk-bootstrap/src")
@@ -214,6 +215,7 @@ function UseEngineIncludeDirs(extraIncludeDirs)
         IncludeDir["json"],
         IncludeDir["imgui"],
         IncludeDir["stb_image"],
+        IncludeDir["entt"],
         IncludeDir["VulkanHeaders"],
         IncludeDir["vk_bootstrap"]
     }

@@ -6,6 +6,7 @@
 #include "Editor/Panels/FpsOverlayPanel.h"
 #include "Editor/Panels/HierarchyPanel.h"
 #include "Editor/Panels/InspectorPanel.h"
+#include "Editor/Scene/EditorSceneState.h"
 #include "Editor/Panels/StatsPanel.h"
 #include "Editor/ProjectHub/EditorProjectHub.h"
 #include "Editor/Shell/EditorShell.h"
@@ -34,6 +35,10 @@ namespace EditorApp
         };
 
         void SetMode(Mode mode);
+        void HandleShellActions(const EditorShellActions& actions);
+        void RenderSceneDialogs();
+        std::string BuildDefaultScenePath(const std::string& sceneName) const;
+        void SetSceneStatus(std::string message, bool isError);
 
         EditorServices m_Services;
         EditorPanelVisibility m_PanelVisibility;
@@ -43,9 +48,17 @@ namespace EditorApp
         SceneViewportPanel m_SceneViewportPanel;
         HierarchyPanel m_HierarchyPanel;
         InspectorPanel m_InspectorPanel;
+        EditorSceneState m_SceneState;
         ConsolePanel m_ConsolePanel;
         FpsOverlayPanel m_FpsOverlayPanel;
         StatsPanel m_StatsPanel;
+        std::string m_NewSceneName = "Untitled";
+        std::string m_NewScenePath;
+        std::string m_OpenScenePath;
+        std::string m_SaveScenePath;
+        bool m_OpenNewScenePopup = false;
+        bool m_OpenOpenScenePopup = false;
+        bool m_OpenSaveSceneAsPopup = false;
         Mode m_Mode = Mode::ProjectHub;
     };
 }

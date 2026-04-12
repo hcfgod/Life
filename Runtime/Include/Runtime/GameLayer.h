@@ -21,15 +21,20 @@ namespace RuntimeApp
 
     private:
         void TryAcquireCheckerTexture();
-        Life::SceneRenderer2D::Scene2D BuildScene2D(const Life::Camera& camera) const;
+        void EnsureRuntimeScene();
+        void PopulateRuntimeScene(Life::Scene& scene);
         void CacheServices();
         void ResetServices() noexcept;
 
         nlohmann::json m_StartupConfig;
         Life::OptionalRef<Life::InputSystem> m_InputSystem;
         Life::OptionalRef<Life::CameraManager> m_CameraManager;
+        Life::OptionalRef<Life::SceneService> m_SceneService;
         Life::OptionalRef<Life::SceneRenderer2D> m_SceneRenderer2D;
         Life::Ref<Life::Assets::TextureAsset> m_CheckerTextureAsset;
+        Life::Entity m_CheckerEntity;
+        Life::Entity m_AnimatedEntity;
+        Life::Entity m_AccentEntity;
         float m_ElapsedTime = 0.0f;
         bool m_HasLoggedRuntime = false;
         bool m_WasMovementInputActive = false;

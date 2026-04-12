@@ -16,6 +16,7 @@
 #include "Graphics/Renderer.h"
 #include "Graphics/Renderer2D.h"
 #include "Graphics/SceneRenderer2D.h"
+#include "Scene/SceneService.h"
 #include "Platform/PlatformDetection.h"
 
 #include <algorithm>
@@ -240,6 +241,9 @@ namespace Life
             m_Host.m_Services.Register<Assets::AssetManager>(m_Host.m_AssetManager);
             m_Host.m_ProjectService.BindAssetSystems(m_Host.m_AssetDatabase, m_Host.m_AssetManager);
             m_Host.m_Services.Register<Assets::ProjectService>(m_Host.m_ProjectService);
+            m_Host.m_SceneService = CreateScope<SceneService>();
+            m_Host.m_SceneService->BindAssetManager(m_Host.m_AssetManager);
+            m_Host.m_Services.Register<SceneService>(*m_Host.m_SceneService);
 
             if (!specification.ProjectDescriptorPath.empty())
             {
@@ -253,6 +257,10 @@ namespace Life
                         std::source_location::current(),
                         openProjectResult.GetError().GetSeverity());
                 }
+
+                const Assets::Project& project = openProjectResult.GetValue();
+                if (!project.Descriptor.Startup.Scene.empty())
+                    m_Host.m_SceneService->OpenScene(project.Descriptor.Startup.Scene);
             }
         }
 
@@ -336,6 +344,7 @@ namespace Life
         {
             m_Host.m_ImGuiSystem.reset();
             m_Host.m_SceneRenderer2D.reset();
+            m_Host.m_SceneService.reset();
             m_Host.m_Renderer2D.reset();
             m_Host.m_CameraManager.reset();
             m_Host.m_Renderer.reset();

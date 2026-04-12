@@ -10,6 +10,7 @@
 #include "Graphics/Renderer.h"
 #include "Graphics/Renderer2D.h"
 #include "Graphics/SceneRenderer2D.h"
+#include "Scene/SceneService.h"
 
 #include <cstdio>
 #include <exception>

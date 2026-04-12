@@ -13,6 +13,7 @@ namespace EditorApp
         services.ProjectService = Life::MakeOptionalRef(application.GetService<Life::Assets::ProjectService>());
         services.CameraManager = Life::MakeOptionalRef(application.GetService<Life::CameraManager>());
         services.Renderer = Life::MakeOptionalRef(application.TryGetService<Life::Renderer>());
+        services.SceneService = Life::MakeOptionalRef(application.GetService<Life::SceneService>());
         services.SceneRenderer2D = Life::MakeOptionalRef(application.TryGetService<Life::SceneRenderer2D>());
         services.ImGuiSystem = Life::MakeOptionalRef(application.TryGetService<Life::ImGuiSystem>());
         return services;
@@ -22,6 +23,7 @@ namespace EditorApp
     {
         ImGuiSystem.reset();
         SceneRenderer2D.reset();
+        SceneService.reset();
         Renderer.reset();
         CameraManager.reset();
         ProjectService.reset();
