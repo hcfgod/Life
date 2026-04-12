@@ -51,17 +51,12 @@ namespace Life::Assets
 #endif
     }
 
-    static std::filesystem::path NormalizeRootPath(const std::filesystem::path& path)
+    static std::filesystem::path NormalizePath(const std::filesystem::path& path)
     {
         if (path.empty())
             return {};
 
         std::error_code ec;
-        std::filesystem::path weaklyCanonical = std::filesystem::weakly_canonical(path, ec);
-        if (!ec)
-            return weaklyCanonical;
-
-        ec.clear();
         const std::filesystem::path absolutePath = std::filesystem::absolute(path, ec);
         if (!ec)
             return absolutePath.lexically_normal();
@@ -97,7 +92,7 @@ namespace Life::Assets
                     std::filesystem::exists(probe / "Assets" / "Shaders", ec);
 
                 if (hasAssets && (hasEngine || hasScripts || hasSharedMaterials || hasSharedShaders))
-                    return std::filesystem::weakly_canonical(probe);
+                    return NormalizePath(probe);
 
                 if (!probe.has_parent_path())
                     break;
@@ -114,7 +109,7 @@ namespace Life::Assets
         // Must point to the directory that contains "Assets/".
         if (const auto env = TryGetEnvironmentVariable("LIFE_SHARED_ASSET_ROOT"); env.has_value())
         {
-            std::filesystem::path candidate = std::filesystem::weakly_canonical(std::filesystem::path(*env));
+            std::filesystem::path candidate = NormalizePath(std::filesystem::path(*env));
             if (candidate.filename() == "Assets")
                 candidate = candidate.parent_path();
 
@@ -210,7 +205,7 @@ namespace Life::Assets
             return;
         }
 
-        s_AssetRootOverride = NormalizeRootPath(rootDirectory);
+        s_AssetRootOverride = NormalizePath(rootDirectory);
         InvalidateCachedProjectRoot();
     }
 
@@ -222,7 +217,7 @@ namespace Life::Assets
             return;
         }
 
-        s_ActiveProjectRootOverride = NormalizeRootPath(rootDirectory);
+        s_ActiveProjectRootOverride = NormalizePath(rootDirectory);
         InvalidateCachedProjectRoot();
     }
 
@@ -267,7 +262,7 @@ namespace Life::Assets
 
         if (const auto env = TryGetEnvironmentVariable("LIFE_ASSET_ROOT"); env.has_value())
         {
-            std::filesystem::path candidate = std::filesystem::weakly_canonical(std::filesystem::path(*env));
+            std::filesystem::path candidate = NormalizePath(std::filesystem::path(*env));
             if (candidate.filename() == "Assets")
             {
                 candidate = candidate.parent_path();
@@ -354,7 +349,7 @@ namespace Life::Assets
         std::filesystem::path keyPath(assetKey);
         if (keyPath.is_absolute())
         {
-            return std::filesystem::weakly_canonical(keyPath);
+            return NormalizePath(keyPath);
         }
 
         if (assetKey.rfind("Assets/", 0) == 0 || assetKey.rfind("Assets\\", 0) == 0)
@@ -367,10 +362,10 @@ namespace Life::Assets
                     const std::filesystem::path sharedResolved = *sharedRoot / keyPath;
                     std::error_code sharedEc;
                     if (std::filesystem::exists(sharedResolved, sharedEc))
-                        return std::filesystem::weakly_canonical(sharedResolved);
+                        return NormalizePath(sharedResolved);
                 }
                 if (const auto builtIn = TryResolveBuiltInDefaultAsset(assetKey); builtIn.has_value())
-                    return std::filesystem::weakly_canonical(*builtIn);
+                    return NormalizePath(*builtIn);
 
                 return Result<std::filesystem::path>(rootResult.GetError());
             }
@@ -380,20 +375,20 @@ namespace Life::Assets
 
             std::error_code ec;
             if (std::filesystem::exists(projectResolved, ec))
-                return std::filesystem::weakly_canonical(projectResolved);
+                return NormalizePath(projectResolved);
 
             if (const auto sharedRoot = TryResolveSharedEditorRoot(); sharedRoot.has_value())
             {
                 const std::filesystem::path sharedResolved = *sharedRoot / keyPath;
                 std::error_code sharedEc;
                 if (std::filesystem::exists(sharedResolved, sharedEc))
-                    return std::filesystem::weakly_canonical(sharedResolved);
+                    return NormalizePath(sharedResolved);
             }
 
             if (const auto builtIn = TryResolveBuiltInDefaultAsset(assetKey); builtIn.has_value())
-                return std::filesystem::weakly_canonical(*builtIn);
+                return NormalizePath(*builtIn);
 
-            return std::filesystem::weakly_canonical(projectResolved);
+            return NormalizePath(projectResolved);
         }
 
         std::error_code ec;
@@ -403,6 +398,6 @@ namespace Life::Assets
             return Result<std::filesystem::path>(ErrorCode::FileAccessDenied, "Failed to query current working directory");
         }
 
-        return std::filesystem::weakly_canonical(cwd / keyPath);
+        return NormalizePath(cwd / keyPath);
     }
 }
