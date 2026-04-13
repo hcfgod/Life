@@ -172,7 +172,16 @@ namespace Life
             return;
 
         Detail::Renderer2DBatching batching(*this);
-        batching.PushQuad(center, xAxis, yAxis, color, { 0.0f, 0.0f }, { 1.0f, 1.0f }, texture);
+        const Detail::Renderer2DBatching::QuadSubmission quad = {
+            center,
+            xAxis,
+            yAxis,
+            color,
+            { 0.0f, 0.0f },
+            { 1.0f, 1.0f },
+            texture
+        };
+        batching.PushQuad(quad);
     }
 
     void Renderer2D::DrawQuad(const glm::vec3& center, const glm::vec3& xAxis, const glm::vec3& yAxis,

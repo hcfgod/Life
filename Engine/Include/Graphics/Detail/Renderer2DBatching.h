@@ -12,13 +12,23 @@ namespace Life
         class Renderer2DBatching
         {
         public:
+            struct QuadSubmission
+            {
+                glm::vec3 Center{};
+                glm::vec3 XAxis{};
+                glm::vec3 YAxis{};
+                glm::vec4 Color{ 1.0f };
+                glm::vec2 UVMin{};
+                glm::vec2 UVMax{ 1.0f, 1.0f };
+                const TextureResource* Texture = nullptr;
+            };
+
             explicit Renderer2DBatching(Renderer2D& renderer2D);
 
             void AdvanceActiveBufferVersion() noexcept;
             bool UpdateSceneConstants(const glm::mat4& viewProjection);
             void ResetQueuedDraws() noexcept;
-            void PushQuad(const glm::vec3& center, const glm::vec3& xAxis, const glm::vec3& yAxis, const glm::vec4& color,
-                          const glm::vec2& uvMin, const glm::vec2& uvMax, const TextureResource* texture);
+            void PushQuad(const QuadSubmission& quad);
 
         private:
             Renderer2D& m_Renderer2D;
