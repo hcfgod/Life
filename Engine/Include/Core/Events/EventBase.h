@@ -10,6 +10,7 @@ namespace Life
         WindowClose,
         WindowResize,
         WindowMoved,
+        WindowFileDropped,
         WindowFocusGained,
         WindowFocusLost,
         WindowMinimized,

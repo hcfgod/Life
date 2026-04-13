@@ -83,10 +83,16 @@ namespace Life
     private:
         friend class Entity;
 
+        struct ParentRelation
+        {
+            entt::entity Child = entt::null;
+            entt::entity Parent = entt::null;
+        };
+
         void InitializeEntity(entt::entity handle, std::string tag);
         void DetachFromParent(entt::entity child, bool makeRoot = false);
         void RemoveFromRootOrder(entt::entity handle);
-        bool WouldCreateCycle(entt::entity child, entt::entity parent) const;
+        bool WouldCreateCycle(ParentRelation relation) const;
         static glm::mat4 ComposeTransform(const TransformComponent& transform);
         static std::string GenerateEntityId();
 

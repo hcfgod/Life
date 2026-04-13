@@ -33,8 +33,11 @@ namespace Life
         {
             glm::vec3 Position{ 0.0f, 0.0f, 0.0f };
             glm::vec2 Size{ 1.0f, 1.0f };
+            glm::vec3 XAxis{ 1.0f, 0.0f, 0.0f };
+            glm::vec3 YAxis{ 0.0f, 1.0f, 0.0f };
             glm::vec4 Color{ 1.0f, 1.0f, 1.0f, 1.0f };
             float RotationRadians = 0.0f;
+            bool UseExplicitAxes = false;
             const TextureResource* Texture = nullptr;
             const Assets::TextureAsset* TextureAsset = nullptr;
         };

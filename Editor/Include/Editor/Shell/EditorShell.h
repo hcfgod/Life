@@ -6,6 +6,7 @@ namespace EditorApp
 {
     struct EditorPanelVisibility
     {
+        bool ShowProjectAssets = true;
         bool ShowHierarchy = true;
         bool ShowInspector = true;
         bool ShowConsole = true;

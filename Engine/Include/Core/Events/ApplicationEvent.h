@@ -3,7 +3,9 @@
 #include "Core/Events/EventBase.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
+#include <utility>
 
 namespace Life
 {
@@ -61,6 +63,34 @@ namespace Life
     private:
         int32_t m_X;
         int32_t m_Y;
+    };
+
+    class WindowFileDroppedEvent final : public Event
+    {
+    public:
+        WindowFileDroppedEvent(std::filesystem::path path, float x, float y)
+            : m_Path(std::move(path)), m_X(x), m_Y(y)
+        {
+        }
+
+        static EventType GetStaticType() { return EventType::WindowFileDropped; }
+
+        const std::filesystem::path& GetPath() const { return m_Path; }
+        float GetX() const { return m_X; }
+        float GetY() const { return m_Y; }
+
+        EventType GetEventType() const override { return GetStaticType(); }
+        const char* GetName() const override { return "WindowFileDroppedEvent"; }
+        int GetCategoryFlags() const override { return static_cast<int>(EventCategory::Application) | static_cast<int>(EventCategory::Window); }
+        std::string ToString() const override
+        {
+            return std::string(GetName()) + ": " + m_Path.string();
+        }
+
+    private:
+        std::filesystem::path m_Path;
+        float m_X = 0.0f;
+        float m_Y = 0.0f;
     };
 
     class WindowFocusGainedEvent final : public Event

@@ -26,6 +26,13 @@ namespace Life
             case SDL_EVENT_WINDOW_MOVED:
                 return CreateScope<WindowMovedEvent>(sdlEvent.window.data1, sdlEvent.window.data2);
 
+            case SDL_EVENT_DROP_FILE:
+                return CreateScope<WindowFileDroppedEvent>(
+                    std::filesystem::path(sdlEvent.drop.data != nullptr ? sdlEvent.drop.data : ""),
+                    sdlEvent.drop.x,
+                    sdlEvent.drop.y
+                );
+
             case SDL_EVENT_WINDOW_FOCUS_GAINED:
                 return CreateScope<WindowFocusGainedEvent>();
 

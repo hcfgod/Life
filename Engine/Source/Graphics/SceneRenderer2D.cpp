@@ -69,10 +69,13 @@ namespace Life
             QuadCommand quad;
             quad.Position = glm::vec3(worldTransform[3]);
             quad.Size = sprite.Size;
+            quad.XAxis = glm::vec3(worldTransform * glm::vec4(sprite.Size.x, 0.0f, 0.0f, 0.0f));
+            quad.YAxis = glm::vec3(worldTransform * glm::vec4(0.0f, sprite.Size.y, 0.0f, 0.0f));
             quad.Color = sprite.Color;
             quad.RotationRadians = transform.LocalRotation.z;
+            quad.UseExplicitAxes = true;
             quad.TextureAsset = sprite.TextureAsset.get();
-            renderScene.Quads.push_back(std::move(quad));
+            renderScene.Quads.push_back(quad);
         }
 
         return renderScene;
@@ -119,7 +122,22 @@ namespace Life
         const std::vector<const QuadCommand*> orderedQuads = BuildSubmissionOrder(scene);
         for (const QuadCommand* quad : orderedQuads)
         {
-            if (quad->TextureAsset != nullptr)
+            if (quad->UseExplicitAxes)
+            {
+                if (quad->TextureAsset != nullptr)
+                {
+                    renderer2D.DrawQuad(quad->Position, quad->XAxis, quad->YAxis, *quad->TextureAsset, quad->Color);
+                }
+                else if (quad->Texture != nullptr)
+                {
+                    renderer2D.DrawQuad(quad->Position, quad->XAxis, quad->YAxis, quad->Texture, quad->Color);
+                }
+                else
+                {
+                    renderer2D.DrawQuad(quad->Position, quad->XAxis, quad->YAxis, quad->Color);
+                }
+            }
+            else if (quad->TextureAsset != nullptr)
             {
                 renderer2D.DrawRotatedQuad(quad->Position, quad->Size, quad->RotationRadians, *quad->TextureAsset, quad->Color);
             }

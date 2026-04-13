@@ -6,6 +6,7 @@
 #include "Editor/Panels/FpsOverlayPanel.h"
 #include "Editor/Panels/HierarchyPanel.h"
 #include "Editor/Panels/InspectorPanel.h"
+#include "Editor/Panels/ProjectAssetsPanel.h"
 #include "Editor/Scene/EditorSceneState.h"
 #include "Editor/Panels/StatsPanel.h"
 #include "Editor/ProjectHub/EditorProjectHub.h"
@@ -46,6 +47,7 @@ namespace EditorApp
         EditorProjectHub m_ProjectHub;
         EditorCameraTool m_CameraTool;
         SceneViewportPanel m_SceneViewportPanel;
+        ProjectAssetsPanel m_ProjectAssetsPanel;
         HierarchyPanel m_HierarchyPanel;
         InspectorPanel m_InspectorPanel;
         EditorSceneState m_SceneState;

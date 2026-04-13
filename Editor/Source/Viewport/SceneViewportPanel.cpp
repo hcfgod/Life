@@ -1,6 +1,7 @@
 #include "Editor/Viewport/SceneViewportPanel.h"
 
 #include "Editor/Camera/EditorCameraTool.h"
+#include "Editor/Panels/ProjectAssetDragDrop.h"
 
 #include <SDL3/SDL.h>
 
@@ -61,7 +62,7 @@ namespace EditorApp
         TryAcquireCheckerTexture(services);
     }
 
-    void SceneViewportPanel::Render(bool& isOpen, const EditorServices& services, EditorCameraTool& cameraTool)
+    void SceneViewportPanel::Render(bool& isOpen, const EditorServices& services, EditorSceneState& sceneState, EditorCameraTool& cameraTool)
     {
 #if __has_include(<imgui.h>)
         if (!isOpen)
@@ -87,16 +88,44 @@ namespace EditorApp
                     const bool viewportFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
                     if (viewportRegion.x >= 1.0f && viewportRegion.y >= 1.0f)
                     {
-                        if (!RenderSceneSurface(
-                                static_cast<uint32_t>(viewportRegion.x),
-                                static_cast<uint32_t>(viewportRegion.y),
-                                services,
-                                cameraTool,
-                                viewportHovered,
-                                viewportFocused))
+                        const bool rendered = RenderSceneSurface(
+                            static_cast<uint32_t>(viewportRegion.x),
+                            static_cast<uint32_t>(viewportRegion.y),
+                            services,
+                            cameraTool,
+                            viewportHovered,
+                            viewportFocused);
+                        if (!rendered)
                         {
                             SetCameraNavigationActive(false);
                             ImGui::TextUnformatted("Scene surface rendering is unavailable.");
+                        }
+                        else if (ImGui::BeginDragDropTarget())
+                        {
+                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kProjectAssetDragPayloadType))
+                            {
+                                const ProjectAssetDragPayload* assetPayload = static_cast<const ProjectAssetDragPayload*>(payload->Data);
+                                if (assetPayload != nullptr &&
+                                    assetPayload->Kind == ProjectAssetPayloadKind::Scene &&
+                                    assetPayload->RelativePath[0] != '\0' &&
+                                    services.SceneService)
+                                {
+                                    const std::string sceneAssetKey = std::string("Assets/") + assetPayload->RelativePath.data();
+                                    const auto loadResult = services.SceneService->get().LoadScene(sceneAssetKey);
+                                    if (loadResult.IsFailure())
+                                    {
+                                        sceneState.SetStatusMessage(loadResult.GetError().GetErrorMessage(), true);
+                                    }
+                                    else
+                                    {
+                                        sceneState.ClearSelection();
+                                        sceneState.SetStatusMessage(
+                                            "Opened scene '" + services.SceneService->get().GetActiveScene().GetName() + "'.",
+                                            false);
+                                    }
+                                }
+                            }
+                            ImGui::EndDragDropTarget();
                         }
                     }
                     else
@@ -122,6 +151,7 @@ namespace EditorApp
 #else
         (void)isOpen;
         (void)services;
+        (void)sceneState;
         (void)cameraTool;
 #endif
     }

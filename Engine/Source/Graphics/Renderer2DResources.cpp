@@ -88,8 +88,9 @@ namespace Life::Detail
         {
             { "inLocalPosition", VertexAttributeSemantic::Position, TextureFormat::RG32_FLOAT, 0, 0, VertexInputRate::PerVertex },
             { "inLocalTexCoord", VertexAttributeSemantic::TexCoord0, TextureFormat::RG32_FLOAT, 0, 0, VertexInputRate::PerVertex },
-            { "inQuadTransform", VertexAttributeSemantic::Custom, TextureFormat::RGBA32_FLOAT, 0, 1, VertexInputRate::PerInstance },
-            { "inQuadSize", VertexAttributeSemantic::Custom, TextureFormat::RG32_FLOAT, 0, 1, VertexInputRate::PerInstance },
+            { "inQuadCenter", VertexAttributeSemantic::Custom, TextureFormat::RGBA32_FLOAT, 0, 1, VertexInputRate::PerInstance },
+            { "inQuadXAxis", VertexAttributeSemantic::Custom, TextureFormat::RGBA32_FLOAT, 0, 1, VertexInputRate::PerInstance },
+            { "inQuadYAxis", VertexAttributeSemantic::Custom, TextureFormat::RGBA32_FLOAT, 0, 1, VertexInputRate::PerInstance },
             { "inColor", VertexAttributeSemantic::Color, TextureFormat::RGBA32_FLOAT, 0, 1, VertexInputRate::PerInstance },
             { "inTexRect", VertexAttributeSemantic::TexCoord1, TextureFormat::RGBA32_FLOAT, 0, 1, VertexInputRate::PerInstance }
         };

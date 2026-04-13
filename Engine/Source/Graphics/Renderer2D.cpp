@@ -10,6 +10,7 @@
 #include "Graphics/Camera.h"
 #include "Graphics/RenderCommand.h"
 #include "Graphics/Renderer.h"
+#include <cmath>
 
 namespace Life
 {
@@ -97,7 +98,11 @@ namespace Life
 
     void Renderer2D::DrawQuad(const glm::vec3& position, const glm::vec2& size, const glm::vec4& color)
     {
-        DrawRotatedQuad(position, size, 0.0f, m_Impl->WhiteTexture.get(), color);
+        DrawQuad(position,
+                 glm::vec3(size.x, 0.0f, 0.0f),
+                 glm::vec3(0.0f, size.y, 0.0f),
+                 m_Impl->WhiteTexture.get(),
+                 color);
     }
 
     void Renderer2D::DrawQuad(const glm::vec2& position, const glm::vec2& size, const TextureResource* texture,
@@ -109,7 +114,11 @@ namespace Life
     void Renderer2D::DrawQuad(const glm::vec3& position, const glm::vec2& size, const TextureResource* texture,
                               const glm::vec4& color)
     {
-        DrawRotatedQuad(position, size, 0.0f, texture, color);
+        DrawQuad(position,
+                 glm::vec3(size.x, 0.0f, 0.0f),
+                 glm::vec3(0.0f, size.y, 0.0f),
+                 texture,
+                 color);
     }
 
     void Renderer2D::DrawQuad(const glm::vec2& position, const glm::vec2& size, const Assets::TextureAsset& textureAsset,
@@ -121,7 +130,11 @@ namespace Life
     void Renderer2D::DrawQuad(const glm::vec3& position, const glm::vec2& size, const Assets::TextureAsset& textureAsset,
                               const glm::vec4& color)
     {
-        DrawRotatedQuad(position, size, 0.0f, textureAsset, color);
+        DrawQuad(position,
+                 glm::vec3(size.x, 0.0f, 0.0f),
+                 glm::vec3(0.0f, size.y, 0.0f),
+                 textureAsset,
+                 color);
     }
 
     void Renderer2D::DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
@@ -133,17 +146,39 @@ namespace Life
     void Renderer2D::DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
                                      const TextureResource* texture, const glm::vec4& color)
     {
-        if (!m_Impl->SceneActive)
-            return;
-
-        Detail::Renderer2DBatching batching(*this);
-        batching.PushQuad(position, size, rotationRadians, color, { 0.0f, 0.0f }, { 1.0f, 1.0f }, texture);
+        const float sineRotation = std::sin(rotationRadians);
+        const float cosineRotation = std::cos(rotationRadians);
+        const glm::vec3 xAxis{ cosineRotation * size.x, sineRotation * size.x, 0.0f };
+        const glm::vec3 yAxis{ -sineRotation * size.y, cosineRotation * size.y, 0.0f };
+        DrawQuad(position, xAxis, yAxis, texture, color);
     }
 
     void Renderer2D::DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
                                      const Assets::TextureAsset& textureAsset, const glm::vec4& color)
     {
         DrawRotatedQuad(position, size, rotationRadians, textureAsset.TryGetTextureResource(), color);
+    }
+
+    void Renderer2D::DrawQuad(const glm::vec3& center, const glm::vec3& xAxis, const glm::vec3& yAxis,
+                              const glm::vec4& color)
+    {
+        DrawQuad(center, xAxis, yAxis, m_Impl->WhiteTexture.get(), color);
+    }
+
+    void Renderer2D::DrawQuad(const glm::vec3& center, const glm::vec3& xAxis, const glm::vec3& yAxis,
+                              const TextureResource* texture, const glm::vec4& color)
+    {
+        if (!m_Impl->SceneActive)
+            return;
+
+        Detail::Renderer2DBatching batching(*this);
+        batching.PushQuad(center, xAxis, yAxis, color, { 0.0f, 0.0f }, { 1.0f, 1.0f }, texture);
+    }
+
+    void Renderer2D::DrawQuad(const glm::vec3& center, const glm::vec3& xAxis, const glm::vec3& yAxis,
+                              const Assets::TextureAsset& textureAsset, const glm::vec4& color)
+    {
+        DrawQuad(center, xAxis, yAxis, textureAsset.TryGetTextureResource(), color);
     }
 
     bool Renderer2D::IsSceneActive() const noexcept

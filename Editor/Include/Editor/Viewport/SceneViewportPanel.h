@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Editor/EditorServices.h"
+#include "Editor/Scene/EditorSceneState.h"
 #include "Engine.h"
 
 namespace EditorApp
@@ -43,7 +44,7 @@ namespace EditorApp
         void Attach(const EditorServices& services);
         void Detach() noexcept;
         void Update(const EditorServices& services, float timestep);
-        void Render(bool& isOpen, const EditorServices& services, EditorCameraTool& cameraTool);
+        void Render(bool& isOpen, const EditorServices& services, EditorSceneState& sceneState, EditorCameraTool& cameraTool);
         void RenderStressPanel(bool& isOpen);
 
         const SceneViewportState& GetState() const noexcept;

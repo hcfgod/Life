@@ -238,11 +238,11 @@ TEST_CASE("Renderer and Renderer2D stay safe no-op services without live frame r
     renderer.EndScene();
 
     renderer2D.BeginScene(glm::mat4(1.0f));
-    renderer2D.DrawQuad({ 0.0f, 0.0f }, { 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f });
+    renderer2D.DrawRotatedQuad({ 0.0f, 0.0f, 0.0f }, { 2.0f, 2.0f }, 0.5f, { 0.0f, 1.0f, 0.0f, 1.0f });
     renderer2D.EndScene();
 
     renderer2D.BeginScene(glm::mat4(1.0f));
-    renderer2D.DrawRotatedQuad({ 0.0f, 0.0f, 0.0f }, { 2.0f, 2.0f }, 0.5f, { 0.0f, 1.0f, 0.0f, 1.0f });
+    renderer2D.DrawQuad({ 0.0f, 0.0f, 0.0f }, { 2.0f, 0.5f, 0.0f }, { -0.5f, 1.5f, 0.25f }, { 0.0f, 0.5f, 1.0f, 1.0f });
     renderer2D.EndScene();
 
     CHECK(renderer.GetStats().DrawCalls == 0);

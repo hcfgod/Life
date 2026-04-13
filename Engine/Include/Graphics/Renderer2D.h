@@ -57,6 +57,12 @@ namespace Life
                       const glm::vec4& color = glm::vec4(1.0f));
         void DrawQuad(const glm::vec3& position, const glm::vec2& size, const Assets::TextureAsset& textureAsset,
                       const glm::vec4& color = glm::vec4(1.0f));
+        void DrawQuad(const glm::vec3& center, const glm::vec3& xAxis, const glm::vec3& yAxis,
+                      const glm::vec4& color);
+        void DrawQuad(const glm::vec3& center, const glm::vec3& xAxis, const glm::vec3& yAxis,
+                      const TextureResource* texture, const glm::vec4& color = glm::vec4(1.0f));
+        void DrawQuad(const glm::vec3& center, const glm::vec3& xAxis, const glm::vec3& yAxis,
+                      const Assets::TextureAsset& textureAsset, const glm::vec4& color = glm::vec4(1.0f));
         void DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,
                              const glm::vec4& color);
         void DrawRotatedQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians,

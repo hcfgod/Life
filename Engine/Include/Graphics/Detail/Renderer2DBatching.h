@@ -17,7 +17,7 @@ namespace Life
             void AdvanceActiveBufferVersion() noexcept;
             bool UpdateSceneConstants(const glm::mat4& viewProjection);
             void ResetQueuedDraws() noexcept;
-            void PushQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians, const glm::vec4& color,
+            void PushQuad(const glm::vec3& center, const glm::vec3& xAxis, const glm::vec3& yAxis, const glm::vec4& color,
                           const glm::vec2& uvMin, const glm::vec2& uvMax, const TextureResource* texture);
 
         private:

@@ -39,9 +39,9 @@ namespace Life::Detail
 
     struct Renderer2DQuadInstanceData
     {
-        glm::vec3 QuadPosition{ 0.0f, 0.0f, 0.0f };
-        float QuadRotation = 0.0f;
-        glm::vec2 QuadSize{ 0.0f, 0.0f };
+        glm::vec4 QuadCenter{ 0.0f, 0.0f, 0.0f, 0.0f };
+        glm::vec4 QuadXAxis{ 1.0f, 0.0f, 0.0f, 0.0f };
+        glm::vec4 QuadYAxis{ 0.0f, 1.0f, 0.0f, 0.0f };
         glm::vec4 Color{ 1.0f, 1.0f, 1.0f, 1.0f };
         glm::vec4 TexRect{ 0.0f, 0.0f, 1.0f, 1.0f };
     };

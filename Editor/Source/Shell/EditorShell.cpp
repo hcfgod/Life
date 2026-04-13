@@ -71,7 +71,9 @@ namespace EditorApp
         ImGuiID leftDockId = ImGui::DockBuilderSplitNode(rootDockId, ImGuiDir_Left, 0.20f, nullptr, &rootDockId);
         ImGuiID rightDockId = ImGui::DockBuilderSplitNode(rootDockId, ImGuiDir_Right, 0.24f, nullptr, &rootDockId);
         ImGuiID bottomDockId = ImGui::DockBuilderSplitNode(rootDockId, ImGuiDir_Down, 0.28f, nullptr, &rootDockId);
+        ImGuiID projectDockId = ImGui::DockBuilderSplitNode(bottomDockId, ImGuiDir_Left, 0.55f, nullptr, &bottomDockId);
 
+        ImGui::DockBuilderDockWindow("Project Assets", projectDockId);
         ImGui::DockBuilderDockWindow("Hierarchy", leftDockId);
         ImGui::DockBuilderDockWindow("Inspector", rightDockId);
         ImGui::DockBuilderDockWindow("Renderer Stress", rightDockId);
@@ -112,6 +114,7 @@ namespace EditorApp
 
         if (ImGui::BeginMenu("Window"))
         {
+            ImGui::MenuItem("Project Assets", nullptr, &visibility.ShowProjectAssets);
             ImGui::MenuItem("Hierarchy", nullptr, &visibility.ShowHierarchy);
             ImGui::MenuItem("Inspector", nullptr, &visibility.ShowInspector);
             ImGui::MenuItem("Console", nullptr, &visibility.ShowConsole);

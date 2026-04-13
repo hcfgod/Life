@@ -24,6 +24,59 @@ namespace EditorApp
         };
 
 #if __has_include(<imgui.h>)
+        DropMode DetermineDropMode(const ImVec2& rectMin, const ImVec2& rectMax)
+        {
+            const float itemHeight = rectMax.y - rectMin.y;
+            const float mouseY = ImGui::GetIO().MousePos.y;
+            if (itemHeight > 0.0f)
+            {
+                if (mouseY < rectMin.y + itemHeight * 0.25f)
+                    return DropMode::Before;
+                if (mouseY > rectMax.y - itemHeight * 0.25f)
+                    return DropMode::After;
+            }
+
+            return DropMode::Child;
+        }
+
+        bool CanApplyDrop(const Life::Entity& dragged, const Life::Entity& target)
+        {
+            return dragged.IsValid() && target.IsValid() && dragged != target && !target.IsDescendantOf(dragged);
+        }
+
+        void DrawDropPreview(const ImVec2& rectMin, const ImVec2& rectMax, DropMode mode, bool valid)
+        {
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            const ImU32 lineColor = ImGui::GetColorU32(valid ? ImVec4(0.24f, 0.60f, 0.96f, 0.95f) : ImVec4(0.90f, 0.26f, 0.26f, 0.95f));
+            const ImU32 fillColor = ImGui::GetColorU32(valid ? ImVec4(0.24f, 0.60f, 0.96f, 0.14f) : ImVec4(0.90f, 0.26f, 0.26f, 0.12f));
+            const float thickness = 2.0f;
+
+            switch (mode)
+            {
+                case DropMode::Child:
+                    drawList->AddRectFilled(rectMin, rectMax, fillColor, 4.0f);
+                    drawList->AddRect(rectMin, rectMax, lineColor, 4.0f, 0, thickness);
+                    break;
+
+                case DropMode::Before:
+                    drawList->AddLine(ImVec2(rectMin.x, rectMin.y + 1.0f), ImVec2(rectMax.x, rectMin.y + 1.0f), lineColor, thickness);
+                    break;
+
+                case DropMode::After:
+                    drawList->AddLine(ImVec2(rectMin.x, rectMax.y - 1.0f), ImVec2(rectMax.x, rectMax.y - 1.0f), lineColor, thickness);
+                    break;
+            }
+        }
+
+        void DrawRootDropPreview(const ImVec2& rectMin, const ImVec2& rectMax, bool valid)
+        {
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            const ImU32 lineColor = ImGui::GetColorU32(valid ? ImVec4(0.24f, 0.60f, 0.96f, 0.95f) : ImVec4(0.90f, 0.26f, 0.26f, 0.95f));
+            const ImU32 fillColor = ImGui::GetColorU32(valid ? ImVec4(0.24f, 0.60f, 0.96f, 0.14f) : ImVec4(0.90f, 0.26f, 0.26f, 0.12f));
+            drawList->AddRectFilled(rectMin, rectMax, fillColor, 4.0f);
+            drawList->AddRect(rectMin, rectMax, lineColor, 4.0f, 0, 2.0f);
+        }
+
         bool BeginEntityDragSource(const Life::Entity& entity)
         {
             if (!entity.IsValid() || !ImGui::BeginDragDropSource())
@@ -46,7 +99,7 @@ namespace EditorApp
 
         bool ApplyDrop(Life::Scene& scene, Life::Entity dragged, const Life::Entity& target, DropMode mode)
         {
-            if (!dragged.IsValid() || !target.IsValid() || dragged == target || target.IsDescendantOf(dragged))
+            if (!CanApplyDrop(dragged, target))
                 return false;
 
             switch (mode)
@@ -96,27 +149,51 @@ namespace EditorApp
                 return false;
 
             bool changed = false;
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kEntityPayloadType))
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kEntityPayloadType, ImGuiDragDropFlags_AcceptBeforeDelivery))
             {
                 const Life::Entity dragged = ResolvePayloadEntity(payload, scene);
                 const ImVec2 rectMin = ImGui::GetItemRectMin();
                 const ImVec2 rectMax = ImGui::GetItemRectMax();
-                const float itemHeight = rectMax.y - rectMin.y;
-                const float mouseY = ImGui::GetIO().MousePos.y;
+                const DropMode mode = DetermineDropMode(rectMin, rectMax);
+                const bool valid = CanApplyDrop(dragged, target);
 
-                DropMode mode = DropMode::Child;
-                if (itemHeight > 0.0f)
-                {
-                    if (mouseY < rectMin.y + itemHeight * 0.25f)
-                        mode = DropMode::Before;
-                    else if (mouseY > rectMax.y - itemHeight * 0.25f)
-                        mode = DropMode::After;
-                }
+                DrawDropPreview(rectMin, rectMax, mode, valid);
 
-                changed = ApplyDrop(scene, dragged, target, mode);
+                if (payload->Delivery && valid)
+                    changed = ApplyDrop(scene, dragged, target, mode);
             }
 
             ImGui::EndDragDropTarget();
+            return changed;
+        }
+
+        bool RenderRootDropTarget(Life::Scene& scene)
+        {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::TextUnformatted("Scene Root");
+            const ImVec2 targetSize(ImGui::GetContentRegionAvail().x, ImGui::GetFrameHeight() * 1.35f);
+            ImGui::Selectable("Drop here to reparent to root", false, ImGuiSelectableFlags_None, targetSize);
+
+            bool changed = false;
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kEntityPayloadType, ImGuiDragDropFlags_AcceptBeforeDelivery))
+                {
+                    Life::Entity dragged = ResolvePayloadEntity(payload, scene);
+                    const bool valid = dragged.IsValid() && dragged.HasParent();
+                    DrawRootDropPreview(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), valid);
+
+                    if (payload->Delivery && valid)
+                    {
+                        dragged.RemoveParent();
+                        changed = true;
+                    }
+                }
+
+                ImGui::EndDragDropTarget();
+            }
+
             return changed;
         }
 
@@ -220,22 +297,7 @@ namespace EditorApp
                 for (const Life::Entity root : roots)
                     changed |= RenderEntityNode(scene, root, sceneState, pendingDelete);
 
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::TextUnformatted("Drop here to reparent to root");
-                if (ImGui::BeginDragDropTarget())
-                {
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kEntityPayloadType))
-                    {
-                        Life::Entity dragged = ResolvePayloadEntity(payload, scene);
-                        if (dragged.IsValid())
-                        {
-                            dragged.RemoveParent();
-                            changed = true;
-                        }
-                    }
-                    ImGui::EndDragDropTarget();
-                }
+                changed |= RenderRootDropTarget(scene);
 
                 if (pendingDelete.IsValid())
                 {

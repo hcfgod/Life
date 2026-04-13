@@ -170,7 +170,8 @@ namespace Life
         if (!IsValid(child) || !IsValid(parent) || child == parent)
             return false;
 
-        if (WouldCreateCycle(child.GetHandle(), parent.GetHandle()))
+        const ParentRelation relation = { child.GetHandle(), parent.GetHandle() };
+        if (WouldCreateCycle(relation))
             return false;
 
         DetachFromParent(child.GetHandle());
@@ -393,12 +394,12 @@ namespace Life
             m_RootEntities.end());
     }
 
-    bool Scene::WouldCreateCycle(entt::entity child, entt::entity parent) const
+    bool Scene::WouldCreateCycle(ParentRelation relation) const
     {
-        entt::entity current = parent;
+        entt::entity current = relation.Parent;
         while (current != entt::null && m_Registry.valid(current))
         {
-            if (current == child)
+            if (current == relation.Child)
                 return true;
 
             current = m_Registry.get<HierarchyComponent>(current).Parent;

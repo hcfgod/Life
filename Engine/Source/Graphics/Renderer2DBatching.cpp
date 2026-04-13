@@ -50,7 +50,7 @@ namespace Life::Detail
         m_Renderer2D.m_Impl->QueuedQuadCount = 0;
     }
 
-    void Renderer2DBatching::PushQuad(const glm::vec3& position, const glm::vec2& size, float rotationRadians, const glm::vec4& color,
+    void Renderer2DBatching::PushQuad(const glm::vec3& center, const glm::vec3& xAxis, const glm::vec3& yAxis, const glm::vec4& color,
                                       const glm::vec2& uvMin, const glm::vec2& uvMax, const TextureResource* texture)
     {
         const TextureResource* resolvedTexture = texture != nullptr ? texture : m_Renderer2D.m_Impl->ErrorTexture.get();
@@ -69,9 +69,9 @@ namespace Life::Detail
         }
 
         Renderer2DQuadInstanceData instance;
-        instance.QuadPosition = position;
-        instance.QuadRotation = rotationRadians;
-        instance.QuadSize = size;
+        instance.QuadCenter = glm::vec4(center, 0.0f);
+        instance.QuadXAxis = glm::vec4(xAxis, 0.0f);
+        instance.QuadYAxis = glm::vec4(yAxis, 0.0f);
         instance.Color = color;
         instance.TexRect = { uvMin.x, uvMin.y, uvMax.x, uvMax.y };
         m_Renderer2D.m_Impl->Instances.push_back(instance);

@@ -410,12 +410,13 @@ namespace EditorApp
         }
 
         m_Shell.Begin(m_PanelVisibility, actions, frameContext);
+        m_ProjectAssetsPanel.Render(m_PanelVisibility.ShowProjectAssets, m_Services, m_SceneState);
         m_HierarchyPanel.Render(m_PanelVisibility.ShowHierarchy, m_Services, m_SceneState);
         m_InspectorPanel.Render(m_PanelVisibility.ShowInspector, m_Services, m_SceneState);
         m_ConsolePanel.Render(m_PanelVisibility.ShowConsole);
         m_SceneViewportPanel.RenderStressPanel(m_PanelVisibility.ShowRendererStress);
         m_StatsPanel.Render(m_PanelVisibility.ShowStats, m_Services, m_SceneViewportPanel.GetState());
-        m_SceneViewportPanel.Render(m_PanelVisibility.ShowScene, m_Services, m_CameraTool);
+        m_SceneViewportPanel.Render(m_PanelVisibility.ShowScene, m_Services, m_SceneState, m_CameraTool);
         m_FpsOverlayPanel.Render(m_PanelVisibility.ShowFpsOverlay);
         RenderSceneDialogs();
         m_Shell.End();
@@ -441,6 +442,17 @@ namespace EditorApp
         dispatcher.Dispatch<Life::WindowResizeEvent>([this](Life::WindowResizeEvent&)
         {
             m_Shell.ResetLayout();
+            return false;
+        });
+        dispatcher.Dispatch<Life::WindowFileDroppedEvent>([this](Life::WindowFileDroppedEvent& dropEvent)
+        {
+            if (m_Mode != Mode::Workspace ||
+                !m_PanelVisibility.ShowProjectAssets ||
+                !m_Services.ProjectService ||
+                !m_Services.ProjectService->get().HasActiveProject())
+                return false;
+
+            m_ProjectAssetsPanel.QueueExternalFileDrop(dropEvent.GetPath(), dropEvent.GetX(), dropEvent.GetY());
             return false;
         });
     }

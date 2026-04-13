@@ -3,12 +3,28 @@
 #include "Editor/EditorServices.h"
 #include "Editor/Scene/EditorComponentRegistry.h"
 
+#include <string>
+
 #if __has_include(<imgui.h>)
 #include <imgui.h>
 #endif
 
 namespace EditorApp
 {
+    namespace
+    {
+        bool HasAddableComponents(const Life::Entity& entity)
+        {
+            for (const EditorComponentDescriptor& descriptor : EditorComponentRegistry::Get().GetDescriptors())
+            {
+                if (descriptor.CanAddComponent && descriptor.CanAddComponent(entity))
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
     void InspectorPanel::Render(bool& isOpen, const EditorServices& services, EditorSceneState& sceneState) const
     {
 #if __has_include(<imgui.h>)
@@ -33,9 +49,11 @@ namespace EditorApp
                 else
                 {
                     bool changed = false;
+                    const bool hasAddableComponents = HasAddableComponents(selectedEntity);
 
                     ImGui::Text("Entity: %s", selectedEntity.GetTag().c_str());
                     ImGui::TextDisabled("ID: %s", selectedEntity.GetId().c_str());
+                    ImGui::Spacing();
 
                     if (ImGui::Button("Delete Entity"))
                     {
@@ -46,50 +64,76 @@ namespace EditorApp
                             sceneState.SetStatusMessage("Deleted entity '" + deletedId + "'.", false);
                     }
 
-                    ImGui::SameLine();
-                    if (ImGui::BeginCombo("Add Component", "Add..."))
+                    ImGui::Separator();
+
+                    const ImGuiStyle& style = ImGui::GetStyle();
+                    const float footerHeight = hasAddableComponents
+                        ? ImGui::GetFrameHeightWithSpacing() * 2.0f + style.ItemSpacing.y + style.WindowPadding.y
+                        : ImGui::GetTextLineHeightWithSpacing() * 2.0f + style.ItemSpacing.y + style.WindowPadding.y;
+
+                    if (ImGui::BeginChild("InspectorComponents", ImVec2(0.0f, -footerHeight), false))
                     {
                         for (const EditorComponentDescriptor& descriptor : EditorComponentRegistry::Get().GetDescriptors())
                         {
-                            if (!descriptor.CanAddComponent || !descriptor.CanAddComponent(selectedEntity))
+                            if (!descriptor.HasComponent || !descriptor.HasComponent(selectedEntity))
                                 continue;
 
-                            if (ImGui::Selectable(descriptor.DisplayName.c_str()))
-                            {
-                                descriptor.AddComponent(selectedEntity);
-                                changed = true;
-                            }
-                        }
-                        ImGui::EndCombo();
-                    }
-
-                    ImGui::Separator();
-
-                    for (const EditorComponentDescriptor& descriptor : EditorComponentRegistry::Get().GetDescriptors())
-                    {
-                        if (!descriptor.HasComponent || !descriptor.HasComponent(selectedEntity))
-                            continue;
-
-                        const bool open = ImGui::CollapsingHeader(descriptor.DisplayName.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
-                        if (!open)
-                            continue;
-
-                        if (descriptor.Removable)
-                        {
                             ImGui::PushID(descriptor.Id.c_str());
-                            if (ImGui::Button("Remove"))
+                            const std::string headerLabel = descriptor.DisplayName + "##" + descriptor.Id;
+                            const bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+                            if (!open)
                             {
-                                changed |= descriptor.RemoveComponent(selectedEntity);
                                 ImGui::PopID();
                                 continue;
                             }
+
+                            if (descriptor.Removable)
+                            {
+                                if (ImGui::Button("Remove"))
+                                {
+                                    changed |= descriptor.RemoveComponent(selectedEntity);
+                                    ImGui::PopID();
+                                    continue;
+                                }
+
+                                ImGui::Spacing();
+                            }
+
+                            if (descriptor.DrawInspector)
+                                changed |= descriptor.DrawInspector(selectedEntity, services);
+
+                            ImGui::Separator();
                             ImGui::PopID();
                         }
+                    }
+                    ImGui::EndChild();
 
-                        if (descriptor.DrawInspector)
-                            changed |= descriptor.DrawInspector(selectedEntity, services);
+                    ImGui::Separator();
+                    ImGui::TextUnformatted("Add Component");
+                    if (hasAddableComponents)
+                    {
+                        if (ImGui::Button("Add Component", ImVec2(-1.0f, 0.0f)))
+                            ImGui::OpenPopup("AddComponentPopup");
 
-                        ImGui::Separator();
+                        if (ImGui::BeginPopup("AddComponentPopup"))
+                        {
+                            for (const EditorComponentDescriptor& descriptor : EditorComponentRegistry::Get().GetDescriptors())
+                            {
+                                if (!descriptor.CanAddComponent || !descriptor.CanAddComponent(selectedEntity))
+                                    continue;
+
+                                if (ImGui::Selectable(descriptor.DisplayName.c_str()))
+                                {
+                                    descriptor.AddComponent(selectedEntity);
+                                    changed = true;
+                                }
+                            }
+                            ImGui::EndPopup();
+                        }
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("No additional components available.");
                     }
 
                     if (changed)

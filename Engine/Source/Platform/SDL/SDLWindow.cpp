@@ -151,7 +151,8 @@ namespace Life
                 if (InputSystem* inputSystem = GetServices().TryGet<InputSystem>())
                     inputSystem->OnSdlEvent(sdlEvent);
 
-                if (Scope<Event> event = TranslateSDLEvent(sdlEvent))
+                Scope<Event> event = TranslateSDLEvent(sdlEvent);
+                if (event)
                     return event;
             }
         }
