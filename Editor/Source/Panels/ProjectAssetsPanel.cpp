@@ -287,6 +287,40 @@ namespace EditorApp
             return ToLowerAscii(entry.RelativePath.generic_string()).find(filterLower) != std::string::npos;
         }
 
+        void AppendSearchEntries(
+            const std::filesystem::path& assetsDirectory,
+            const std::filesystem::path& relativeFolder,
+            const std::string& filterLower,
+            std::vector<ProjectAssetEntry>& outEntries)
+        {
+            const auto entries = CollectEntries(assetsDirectory, relativeFolder);
+            for (const ProjectAssetEntry& entry : entries)
+            {
+                if (MatchesFilter(entry, filterLower))
+                    outEntries.push_back(entry);
+
+                if (entry.IsDirectory)
+                    AppendSearchEntries(assetsDirectory, entry.RelativePath, filterLower, outEntries);
+            }
+        }
+
+        std::vector<ProjectAssetEntry> CollectSearchEntries(const std::filesystem::path& assetsDirectory, const std::string& filterLower)
+        {
+            std::vector<ProjectAssetEntry> entries;
+            if (filterLower.empty())
+                return entries;
+
+            AppendSearchEntries(assetsDirectory, {}, filterLower, entries);
+            std::sort(entries.begin(), entries.end(), [](const ProjectAssetEntry& left, const ProjectAssetEntry& right)
+            {
+                if (left.IsDirectory != right.IsDirectory)
+                    return left.IsDirectory > right.IsDirectory;
+
+                return ToLowerAscii(left.RelativePath.generic_string()) < ToLowerAscii(right.RelativePath.generic_string());
+            });
+            return entries;
+        }
+
         bool DirectoryContainsMatch(const std::filesystem::path& assetsDirectory, const std::filesystem::path& relativeFolder, const std::string& filterLower)
         {
             if (filterLower.empty())
@@ -699,7 +733,10 @@ namespace EditorApp
             m_ActiveFolderRelativePath.clear();
 
         m_GridScale = ClampGridScale(m_GridScale);
+        const std::string filterLower = ToLowerAscii(m_SearchFilter);
         const auto currentEntries = CollectEntries(assetsDirectory, m_ActiveFolderRelativePath);
+        const auto searchEntries = CollectSearchEntries(assetsDirectory, filterLower);
+        const bool useGlobalSearchResults = !filterLower.empty();
         const std::string activeFolderLabel = m_ActiveFolderRelativePath.empty()
             ? std::string("Assets")
             : std::string("Assets/") + m_ActiveFolderRelativePath.generic_string();
@@ -727,8 +764,8 @@ namespace EditorApp
         {
             ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Project Assets");
             ImGui::SameLine();
-            ImGui::TextDisabled("%zu items", currentEntries.size());
-            ImGui::TextDisabled("%s", activeFolderLabel.c_str());
+            ImGui::TextDisabled("%zu items", useGlobalSearchResults ? searchEntries.size() : currentEntries.size());
+            ImGui::TextDisabled("%s", useGlobalSearchResults ? "Project-wide search" : activeFolderLabel.c_str());
             ImGui::Separator();
 
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.33f, 0.54f, 1.0f));
@@ -768,7 +805,6 @@ namespace EditorApp
         }
         ImGui::EndChild();
 
-        const std::string filterLower = ToLowerAscii(m_SearchFilter);
         const bool useCompactList = m_GridScale <= 0.25f;
 
         if (m_OpenPendingPopup)
@@ -950,9 +986,10 @@ namespace EditorApp
 
             if (ImGui::BeginChild("##ProjectAssetsGrid", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar))
             {
-                ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "%s", activeFolderLabel.c_str());
+                const std::string gridLabel = useGlobalSearchResults ? std::string("Search Results") : activeFolderLabel;
+                ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "%s", gridLabel.c_str());
                 ImGui::SameLine();
-                ImGui::TextDisabled(useCompactList ? "List" : "Grid");
+                ImGui::TextDisabled(useGlobalSearchResults ? (useCompactList ? "Search List" : "Search Grid") : (useCompactList ? "List" : "Grid"));
                 ImGui::Separator();
 
                 if (!m_ActiveFolderRelativePath.empty())
@@ -1015,18 +1052,25 @@ namespace EditorApp
                 ImGui::Separator();
 
                 std::vector<ProjectAssetEntry> visibleEntries;
-                visibleEntries.reserve(currentEntries.size());
-                for (const ProjectAssetEntry& entry : currentEntries)
+                if (useGlobalSearchResults)
                 {
-                    if (MatchesFilter(entry, filterLower))
-                        visibleEntries.push_back(entry);
+                    visibleEntries = searchEntries;
+                }
+                else
+                {
+                    visibleEntries.reserve(currentEntries.size());
+                    for (const ProjectAssetEntry& entry : currentEntries)
+                    {
+                        if (MatchesFilter(entry, filterLower))
+                            visibleEntries.push_back(entry);
+                    }
                 }
 
                 if (visibleEntries.empty())
                 {
                     ImGui::Dummy(ImVec2(0.0f, 12.0f));
-                    ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), filterLower.empty() ? "No assets in this folder." : "No assets match the current filter.");
-                    ImGui::TextDisabled(filterLower.empty() ? "Create a folder, create a scene, or import files from Explorer." : "Try a different search term or clear the filter.");
+                    ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), filterLower.empty() ? "No assets in this folder." : "No assets match the current search.");
+                    ImGui::TextDisabled(filterLower.empty() ? "Create a folder, create a scene, or import files from Explorer." : "Search scans the full Assets tree. Try a different term or clear the filter.");
                 }
                 else if (useCompactList)
                 {

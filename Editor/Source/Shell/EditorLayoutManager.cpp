@@ -90,7 +90,6 @@ namespace EditorApp
                 { "hierarchy", visibility.ShowHierarchy },
                 { "inspector", visibility.ShowInspector },
                 { "console", visibility.ShowConsole },
-                { "rendererStress", visibility.ShowRendererStress },
                 { "stats", visibility.ShowStats },
                 { "scene", visibility.ShowScene },
                 { "fpsOverlay", visibility.ShowFpsOverlay }
@@ -111,8 +110,6 @@ namespace EditorApp
                 visibility.ShowInspector = json["inspector"].get<bool>();
             if (json.contains("console") && json["console"].is_boolean())
                 visibility.ShowConsole = json["console"].get<bool>();
-            if (json.contains("rendererStress") && json["rendererStress"].is_boolean())
-                visibility.ShowRendererStress = json["rendererStress"].get<bool>();
             if (json.contains("stats") && json["stats"].is_boolean())
                 visibility.ShowStats = json["stats"].get<bool>();
             if (json.contains("scene") && json["scene"].is_boolean())

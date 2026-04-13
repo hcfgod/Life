@@ -87,8 +87,9 @@ namespace Life
     {
         std::vector<const QuadCommand*> orderedQuads;
         orderedQuads.reserve(scene.Quads.size());
-        for (const QuadCommand& quad : scene.Quads)
-            orderedQuads.push_back(&quad);
+        std::vector<size_t> orderedIndices(scene.Quads.size());
+        for (size_t index = 0; index < orderedIndices.size(); ++index)
+            orderedIndices[index] = index;
 
         switch (scene.SortMode)
         {
@@ -97,24 +98,27 @@ namespace Life
 
             case QuadSortMode::BackToFront:
                 std::stable_sort(
-                    orderedQuads.begin(),
-                    orderedQuads.end(),
-                    [](const QuadCommand* left, const QuadCommand* right)
+                    orderedIndices.begin(),
+                    orderedIndices.end(),
+                    [&scene](size_t leftIndex, size_t rightIndex)
                     {
-                        return left->Position.z < right->Position.z;
+                        return scene.Quads[leftIndex].Position.z < scene.Quads[rightIndex].Position.z;
                     });
                 break;
 
             case QuadSortMode::FrontToBack:
                 std::stable_sort(
-                    orderedQuads.begin(),
-                    orderedQuads.end(),
-                    [](const QuadCommand* left, const QuadCommand* right)
+                    orderedIndices.begin(),
+                    orderedIndices.end(),
+                    [&scene](size_t leftIndex, size_t rightIndex)
                     {
-                        return left->Position.z > right->Position.z;
+                        return scene.Quads[leftIndex].Position.z > scene.Quads[rightIndex].Position.z;
                     });
                 break;
         }
+
+        for (const size_t index : orderedIndices)
+            orderedQuads.push_back(&scene.Quads[index]);
 
         return orderedQuads;
     }

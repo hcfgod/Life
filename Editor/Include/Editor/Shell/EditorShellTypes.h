@@ -38,7 +38,6 @@ namespace EditorApp
         bool ShowHierarchy = true;
         bool ShowInspector = true;
         bool ShowConsole = true;
-        bool ShowRendererStress = true;
         bool ShowStats = true;
         bool ShowScene = true;
         bool ShowFpsOverlay = false;
@@ -50,7 +49,6 @@ namespace EditorApp
             && lhs.ShowHierarchy == rhs.ShowHierarchy
             && lhs.ShowInspector == rhs.ShowInspector
             && lhs.ShowConsole == rhs.ShowConsole
-            && lhs.ShowRendererStress == rhs.ShowRendererStress
             && lhs.ShowStats == rhs.ShowStats
             && lhs.ShowScene == rhs.ShowScene
             && lhs.ShowFpsOverlay == rhs.ShowFpsOverlay;

@@ -107,7 +107,7 @@ namespace EditorApp
         ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodeSize(dockspaceId, viewport->WorkSize);
 
-        ImGuiID rootDockId = dockspaceId;
+        	ImGuiID rootDockId = dockspaceId;
         ImGuiID leftDockId = ImGui::DockBuilderSplitNode(rootDockId, ImGuiDir_Left, 0.19f, nullptr, &rootDockId);
         ImGuiID rightDockId = ImGui::DockBuilderSplitNode(rootDockId, ImGuiDir_Right, 0.26f, nullptr, &rootDockId);
         ImGuiID bottomDockId = ImGui::DockBuilderSplitNode(rootDockId, ImGuiDir_Down, 0.30f, nullptr, &rootDockId);
@@ -116,7 +116,6 @@ namespace EditorApp
         ImGui::DockBuilderDockWindow("Project Assets", projectDockId);
         ImGui::DockBuilderDockWindow("Hierarchy", leftDockId);
         ImGui::DockBuilderDockWindow("Inspector", rightDockId);
-        ImGui::DockBuilderDockWindow("Renderer Stress", rightDockId);
         ImGui::DockBuilderDockWindow("Console", bottomDockId);
         ImGui::DockBuilderDockWindow("Stats", rightDockId);
         ImGui::DockBuilderDockWindow("Scene", rootDockId);
@@ -315,19 +314,13 @@ namespace EditorApp
         if (!ImGui::BeginMenuBar())
             return;
 
-        if (ImGui::BeginMenu("Scene"))
+        const bool allowSceneShortcuts = context.HasActiveScene && !ImGui::GetIO().WantTextInput;
+        if (allowSceneShortcuts)
         {
-            if (ImGui::MenuItem("New Scene"))
-                actions.RequestNewScene = true;
-            if (ImGui::MenuItem("Open Scene"))
-                actions.RequestOpenScene = true;
-            if (ImGui::MenuItem("Save Scene", nullptr, false, context.HasActiveScene))
-                actions.RequestSaveScene = true;
-            if (ImGui::MenuItem("Save Scene As", nullptr, false, context.HasActiveScene))
+            if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
                 actions.RequestSaveSceneAs = true;
-            if (ImGui::MenuItem("Close Scene", nullptr, false, context.HasActiveScene))
-                actions.RequestCloseScene = true;
-            ImGui::EndMenu();
+            else if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
+                actions.RequestSaveScene = true;
         }
 
         if (ImGui::BeginMenu("Project"))
@@ -337,13 +330,27 @@ namespace EditorApp
             ImGui::EndMenu();
         }
 
+        if (ImGui::BeginMenu("Scene"))
+        {
+            if (ImGui::MenuItem("New Scene"))
+                actions.RequestNewScene = true;
+            if (ImGui::MenuItem("Open Scene"))
+                actions.RequestOpenScene = true;
+            if (ImGui::MenuItem("Save Scene", "Ctrl+S", false, context.HasActiveScene))
+                actions.RequestSaveScene = true;
+            if (ImGui::MenuItem("Save Scene As", "Ctrl+Shift+S", false, context.HasActiveScene))
+                actions.RequestSaveSceneAs = true;
+            if (ImGui::MenuItem("Close Scene", nullptr, false, context.HasActiveScene))
+                actions.RequestCloseScene = true;
+            ImGui::EndMenu();
+        }
+
         if (ImGui::BeginMenu("Window"))
         {
             ImGui::MenuItem("Project Assets", nullptr, &visibility.ShowProjectAssets);
             ImGui::MenuItem("Hierarchy", nullptr, &visibility.ShowHierarchy);
             ImGui::MenuItem("Inspector", nullptr, &visibility.ShowInspector);
             ImGui::MenuItem("Console", nullptr, &visibility.ShowConsole);
-            ImGui::MenuItem("Renderer Stress", nullptr, &visibility.ShowRendererStress);
             ImGui::MenuItem("Stats", nullptr, &visibility.ShowStats);
             ImGui::MenuItem("Scene", nullptr, &visibility.ShowScene);
             ImGui::MenuItem("FPS Overlay", nullptr, &visibility.ShowFpsOverlay);

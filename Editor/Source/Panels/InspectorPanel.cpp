@@ -81,7 +81,7 @@ namespace EditorApp
                     const bool hasAddableComponents = HasAddableComponents(selectedEntity);
 
                     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 7.0f));
-                    if (ImGui::BeginChild("##InspectorEntityCard", ImVec2(0.0f, 98.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+                    if (ImGui::BeginChild("##InspectorEntityCard", ImVec2(0.0f, 112.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
                     {
                         bool isEnabled = selectedEntity.IsEnabled();
                         if (ImGui::BeginTable("##InspectorEntityCardHeader", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
@@ -91,12 +91,14 @@ namespace EditorApp
                             ImGui::TableNextRow();
 
                             ImGui::TableSetColumnIndex(0);
+                            ImGui::AlignTextToFramePadding();
                             ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Entity");
-                            ImGui::SameLine();
-                            ImGui::TextDisabled("Primary selection");
 
                             ImGui::TableSetColumnIndex(1);
-                            ImGui::AlignTextToFramePadding();
+                            const float checkboxWidth = ImGui::CalcTextSize("Enabled").x + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::GetStyle().ItemSpacing.x;
+                            const float checkboxOffset = std::max(0.0f, ImGui::GetContentRegionAvail().x - checkboxWidth);
+                            if (checkboxOffset > 0.0f)
+                                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + checkboxOffset);
                             if (ImGui::Checkbox("Enabled", &isEnabled))
                             {
                                 selectedEntity.SetEnabled(isEnabled);
@@ -106,6 +108,7 @@ namespace EditorApp
                             ImGui::EndTable();
                         }
 
+                        ImGui::TextUnformatted("Name");
                         std::string entityName = selectedEntity.GetTag();
                         ImGui::SetNextItemWidth(-1.0f);
                         if (InputTextString("##InspectorEntityName", entityName))

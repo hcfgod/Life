@@ -46,9 +46,9 @@ namespace EditorApp
             }
 
             ImGui::SeparatorText("Renderer2D");
-            ImGui::Text("Configured Quads: %u", viewportState.RequestedQuadCount);
-            ImGui::Text("Configured Textured Quads: %u", viewportState.TexturedQuadCount);
-            ImGui::Text("Configured Colored Quads: %u", viewportState.UntexturedQuadCount);
+            ImGui::Text("Scene Quads: %u", viewportState.RequestedQuadCount);
+            ImGui::Text("Textured Scene Quads: %u", viewportState.TexturedQuadCount);
+            ImGui::Text("Colored Scene Quads: %u", viewportState.UntexturedQuadCount);
             ImGui::Text("Renderer2D Draw Calls: %u", viewportState.RendererStats.DrawCalls);
             ImGui::Text("Renderer2D Quads: %u", viewportState.RendererStats.QuadCount);
         }

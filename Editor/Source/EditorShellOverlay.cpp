@@ -419,7 +419,6 @@ namespace EditorApp
         m_HierarchyPanel.Render(m_PanelVisibility.ShowHierarchy, m_Services, m_SceneState);
         m_InspectorPanel.Render(m_PanelVisibility.ShowInspector, m_Services, m_SceneState);
         m_ConsolePanel.Render(m_PanelVisibility.ShowConsole);
-        m_SceneViewportPanel.RenderStressPanel(m_PanelVisibility.ShowRendererStress);
         m_StatsPanel.Render(m_PanelVisibility.ShowStats, m_Services, m_SceneViewportPanel.GetState());
         m_SceneViewportPanel.Render(m_PanelVisibility.ShowScene, m_Services, m_SceneState, m_CameraTool);
         m_FpsOverlayPanel.Render(m_PanelVisibility.ShowFpsOverlay);
