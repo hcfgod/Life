@@ -39,7 +39,7 @@ namespace EditorApp
         m_NextPersistTime = 0.0;
     }
 
-    void EditorShell::Begin(EditorPanelVisibility& visibility, EditorShellActions& actions, const FrameContext& context)
+    void EditorShell::Begin(EditorPanelVisibility& visibility, EditorPanelState& panelState, EditorShellActions& actions, const FrameContext& context)
     {
 #if __has_include(<imgui.h>)
         UpdateProjectContext(context);
@@ -64,30 +64,33 @@ namespace EditorApp
         ImGui::Begin("EditorRoot", nullptr, dockspaceWindowFlags);
         ImGui::PopStyleVar(3);
 
-        RestoreStartupLayout(visibility);
-        ProcessPendingLayoutCommand(visibility);
+        RestoreStartupLayout(visibility, panelState);
+        ProcessPendingLayoutCommand(visibility, panelState);
         if (!m_LayoutInitialized && m_UseDefaultLayout)
             BuildDefaultLayout();
 
-        RenderMenuBar(visibility, actions, context);
+        RenderMenuBar(visibility, panelState, actions, context);
+        RenderWorkspaceChrome(context);
 
         const ImGuiID dockspaceId = ImGui::GetID("EditorDockspace");
         ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-        RenderLayoutDialogs(visibility);
+        RenderLayoutDialogs(visibility, panelState);
 #else
         (void)visibility;
+        (void)panelState;
         (void)actions;
         (void)context;
 #endif
     }
 
-    void EditorShell::End(const EditorPanelVisibility& visibility)
+    void EditorShell::End(const EditorPanelVisibility& visibility, const EditorPanelState& panelState)
     {
 #if __has_include(<imgui.h>)
         ImGui::End();
-        PersistLayoutSessions(visibility);
+        PersistLayoutSessions(visibility, panelState);
 #else
         (void)visibility;
+        (void)panelState;
 #endif
     }
 
@@ -105,10 +108,10 @@ namespace EditorApp
         ImGui::DockBuilderSetNodeSize(dockspaceId, viewport->WorkSize);
 
         ImGuiID rootDockId = dockspaceId;
-        ImGuiID leftDockId = ImGui::DockBuilderSplitNode(rootDockId, ImGuiDir_Left, 0.20f, nullptr, &rootDockId);
-        ImGuiID rightDockId = ImGui::DockBuilderSplitNode(rootDockId, ImGuiDir_Right, 0.24f, nullptr, &rootDockId);
-        ImGuiID bottomDockId = ImGui::DockBuilderSplitNode(rootDockId, ImGuiDir_Down, 0.28f, nullptr, &rootDockId);
-        ImGuiID projectDockId = ImGui::DockBuilderSplitNode(bottomDockId, ImGuiDir_Left, 0.55f, nullptr, &bottomDockId);
+        ImGuiID leftDockId = ImGui::DockBuilderSplitNode(rootDockId, ImGuiDir_Left, 0.19f, nullptr, &rootDockId);
+        ImGuiID rightDockId = ImGui::DockBuilderSplitNode(rootDockId, ImGuiDir_Right, 0.26f, nullptr, &rootDockId);
+        ImGuiID bottomDockId = ImGui::DockBuilderSplitNode(rootDockId, ImGuiDir_Down, 0.30f, nullptr, &rootDockId);
+        ImGuiID projectDockId = ImGui::DockBuilderSplitNode(bottomDockId, ImGuiDir_Left, 0.58f, nullptr, &bottomDockId);
 
         ImGui::DockBuilderDockWindow("Project Assets", projectDockId);
         ImGui::DockBuilderDockWindow("Hierarchy", leftDockId);
@@ -137,7 +140,7 @@ namespace EditorApp
         m_PendingLayoutCommand = {};
     }
 
-    void EditorShell::RestoreStartupLayout(EditorPanelVisibility& visibility)
+    void EditorShell::RestoreStartupLayout(EditorPanelVisibility& visibility, EditorPanelState& panelState)
     {
 #if __has_include(<imgui.h>)
         if (m_StartupLayoutResolved)
@@ -150,7 +153,7 @@ namespace EditorApp
             const auto projectSessionResult = m_LayoutManager.LoadProjectSession();
             if (projectSessionResult.IsSuccess())
             {
-                ApplySession(projectSessionResult.GetValue(), visibility);
+                ApplySession(projectSessionResult.GetValue(), visibility, panelState);
                 return;
             }
 
@@ -161,20 +164,21 @@ namespace EditorApp
         const auto globalSessionResult = m_LayoutManager.LoadGlobalSession();
         if (globalSessionResult.IsSuccess())
         {
-            ApplySession(globalSessionResult.GetValue(), visibility);
+            ApplySession(globalSessionResult.GetValue(), visibility, panelState);
             return;
         }
 
         if (globalSessionResult.GetError().GetCode() != Life::ErrorCode::FileNotFound)
             LOG_WARN("Failed to restore global editor layout session: {}", globalSessionResult.GetError().GetErrorMessage());
 
-        ApplyDefaultLayout(visibility);
+        ApplyDefaultLayout(visibility, panelState);
 #else
         (void)visibility;
+        (void)panelState;
 #endif
     }
 
-    void EditorShell::ProcessPendingLayoutCommand(EditorPanelVisibility& visibility)
+    void EditorShell::ProcessPendingLayoutCommand(EditorPanelVisibility& visibility, EditorPanelState& panelState)
     {
 #if __has_include(<imgui.h>)
         const PendingLayoutCommand command = m_PendingLayoutCommand;
@@ -191,19 +195,19 @@ namespace EditorApp
                 break;
             }
 
-            ApplyLayout(layoutResult.GetValue(), visibility);
+            ApplyLayout(layoutResult.GetValue(), visibility, panelState);
             LOG_INFO("Loaded {} editor layout '{}'.", command.LayoutId.Scope == EditorLayoutScope::Project ? "project" : "global", command.LayoutId.Name);
             break;
         }
         case PendingLayoutCommandType::ApplyDefault:
-            ApplyDefaultLayout(visibility);
+            ApplyDefaultLayout(visibility, panelState);
             LOG_INFO("Applied default editor layout.");
             break;
         case PendingLayoutCommandType::Revert:
             if (m_ActiveLayout.has_value())
                 QueueLoadLayout(*m_ActiveLayout);
             else
-                ApplyDefaultLayout(visibility);
+                ApplyDefaultLayout(visibility, panelState);
             break;
         case PendingLayoutCommandType::None:
         default:
@@ -211,9 +215,10 @@ namespace EditorApp
         }
 
         if (m_PendingLayoutCommand.Type == PendingLayoutCommandType::LoadLayout)
-            ProcessPendingLayoutCommand(visibility);
+            ProcessPendingLayoutCommand(visibility, panelState);
 #else
         (void)visibility;
+        (void)panelState;
 #endif
     }
 
@@ -233,10 +238,11 @@ namespace EditorApp
         m_PendingLayoutCommand = { PendingLayoutCommandType::Revert, {} };
     }
 
-    void EditorShell::ApplyDefaultLayout(EditorPanelVisibility& visibility)
+    void EditorShell::ApplyDefaultLayout(EditorPanelVisibility& visibility, EditorPanelState& panelState)
     {
 #if __has_include(<imgui.h>)
         visibility = EditorLayoutManager::GetDefaultPanelVisibility();
+        panelState = {};
         ImGui::ClearIniSettings();
         m_ActiveLayout.reset();
         m_UseDefaultLayout = true;
@@ -244,13 +250,15 @@ namespace EditorApp
         BuildDefaultLayout();
 #else
         (void)visibility;
+        (void)panelState;
 #endif
     }
 
-    void EditorShell::ApplySession(const EditorLayoutSession& session, EditorPanelVisibility& visibility)
+    void EditorShell::ApplySession(const EditorLayoutSession& session, EditorPanelVisibility& visibility, EditorPanelState& panelState)
     {
 #if __has_include(<imgui.h>)
         visibility = session.PanelVisibility;
+        panelState = session.PanelState;
         m_UseDefaultLayout = session.UseDefaultLayout;
         if (session.HasActiveLayout && session.ActiveLayout.IsValid())
             m_ActiveLayout = session.ActiveLayout;
@@ -271,13 +279,15 @@ namespace EditorApp
 #else
         (void)session;
         (void)visibility;
+        (void)panelState;
 #endif
     }
 
-    void EditorShell::ApplyLayout(const EditorLayoutDefinition& layout, EditorPanelVisibility& visibility)
+    void EditorShell::ApplyLayout(const EditorLayoutDefinition& layout, EditorPanelVisibility& visibility, EditorPanelState& panelState)
     {
 #if __has_include(<imgui.h>)
         visibility = layout.PanelVisibility;
+        panelState = layout.PanelState;
         m_ActiveLayout = EditorLayoutId{ layout.Scope, layout.Name };
         m_UseDefaultLayout = false;
         ImGui::ClearIniSettings();
@@ -288,17 +298,18 @@ namespace EditorApp
         }
         else
         {
-            ApplyDefaultLayout(visibility);
+            ApplyDefaultLayout(visibility, panelState);
             m_UseDefaultLayout = false;
             m_ActiveLayout = EditorLayoutId{ layout.Scope, layout.Name };
         }
 #else
         (void)layout;
         (void)visibility;
+        (void)panelState;
 #endif
     }
 
-    void EditorShell::RenderMenuBar(EditorPanelVisibility& visibility, EditorShellActions& actions, const FrameContext& context)
+    void EditorShell::RenderMenuBar(EditorPanelVisibility& visibility, const EditorPanelState& panelState, EditorShellActions& actions, const FrameContext& context)
     {
 #if __has_include(<imgui.h>)
         if (!ImGui::BeginMenuBar())
@@ -339,29 +350,70 @@ namespace EditorApp
             ImGui::EndMenu();
         }
 
-        RenderLayoutMenu(visibility);
+        RenderLayoutMenu(visibility, panelState);
 
-        ImGui::Separator();
-        ImGui::TextUnformatted("Life Editor");
-        if (context.ActiveProjectName != nullptr && context.ActiveProjectName[0] != '\0')
-        {
-            ImGui::Separator();
-            ImGui::TextUnformatted(context.ActiveProjectName);
-        }
-        if (context.ActiveSceneName != nullptr && context.ActiveSceneName[0] != '\0')
-        {
-            ImGui::Separator();
-            ImGui::Text("%s%s", context.ActiveSceneName, context.IsSceneDirty ? " *" : "");
-        }
+        const char* brandLabel = "Life Editor";
+        const float brandWidth = ImGui::CalcTextSize(brandLabel).x;
+        const float targetCursorX = ImGui::GetWindowContentRegionMax().x - brandWidth - ImGui::GetStyle().ItemSpacing.x;
+        if (targetCursorX > ImGui::GetCursorPosX())
+            ImGui::SameLine(targetCursorX);
+        ImGui::TextColored(ImVec4(0.56f, 0.74f, 1.0f, 1.0f), "%s", brandLabel);
         ImGui::EndMenuBar();
 #else
         (void)visibility;
+        (void)panelState;
         (void)actions;
         (void)context;
 #endif
     }
 
-    void EditorShell::RenderLayoutMenu(EditorPanelVisibility& visibility)
+    void EditorShell::RenderWorkspaceChrome(const FrameContext& context) const
+    {
+#if __has_include(<imgui.h>)
+        constexpr float chromeHeight = 42.0f;
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 8.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
+        if (ImGui::BeginChild("##EditorWorkspaceChrome", ImVec2(0.0f, chromeHeight), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+        {
+            auto drawChip = [](const char* label, const char* value, const ImVec4& color)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, color);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(color.x + 0.04f, color.y + 0.04f, color.z + 0.04f, color.w));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(color.x + 0.02f, color.y + 0.02f, color.z + 0.02f, color.w));
+                ImGui::Button(label);
+                ImGui::PopStyleColor(3);
+                ImGui::SameLine();
+                ImGui::TextUnformatted(value);
+            };
+
+            const float centeredCursorY = std::max(0.0f, (ImGui::GetContentRegionAvail().y - ImGui::GetFrameHeight()) * 0.5f - 2.0f);
+            ImGui::SetCursorPosY(centeredCursorY);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Workspace");
+
+            ImGui::SameLine();
+            drawChip("Project", (context.ActiveProjectName != nullptr && context.ActiveProjectName[0] != '\0') ? context.ActiveProjectName : "No Project", ImVec4(0.16f, 0.28f, 0.46f, 1.0f));
+
+            ImGui::SameLine();
+            const char* sceneLabel = (context.ActiveSceneName != nullptr && context.ActiveSceneName[0] != '\0') ? context.ActiveSceneName : "No Scene";
+            drawChip("Scene", sceneLabel, context.IsSceneDirty ? ImVec4(0.36f, 0.26f, 0.08f, 1.0f) : ImVec4(0.17f, 0.25f, 0.20f, 1.0f));
+
+            if (context.IsSceneDirty)
+            {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.95f, 0.73f, 0.30f, 1.0f), "Unsaved changes");
+            }
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleVar(4);
+#else
+        (void)context;
+#endif
+    }
+
+    void EditorShell::RenderLayoutMenu(EditorPanelVisibility& visibility, const EditorPanelState& panelState)
     {
 #if __has_include(<imgui.h>)
         if (!ImGui::BeginMenu("Layout"))
@@ -377,13 +429,14 @@ namespace EditorApp
         {
             if (m_ActiveLayout.has_value())
             {
-                const auto snapshot = CaptureLayoutSnapshot(visibility);
+                const auto snapshot = CaptureLayoutSnapshot(visibility, panelState);
                 if (snapshot.has_value())
                 {
                     EditorLayoutDefinition layout;
                     layout.Name = m_ActiveLayout->Name;
                     layout.Scope = m_ActiveLayout->Scope;
                     layout.PanelVisibility = snapshot->PanelVisibility;
+                    layout.PanelState = snapshot->PanelState;
                     layout.ImGuiIni = snapshot->ImGuiIni;
                     HandleResult("save editor layout", m_LayoutManager.SaveLayout(layout));
                 }
@@ -458,10 +511,11 @@ namespace EditorApp
         ImGui::EndMenu();
 #else
         (void)visibility;
+        (void)panelState;
 #endif
     }
 
-    void EditorShell::RenderLayoutDialogs(EditorPanelVisibility& visibility)
+    void EditorShell::RenderLayoutDialogs(EditorPanelVisibility& visibility, const EditorPanelState& panelState)
     {
 #if __has_include(<imgui.h>)
         if (m_OpenSaveLayoutAsPopup)
@@ -492,7 +546,7 @@ namespace EditorApp
             if (ImGui::Button("Save", ImVec2(120.0f, 0.0f)))
             {
                 const std::string layoutName = EditorLayoutManager::SanitizeLayoutName(m_SaveLayoutName);
-                const auto snapshot = CaptureLayoutSnapshot(visibility);
+                const auto snapshot = CaptureLayoutSnapshot(visibility, panelState);
                 if (layoutName.empty())
                 {
                     LOG_WARN("Editor layout name must not be empty.");
@@ -503,6 +557,7 @@ namespace EditorApp
                     layout.Name = layoutName;
                     layout.Scope = m_SaveLayoutScope;
                     layout.PanelVisibility = snapshot->PanelVisibility;
+                    layout.PanelState = snapshot->PanelState;
                     layout.ImGuiIni = snapshot->ImGuiIni;
 
                     const auto saveResult = m_LayoutManager.SaveLayout(layout);
@@ -565,10 +620,11 @@ namespace EditorApp
         }
 #else
         (void)visibility;
+        (void)panelState;
 #endif
     }
 
-    std::optional<EditorShell::LayoutSnapshot> EditorShell::CaptureLayoutSnapshot(const EditorPanelVisibility& visibility) const
+    std::optional<EditorShell::LayoutSnapshot> EditorShell::CaptureLayoutSnapshot(const EditorPanelVisibility& visibility, const EditorPanelState& panelState) const
     {
 #if __has_include(<imgui.h>)
         size_t iniSize = 0;
@@ -578,18 +634,20 @@ namespace EditorApp
 
         LayoutSnapshot snapshot;
         snapshot.PanelVisibility = visibility;
+        snapshot.PanelState = panelState;
         snapshot.ImGuiIni.assign(iniData, iniSize);
         return snapshot;
 #else
         (void)visibility;
+        (void)panelState;
         return std::nullopt;
 #endif
     }
 
-    void EditorShell::PersistLayoutSessions(const EditorPanelVisibility& visibility)
+    void EditorShell::PersistLayoutSessions(const EditorPanelVisibility& visibility, const EditorPanelState& panelState)
     {
 #if __has_include(<imgui.h>)
-        const auto snapshot = CaptureLayoutSnapshot(visibility);
+        const auto snapshot = CaptureLayoutSnapshot(visibility, panelState);
         if (!snapshot.has_value())
             return;
 
@@ -604,6 +662,7 @@ namespace EditorApp
 
         EditorLayoutSession session;
         session.PanelVisibility = snapshot->PanelVisibility;
+        session.PanelState = snapshot->PanelState;
         session.ImGuiIni = snapshot->ImGuiIni;
         session.UseDefaultLayout = m_UseDefaultLayout;
         session.HasActiveLayout = m_ActiveLayout.has_value();
@@ -628,6 +687,7 @@ namespace EditorApp
         m_NextPersistTime = currentTime + 0.75;
 #else
         (void)visibility;
+        (void)panelState;
 #endif
     }
 

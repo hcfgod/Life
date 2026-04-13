@@ -22,6 +22,9 @@ namespace EditorApp
 {
     namespace
     {
+        constexpr float kMinGridScale = 0.0f;
+        constexpr float kMaxGridScale = 1.8f;
+
         enum class ProjectEntryKind
         {
             Directory,
@@ -56,7 +59,26 @@ namespace EditorApp
             value = buffer.data();
             return true;
         }
+
+         bool InputTextStringWithHint(const char* label, const char* hint, std::string& value)
+         {
+             std::array<char, 1024> buffer{};
+             const std::size_t copyLength = std::min(value.size(), buffer.size() - 1);
+             std::memcpy(buffer.data(), value.data(), copyLength);
+             buffer[copyLength] = '\0';
+
+             if (!ImGui::InputTextWithHint(label, hint, buffer.data(), buffer.size()))
+                 return false;
+
+             value = buffer.data();
+             return true;
+         }
 #endif
+
+         float ClampGridScale(float value)
+         {
+             return std::clamp(value, kMinGridScale, kMaxGridScale);
+         }
 
         std::string ToLowerAscii(std::string value)
         {
@@ -295,6 +317,22 @@ namespace EditorApp
 
             return "FILE";
         }
+
+#if __has_include(<imgui.h>)
+         ImVec4 ResolveAccentColor(ProjectEntryKind kind)
+         {
+             switch (kind)
+             {
+                 case ProjectEntryKind::Directory: return ImVec4(0.38f, 0.62f, 0.96f, 1.0f);
+                 case ProjectEntryKind::Scene: return ImVec4(0.40f, 0.82f, 0.60f, 1.0f);
+                 case ProjectEntryKind::Texture: return ImVec4(0.88f, 0.58f, 0.36f, 1.0f);
+                 case ProjectEntryKind::Material: return ImVec4(0.74f, 0.52f, 0.92f, 1.0f);
+                 case ProjectEntryKind::Shader: return ImVec4(0.96f, 0.72f, 0.36f, 1.0f);
+                 case ProjectEntryKind::Other:
+                 default: return ImVec4(0.62f, 0.66f, 0.76f, 1.0f);
+             }
+         }
+#endif
 
         bool LoadSceneIntoEditor(const std::filesystem::path& sceneIdentifier, const EditorServices& services, EditorSceneState& sceneState)
         {
@@ -604,6 +642,18 @@ namespace EditorApp
 #endif
     }
 
+    void ProjectAssetsPanel::ApplyState(const ProjectAssetsPanelState& state) noexcept
+    {
+        m_GridScale = ClampGridScale(state.GridScale);
+    }
+
+    ProjectAssetsPanelState ProjectAssetsPanel::CaptureState() const noexcept
+    {
+        ProjectAssetsPanelState state;
+        state.GridScale = ClampGridScale(m_GridScale);
+        return state;
+    }
+
     void ProjectAssetsPanel::QueueExternalFileDrop(std::filesystem::path absolutePath, float x, float y)
     {
         if (absolutePath.empty())
@@ -648,6 +698,12 @@ namespace EditorApp
         if (!m_ActiveFolderRelativePath.empty() && (!std::filesystem::exists(activeFolderAbsolutePath, ec) || !std::filesystem::is_directory(activeFolderAbsolutePath, ec)))
             m_ActiveFolderRelativePath.clear();
 
+        m_GridScale = ClampGridScale(m_GridScale);
+        const auto currentEntries = CollectEntries(assetsDirectory, m_ActiveFolderRelativePath);
+        const std::string activeFolderLabel = m_ActiveFolderRelativePath.empty()
+            ? std::string("Assets")
+            : std::string("Assets/") + m_ActiveFolderRelativePath.generic_string();
+
         const ImVec2 panelMin = ImGui::GetWindowPos();
         const ImVec2 panelMax(panelMin.x + ImGui::GetWindowSize().x, panelMin.y + ImGui::GetWindowSize().y);
         bool importedExternalAsset = false;
@@ -664,15 +720,23 @@ namespace EditorApp
             m_PendingExternalDrops.clear();
         }
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 6.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 7.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 8.0f));
 
-        if (ImGui::BeginChild("##ProjectAssetsToolbar", ImVec2(0.0f, 88.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+        if (ImGui::BeginChild("##ProjectAssetsToolbar", ImVec2(0.0f, 104.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
         {
-            ImGui::TextUnformatted("Project Assets");
+            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Project Assets");
             ImGui::SameLine();
-            if (ImGui::Button("Create"))
+            ImGui::TextDisabled("%zu items", currentEntries.size());
+            ImGui::TextDisabled("%s", activeFolderLabel.c_str());
+            ImGui::Separator();
+
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.33f, 0.54f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.41f, 0.64f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.29f, 0.48f, 1.0f));
+            if (ImGui::Button("Create", ImVec2(90.0f, 0.0f)))
                 ImGui::OpenPopup("##ProjectAssetsCreateMenu");
+            ImGui::PopStyleColor(3);
             if (ImGui::BeginPopup("##ProjectAssetsCreateMenu"))
             {
                 if (ImGui::MenuItem("Create Folder"))
@@ -692,16 +756,19 @@ namespace EditorApp
                 ImGui::EndPopup();
             }
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(180.0f);
-            ImGui::SliderFloat("Scale", &m_GridScale, 0.0f, 1.8f, "%.2fx");
-            m_GridScale = std::clamp(m_GridScale, 0.0f, 1.8f);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled("Scale");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(170.0f);
+            ImGui::SliderFloat("##ProjectAssetsScale", &m_GridScale, kMinGridScale, kMaxGridScale, "%.2fx");
+            m_GridScale = ClampGridScale(m_GridScale);
+            ImGui::SameLine();
             ImGui::SetNextItemWidth(-1.0f);
-            InputTextString("Search", m_SearchFilter);
+            InputTextStringWithHint("##ProjectAssetsSearch", "Search assets", m_SearchFilter);
         }
         ImGui::EndChild();
 
         const std::string filterLower = ToLowerAscii(m_SearchFilter);
-        const auto currentEntries = CollectEntries(assetsDirectory, m_ActiveFolderRelativePath);
         const bool useCompactList = m_GridScale <= 0.25f;
 
         if (m_OpenPendingPopup)
@@ -766,9 +833,11 @@ namespace EditorApp
 
         if (ImGui::BeginChild("##ProjectAssetsBrowser", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar))
         {
-            if (ImGui::BeginChild("##ProjectAssetsTree", ImVec2(260.0f, 0.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar))
+            if (ImGui::BeginChild("##ProjectAssetsTree", ImVec2(280.0f, 0.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar))
             {
-                ImGui::TextUnformatted("Folders");
+                ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Folders");
+                ImGui::SameLine();
+                ImGui::TextDisabled("Project structure");
                 ImGui::Separator();
 
                 std::function<void(const std::filesystem::path&, bool)> drawFolderNode =
@@ -881,6 +950,11 @@ namespace EditorApp
 
             if (ImGui::BeginChild("##ProjectAssetsGrid", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar))
             {
+                ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "%s", activeFolderLabel.c_str());
+                ImGui::SameLine();
+                ImGui::TextDisabled(useCompactList ? "List" : "Grid");
+                ImGui::Separator();
+
                 if (!m_ActiveFolderRelativePath.empty())
                 {
                     if (ImGui::Button("Up"))
@@ -950,7 +1024,9 @@ namespace EditorApp
 
                 if (visibleEntries.empty())
                 {
-                    ImGui::TextUnformatted(filterLower.empty() ? "This folder is empty." : "No assets match the current filter.");
+                    ImGui::Dummy(ImVec2(0.0f, 12.0f));
+                    ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), filterLower.empty() ? "No assets in this folder." : "No assets match the current filter.");
+                    ImGui::TextDisabled(filterLower.empty() ? "Create a folder, create a scene, or import files from Explorer." : "Try a different search term or clear the filter.");
                 }
                 else if (useCompactList)
                 {
@@ -958,6 +1034,10 @@ namespace EditorApp
                     {
                         ImGui::PushID(entry.RelativePath.generic_string().c_str());
                         const bool selected = m_SelectedRelativePath == entry.RelativePath;
+                        const ImVec4 accentColor = ResolveAccentColor(entry.Kind);
+                        ImGui::PushStyleColor(ImGuiCol_Header, selected ? ImVec4(accentColor.x * 0.42f, accentColor.y * 0.42f, accentColor.z * 0.42f, 0.88f) : ImVec4(0.12f, 0.15f, 0.20f, 0.68f));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(accentColor.x * 0.32f, accentColor.y * 0.32f, accentColor.z * 0.32f, 0.90f));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(accentColor.x * 0.46f, accentColor.y * 0.46f, accentColor.z * 0.46f, 0.94f));
                         const std::string rowLabel = std::string("[") + ResolveBadge(entry.Kind) + "] " + entry.DisplayName;
                         if (ImGui::Selectable(rowLabel.c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick))
                         {
@@ -971,6 +1051,7 @@ namespace EditorApp
                                 (void)LoadSceneIntoEditor(MakeAssetKey(entry.RelativePath), services, sceneState);
                             }
                         }
+                        ImGui::PopStyleColor(3);
 
                         if (ImGui::BeginPopupContextItem())
                         {
@@ -1060,17 +1141,24 @@ namespace EditorApp
                         ImGui::PushID(entry.RelativePath.generic_string().c_str());
                         ImGui::BeginGroup();
                         const bool selected = m_SelectedRelativePath == entry.RelativePath;
-                        if (selected)
-                            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.38f, 0.58f, 0.95f));
-
+                        const ImVec4 accentColor = ResolveAccentColor(entry.Kind);
+                        const ImVec4 cardColor = selected
+                            ? ImVec4(accentColor.x * 0.52f, accentColor.y * 0.52f, accentColor.z * 0.52f, 0.95f)
+                            : ImVec4(0.12f + accentColor.x * 0.08f, 0.14f + accentColor.y * 0.08f, 0.18f + accentColor.z * 0.08f, 1.0f);
+                        const ImVec4 cardHovered = ImVec4(cardColor.x + 0.05f, cardColor.y + 0.05f, cardColor.z + 0.05f, cardColor.w);
+                        const ImVec4 cardActive = ImVec4(cardColor.x + 0.02f, cardColor.y + 0.02f, cardColor.z + 0.02f, cardColor.w);
+                        ImGui::PushStyleColor(ImGuiCol_Button, cardColor);
+                        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, cardHovered);
+                        ImGui::PushStyleColor(ImGuiCol_ButtonActive, cardActive);
+                        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
                         if (ImGui::Button((std::string("[") + ResolveBadge(entry.Kind) + "]##Button").c_str(), ImVec2(cellSize - 12.0f, cellSize - 28.0f)))
                         {
                             m_SelectedRelativePath = entry.RelativePath;
                             if (entry.IsDirectory)
                                 m_ActiveFolderRelativePath = entry.RelativePath;
                         }
-                        if (selected)
-                            ImGui::PopStyleColor();
+                        ImGui::PopStyleVar();
+                        ImGui::PopStyleColor(3);
 
                         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
                         {

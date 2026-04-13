@@ -78,6 +78,11 @@ namespace EditorApp
             return EditorLayoutScope::Global;
         }
 
+        float ClampProjectAssetsGridScale(float value)
+        {
+            return std::clamp(value, 0.0f, 1.8f);
+        }
+
         nlohmann::json PanelVisibilityToJson(const EditorPanelVisibility& visibility)
         {
             return {
@@ -115,6 +120,34 @@ namespace EditorApp
             if (json.contains("fpsOverlay") && json["fpsOverlay"].is_boolean())
                 visibility.ShowFpsOverlay = json["fpsOverlay"].get<bool>();
             return visibility;
+        }
+
+        nlohmann::json PanelStateToJson(const EditorPanelState& state)
+        {
+            return {
+                {
+                    "projectAssets",
+                    {
+                        { "gridScale", ClampProjectAssetsGridScale(state.ProjectAssets.GridScale) }
+                    }
+                }
+            };
+        }
+
+        EditorPanelState PanelStateFromJson(const nlohmann::json& json)
+        {
+            EditorPanelState state;
+            if (!json.is_object())
+                return state;
+
+            if (json.contains("projectAssets") && json["projectAssets"].is_object())
+            {
+                const nlohmann::json& projectAssets = json["projectAssets"];
+                if (projectAssets.contains("gridScale") && projectAssets["gridScale"].is_number())
+                    state.ProjectAssets.GridScale = ClampProjectAssetsGridScale(projectAssets["gridScale"].get<float>());
+            }
+
+            return state;
         }
 
         Life::Result<nlohmann::json> ReadJsonFile(const std::filesystem::path& path)
@@ -193,6 +226,7 @@ namespace EditorApp
                 { "name", layout.Name },
                 { "scope", ScopeToString(layout.Scope) },
                 { "panelVisibility", PanelVisibilityToJson(layout.PanelVisibility) },
+                { "panelState", PanelStateToJson(layout.PanelState) },
                 { "imguiIni", layout.ImGuiIni }
             };
         }
@@ -220,6 +254,8 @@ namespace EditorApp
                 layout.Scope = ScopeFromString(root["scope"].get<std::string>());
             if (root.contains("panelVisibility"))
                 layout.PanelVisibility = PanelVisibilityFromJson(root["panelVisibility"]);
+            if (root.contains("panelState"))
+                layout.PanelState = PanelStateFromJson(root["panelState"]);
             if (root.contains("imguiIni") && root["imguiIni"].is_string())
                 layout.ImGuiIni = root["imguiIni"].get<std::string>();
 
@@ -238,6 +274,7 @@ namespace EditorApp
             nlohmann::json root = {
                 { "version", session.Version },
                 { "panelVisibility", PanelVisibilityToJson(session.PanelVisibility) },
+                { "panelState", PanelStateToJson(session.PanelState) },
                 { "imguiIni", session.ImGuiIni },
                 { "useDefaultLayout", session.UseDefaultLayout },
                 { "hasActiveLayout", session.HasActiveLayout }
@@ -271,6 +308,8 @@ namespace EditorApp
 
             if (root.contains("panelVisibility"))
                 session.PanelVisibility = PanelVisibilityFromJson(root["panelVisibility"]);
+            if (root.contains("panelState"))
+                session.PanelState = PanelStateFromJson(root["panelState"]);
             if (root.contains("imguiIni") && root["imguiIni"].is_string())
                 session.ImGuiIni = root["imguiIni"].get<std::string>();
             if (root.contains("useDefaultLayout") && root["useDefaultLayout"].is_boolean())

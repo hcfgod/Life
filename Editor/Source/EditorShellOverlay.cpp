@@ -412,8 +412,10 @@ namespace EditorApp
             frameContext.IsSceneDirty = m_Services.SceneService->get().IsActiveSceneDirty();
         }
 
-        m_Shell.Begin(m_PanelVisibility, actions, frameContext);
+        m_Shell.Begin(m_PanelVisibility, m_PanelState, actions, frameContext);
+        m_ProjectAssetsPanel.ApplyState(m_PanelState.ProjectAssets);
         m_ProjectAssetsPanel.Render(m_PanelVisibility.ShowProjectAssets, m_Services, m_SceneState);
+        m_PanelState.ProjectAssets = m_ProjectAssetsPanel.CaptureState();
         m_HierarchyPanel.Render(m_PanelVisibility.ShowHierarchy, m_Services, m_SceneState);
         m_InspectorPanel.Render(m_PanelVisibility.ShowInspector, m_Services, m_SceneState);
         m_ConsolePanel.Render(m_PanelVisibility.ShowConsole);
@@ -422,7 +424,7 @@ namespace EditorApp
         m_SceneViewportPanel.Render(m_PanelVisibility.ShowScene, m_Services, m_SceneState, m_CameraTool);
         m_FpsOverlayPanel.Render(m_PanelVisibility.ShowFpsOverlay);
         RenderSceneDialogs();
-        m_Shell.End(m_PanelVisibility);
+        m_Shell.End(m_PanelVisibility, m_PanelState);
 
         HandleShellActions(actions);
 

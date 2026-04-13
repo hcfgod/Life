@@ -23,6 +23,7 @@ namespace Life
     struct TagComponent
     {
         std::string Tag = "Entity";
+        bool Enabled = true;
     };
 
     struct TransformComponent

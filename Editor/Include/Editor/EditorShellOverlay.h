@@ -43,6 +43,7 @@ namespace EditorApp
 
         EditorServices m_Services;
         EditorPanelVisibility m_PanelVisibility;
+        EditorPanelState m_PanelState;
         EditorShell m_Shell;
         EditorProjectHub m_ProjectHub;
         EditorCameraTool m_CameraTool;

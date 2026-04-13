@@ -73,6 +73,11 @@ namespace EditorApp
 
         if (ImGui::Begin("Scene", &isOpen))
         {
+            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Scene");
+            ImGui::SameLine();
+            ImGui::TextDisabled("Viewport and scene interaction");
+            ImGui::Separator();
+
             const ImVec2 availableRegion = ImGui::GetContentRegionAvail();
             if (availableRegion.x >= 1.0f && availableRegion.y >= 1.0f)
             {
@@ -163,7 +168,13 @@ namespace EditorApp
             return;
 
         if (ImGui::Begin("Renderer Stress", &isOpen))
+        {
+            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Renderer Stress");
+            ImGui::SameLine();
+            ImGui::TextDisabled("Batching and scene-surface stress configuration");
+            ImGui::Separator();
             RenderStressControls();
+        }
 
         ImGui::End();
 #else
@@ -182,6 +193,7 @@ namespace EditorApp
         if (!ImGui::CollapsingHeader("Renderer Stress Test", ImGuiTreeNodeFlags_DefaultOpen))
             return;
 
+        ImGui::SeparatorText("Population");
         ImGui::Checkbox("Enable", &m_StressSettings.Enabled);
 
         int columns = static_cast<int>(m_StressSettings.Columns);
@@ -196,17 +208,21 @@ namespace EditorApp
         if (ImGui::SliderFloat2("Quad Size", quadSize, 0.05f, 3.0f, "%.2f"))
             m_StressSettings.QuadSize = { quadSize[0], quadSize[1] };
 
+        ImGui::SeparatorText("Rendering");
         ImGui::SliderFloat("Spacing", &m_StressSettings.Spacing, 0.05f, 3.0f, "%.2f");
         ImGui::Checkbox("Draw Textured Quads", &m_StressSettings.DrawTexturedQuads);
         ImGui::SameLine();
         ImGui::Checkbox("Draw Colored Quads", &m_StressSettings.DrawColoredQuads);
         ImGui::SliderFloat("Textured Mix", &m_StressSettings.TexturedMix, 0.0f, 1.0f, "%.2f");
+
+        ImGui::SeparatorText("Animation");
         ImGui::Checkbox("Animate", &m_StressSettings.Animate);
         ImGui::SliderFloat("Motion Amplitude", &m_StressSettings.MotionAmplitude, 0.0f, 1.5f, "%.2f");
         ImGui::SliderFloat("Rotation Speed", &m_StressSettings.RotationSpeed, 0.0f, 4.0f, "%.2f");
         ImGui::SliderFloat("Depth Step", &m_StressSettings.DepthStep, 0.0f, 0.01f, "%.4f");
 
         const uint32_t configuredQuadCount = GetConfiguredQuadCount();
+        ImGui::SeparatorText("Summary");
         ImGui::Text("Configured Quads: %u", configuredQuadCount);
         ImGui::Text("Checker Texture: %s", m_CheckerTextureAsset ? "Loaded" : "Unavailable");
 

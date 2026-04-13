@@ -64,6 +64,8 @@ namespace Life
         {
             const auto& [transform, sprite] = view.get<TransformComponent, SpriteComponent>(handle);
             const Entity entity = scene.WrapEntity(handle);
+            if (!entity.IsEnabled())
+                continue;
             const glm::mat4 worldTransform = scene.GetWorldTransformMatrix(entity);
 
             QuadCommand quad;

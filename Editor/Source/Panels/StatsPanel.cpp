@@ -20,6 +20,11 @@ namespace EditorApp
                 ? services.ImGuiSystem->get().GetBackend()
                 : Life::GraphicsBackend::None;
 
+            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Stats");
+            ImGui::SameLine();
+            ImGui::TextDisabled("Frame and renderer diagnostics");
+            ImGui::SeparatorText("Runtime");
+
             ImGui::Text("Graphics Backend: %s", backend == Life::GraphicsBackend::Vulkan ? "Vulkan" : backend == Life::GraphicsBackend::D3D12 ? "D3D12" : "None");
             if (services.GraphicsDevice)
             {
@@ -27,17 +32,20 @@ namespace EditorApp
                 if (ImGui::Checkbox("VSync", &vsyncEnabled))
                     services.GraphicsDevice->get().RequestVSync(vsyncEnabled);
             }
+
+            ImGui::SeparatorText("Scene Surface");
             ImGui::Text("Scene Surface Size: %u x %u", viewportState.SurfaceWidth, viewportState.SurfaceHeight);
             ImGui::Text("Scene Surface Ready: %s", viewportState.SurfaceReady ? "true" : "false");
             ImGui::Text("Scene Render Succeeded: %s", viewportState.LastRenderSucceeded ? "true" : "false");
 
             if (services.ImGuiSystem)
             {
+                ImGui::SeparatorText("ImGui");
                 ImGui::Text("ImGui Keyboard Capture: %s", services.ImGuiSystem->get().WantsKeyboardCapture() ? "true" : "false");
                 ImGui::Text("ImGui Mouse Capture: %s", services.ImGuiSystem->get().WantsMouseCapture() ? "true" : "false");
             }
 
-            ImGui::Separator();
+            ImGui::SeparatorText("Renderer2D");
             ImGui::Text("Configured Quads: %u", viewportState.RequestedQuadCount);
             ImGui::Text("Configured Textured Quads: %u", viewportState.TexturedQuadCount);
             ImGui::Text("Configured Colored Quads: %u", viewportState.UntexturedQuadCount);

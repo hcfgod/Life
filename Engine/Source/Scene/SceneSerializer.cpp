@@ -18,6 +18,7 @@ namespace Life
         constexpr const char* kEntitiesField = "entities";
         constexpr const char* kIdField = "id";
         constexpr const char* kTagField = "tag";
+        constexpr const char* kEnabledField = "enabled";
         constexpr const char* kParentIdField = "parentId";
         constexpr const char* kTransformField = "transform";
         constexpr const char* kSpriteField = "sprite";
@@ -108,6 +109,7 @@ namespace Life
             nlohmann::json record;
             record[kIdField] = entity.GetId();
             record[kTagField] = entity.GetTag();
+            record[kEnabledField] = entity.IsEnabled();
             if (Entity parent = entity.GetParent(); parent.IsValid())
                 record[kParentIdField] = parent.GetId();
 
@@ -196,6 +198,8 @@ namespace Life
 
                     if (record.contains(kIdField) && record[kIdField].is_string())
                         entity.GetComponent<IdComponent>().Id = record[kIdField].get<std::string>();
+                    if (record.contains(kEnabledField) && record[kEnabledField].is_boolean())
+                        entity.SetEnabled(record[kEnabledField].get<bool>());
 
                     if (record.contains(kTransformField) && record[kTransformField].is_object())
                     {

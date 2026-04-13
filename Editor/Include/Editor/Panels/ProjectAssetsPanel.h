@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Editor/Scene/EditorSceneState.h"
+#include "Editor/Shell/EditorShellTypes.h"
 #include "Engine.h"
 
 #include <filesystem>
@@ -15,6 +16,8 @@ namespace EditorApp
     class ProjectAssetsPanel
     {
     public:
+        void ApplyState(const ProjectAssetsPanelState& state) noexcept;
+        ProjectAssetsPanelState CaptureState() const noexcept;
         void Render(bool& isOpen, const EditorServices& services, EditorSceneState& sceneState);
         void QueueExternalFileDrop(std::filesystem::path absolutePath, float x, float y);
 

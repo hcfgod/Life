@@ -38,6 +38,7 @@ namespace EditorApp
         std::string Name;
         EditorLayoutScope Scope = EditorLayoutScope::Global;
         EditorPanelVisibility PanelVisibility;
+        EditorPanelState PanelState;
         std::string ImGuiIni;
     };
 
@@ -47,6 +48,7 @@ namespace EditorApp
 
         uint32_t Version = CurrentVersion;
         EditorPanelVisibility PanelVisibility;
+        EditorPanelState PanelState;
         std::string ImGuiIni;
         bool UseDefaultLayout = true;
         bool HasActiveLayout = false;

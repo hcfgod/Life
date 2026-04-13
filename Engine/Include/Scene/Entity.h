@@ -26,6 +26,8 @@ namespace Life
         const std::string& GetId() const;
         const std::string& GetTag() const;
         void SetTag(std::string tag);
+        bool IsEnabled() const;
+        void SetEnabled(bool enabled);
 
         template<typename TComponent, typename... TArguments>
         TComponent& AddComponent(TArguments&&... arguments);

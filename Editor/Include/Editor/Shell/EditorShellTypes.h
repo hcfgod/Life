@@ -2,6 +2,36 @@
 
 namespace EditorApp
 {
+    struct ProjectAssetsPanelState
+    {
+        float GridScale = 1.0f;
+    };
+
+    inline bool operator==(const ProjectAssetsPanelState& lhs, const ProjectAssetsPanelState& rhs) noexcept
+    {
+        return lhs.GridScale == rhs.GridScale;
+    }
+
+    inline bool operator!=(const ProjectAssetsPanelState& lhs, const ProjectAssetsPanelState& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
+    struct EditorPanelState
+    {
+        ProjectAssetsPanelState ProjectAssets;
+    };
+
+    inline bool operator==(const EditorPanelState& lhs, const EditorPanelState& rhs) noexcept
+    {
+        return lhs.ProjectAssets == rhs.ProjectAssets;
+    }
+
+    inline bool operator!=(const EditorPanelState& lhs, const EditorPanelState& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
     struct EditorPanelVisibility
     {
         bool ShowProjectAssets = true;

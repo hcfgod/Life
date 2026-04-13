@@ -26,18 +26,19 @@ namespace EditorApp
         };
 
         void ResetLayout() noexcept;
-        void Begin(EditorPanelVisibility& visibility, EditorShellActions& actions, const FrameContext& context);
-        void End(const EditorPanelVisibility& visibility);
+        void Begin(EditorPanelVisibility& visibility, EditorPanelState& panelState, EditorShellActions& actions, const FrameContext& context);
+        void End(const EditorPanelVisibility& visibility, const EditorPanelState& panelState);
 
     private:
         struct LayoutSnapshot
         {
             EditorPanelVisibility PanelVisibility;
+            EditorPanelState PanelState;
             std::string ImGuiIni;
 
             bool operator==(const LayoutSnapshot& other) const noexcept
             {
-                return PanelVisibility == other.PanelVisibility && ImGuiIni == other.ImGuiIni;
+                return PanelVisibility == other.PanelVisibility && PanelState == other.PanelState && ImGuiIni == other.ImGuiIni;
             }
         };
 
@@ -57,19 +58,20 @@ namespace EditorApp
 
         void BuildDefaultLayout();
         void UpdateProjectContext(const FrameContext& context);
-        void RestoreStartupLayout(EditorPanelVisibility& visibility);
-        void ProcessPendingLayoutCommand(EditorPanelVisibility& visibility);
+        void RestoreStartupLayout(EditorPanelVisibility& visibility, EditorPanelState& panelState);
+        void ProcessPendingLayoutCommand(EditorPanelVisibility& visibility, EditorPanelState& panelState);
         void QueueLoadLayout(const EditorLayoutId& layoutId);
         void QueueApplyDefaultLayout() noexcept;
         void QueueRevertLayout() noexcept;
-        void ApplyDefaultLayout(EditorPanelVisibility& visibility);
-        void ApplySession(const EditorLayoutSession& session, EditorPanelVisibility& visibility);
-        void ApplyLayout(const EditorLayoutDefinition& layout, EditorPanelVisibility& visibility);
-        void RenderMenuBar(EditorPanelVisibility& visibility, EditorShellActions& actions, const FrameContext& context);
-        void RenderLayoutMenu(EditorPanelVisibility& visibility);
-        void RenderLayoutDialogs(EditorPanelVisibility& visibility);
-        std::optional<LayoutSnapshot> CaptureLayoutSnapshot(const EditorPanelVisibility& visibility) const;
-        void PersistLayoutSessions(const EditorPanelVisibility& visibility);
+        void ApplyDefaultLayout(EditorPanelVisibility& visibility, EditorPanelState& panelState);
+        void ApplySession(const EditorLayoutSession& session, EditorPanelVisibility& visibility, EditorPanelState& panelState);
+        void ApplyLayout(const EditorLayoutDefinition& layout, EditorPanelVisibility& visibility, EditorPanelState& panelState);
+        void RenderMenuBar(EditorPanelVisibility& visibility, const EditorPanelState& panelState, EditorShellActions& actions, const FrameContext& context);
+        void RenderWorkspaceChrome(const FrameContext& context) const;
+        void RenderLayoutMenu(EditorPanelVisibility& visibility, const EditorPanelState& panelState);
+        void RenderLayoutDialogs(EditorPanelVisibility& visibility, const EditorPanelState& panelState);
+        std::optional<LayoutSnapshot> CaptureLayoutSnapshot(const EditorPanelVisibility& visibility, const EditorPanelState& panelState) const;
+        void PersistLayoutSessions(const EditorPanelVisibility& visibility, const EditorPanelState& panelState);
         void HandleResult(const char* action, const Life::Result<void>& result) const;
         void OpenSaveLayoutAsDialog(EditorLayoutScope preferredScope);
 

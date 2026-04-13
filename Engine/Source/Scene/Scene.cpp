@@ -466,6 +466,16 @@ namespace Life
         m_Scene->m_Registry.get<TagComponent>(m_Handle).Tag = std::move(tag);
     }
 
+    bool Entity::IsEnabled() const
+    {
+        return m_Scene->m_Registry.get<TagComponent>(m_Handle).Enabled;
+    }
+
+    void Entity::SetEnabled(bool enabled)
+    {
+        m_Scene->m_Registry.get<TagComponent>(m_Handle).Enabled = enabled;
+    }
+
     Entity Entity::GetParent() const
     {
         return GetScene().GetParent(*this);

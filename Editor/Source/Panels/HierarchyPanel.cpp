@@ -24,6 +24,14 @@ namespace EditorApp
         };
 
 #if __has_include(<imgui.h>)
+        void DrawPanelHeader(const char* title, const char* subtitle)
+        {
+            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "%s", title);
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", subtitle);
+            ImGui::Separator();
+        }
+
         DropMode DetermineDropMode(const ImVec2& rectMin, const ImVec2& rectMax)
         {
             const float itemHeight = rectMax.y - rectMin.y;
@@ -253,6 +261,8 @@ namespace EditorApp
 
         if (ImGui::Begin("Hierarchy", &isOpen))
         {
+            DrawPanelHeader("Hierarchy", "Scene structure and parenting");
+
             if (!sceneState.StatusMessage.empty())
             {
                 const ImVec4 color = sceneState.StatusIsError
@@ -273,12 +283,16 @@ namespace EditorApp
                 bool changed = false;
                 Life::Entity pendingDelete;
 
-                if (ImGui::Button("Create Entity"))
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.33f, 0.54f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.41f, 0.64f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.29f, 0.48f, 1.0f));
+                if (ImGui::Button("Create Entity", ImVec2(-1.0f, 0.0f)))
                 {
                     const Life::Entity entity = scene.CreateEntity("Entity");
                     sceneState.SelectEntity(entity);
                     changed = true;
                 }
+                ImGui::PopStyleColor(3);
 
                 if (ImGui::BeginPopupContextWindow("HierarchyContext", ImGuiPopupFlags_NoOpenOverItems | ImGuiPopupFlags_MouseButtonRight))
                 {
@@ -291,9 +305,11 @@ namespace EditorApp
                     ImGui::EndPopup();
                 }
 
-                ImGui::Separator();
+                ImGui::SeparatorText("Entities");
 
                 const auto roots = scene.GetRootEntities();
+                if (roots.empty())
+                    ImGui::TextDisabled("No entities in the active scene.");
                 for (const Life::Entity root : roots)
                     changed |= RenderEntityNode(scene, root, sceneState, pendingDelete);
 
