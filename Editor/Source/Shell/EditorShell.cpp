@@ -1,5 +1,12 @@
 #include "Editor/Shell/EditorShell.h"
 
+#include "Assets/Project.h"
+#include "Core/Log.h"
+
+#include <algorithm>
+#include <array>
+#include <cstring>
+
 #if __has_include(<imgui.h>)
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -7,14 +14,36 @@
 
 namespace EditorApp
 {
+    namespace
+    {
+#if __has_include(<imgui.h>)
+        bool InputTextString(const char* label, std::string& value)
+        {
+            std::array<char, 1024> buffer{};
+            const std::size_t copyLength = std::min(value.size(), buffer.size() - 1);
+            std::memcpy(buffer.data(), value.data(), copyLength);
+            buffer[copyLength] = '\0';
+
+            if (!ImGui::InputText(label, buffer.data(), buffer.size()))
+                return false;
+
+            value = buffer.data();
+            return true;
+        }
+#endif
+    }
+
     void EditorShell::ResetLayout() noexcept
     {
         m_LayoutInitialized = false;
+        m_NextPersistTime = 0.0;
     }
 
     void EditorShell::Begin(EditorPanelVisibility& visibility, EditorShellActions& actions, const FrameContext& context)
     {
 #if __has_include(<imgui.h>)
+        UpdateProjectContext(context);
+
         ImGuiWindowFlags dockspaceWindowFlags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -35,11 +64,16 @@ namespace EditorApp
         ImGui::Begin("EditorRoot", nullptr, dockspaceWindowFlags);
         ImGui::PopStyleVar(3);
 
-        BuildDefaultLayout();
+        RestoreStartupLayout(visibility);
+        ProcessPendingLayoutCommand(visibility);
+        if (!m_LayoutInitialized && m_UseDefaultLayout)
+            BuildDefaultLayout();
+
         RenderMenuBar(visibility, actions, context);
 
         const ImGuiID dockspaceId = ImGui::GetID("EditorDockspace");
         ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+        RenderLayoutDialogs(visibility);
 #else
         (void)visibility;
         (void)actions;
@@ -47,10 +81,13 @@ namespace EditorApp
 #endif
     }
 
-    void EditorShell::End()
+    void EditorShell::End(const EditorPanelVisibility& visibility)
     {
 #if __has_include(<imgui.h>)
         ImGui::End();
+        PersistLayoutSessions(visibility);
+#else
+        (void)visibility;
 #endif
     }
 
@@ -81,6 +118,183 @@ namespace EditorApp
         ImGui::DockBuilderDockWindow("Stats", rightDockId);
         ImGui::DockBuilderDockWindow("Scene", rootDockId);
         ImGui::DockBuilderFinish(dockspaceId);
+#endif
+    }
+
+    void EditorShell::UpdateProjectContext(const FrameContext& context)
+    {
+        if (m_LayoutManager.GetActiveProject() == context.ActiveProject)
+            return;
+
+        m_LayoutManager.SetActiveProject(context.ActiveProject);
+        m_LayoutInitialized = false;
+        m_StartupLayoutResolved = false;
+        m_UseDefaultLayout = true;
+        m_ActiveLayout.reset();
+        m_LastPersistedProjectSession.reset();
+        m_LastPersistedGlobalSession.reset();
+        m_NextPersistTime = 0.0;
+        m_PendingLayoutCommand = {};
+    }
+
+    void EditorShell::RestoreStartupLayout(EditorPanelVisibility& visibility)
+    {
+#if __has_include(<imgui.h>)
+        if (m_StartupLayoutResolved)
+            return;
+
+        m_StartupLayoutResolved = true;
+
+        if (m_LayoutManager.HasProjectScope())
+        {
+            const auto projectSessionResult = m_LayoutManager.LoadProjectSession();
+            if (projectSessionResult.IsSuccess())
+            {
+                ApplySession(projectSessionResult.GetValue(), visibility);
+                return;
+            }
+
+            if (projectSessionResult.GetError().GetCode() != Life::ErrorCode::FileNotFound)
+                LOG_WARN("Failed to restore project editor layout session: {}", projectSessionResult.GetError().GetErrorMessage());
+        }
+
+        const auto globalSessionResult = m_LayoutManager.LoadGlobalSession();
+        if (globalSessionResult.IsSuccess())
+        {
+            ApplySession(globalSessionResult.GetValue(), visibility);
+            return;
+        }
+
+        if (globalSessionResult.GetError().GetCode() != Life::ErrorCode::FileNotFound)
+            LOG_WARN("Failed to restore global editor layout session: {}", globalSessionResult.GetError().GetErrorMessage());
+
+        ApplyDefaultLayout(visibility);
+#else
+        (void)visibility;
+#endif
+    }
+
+    void EditorShell::ProcessPendingLayoutCommand(EditorPanelVisibility& visibility)
+    {
+#if __has_include(<imgui.h>)
+        const PendingLayoutCommand command = m_PendingLayoutCommand;
+        m_PendingLayoutCommand = {};
+
+        switch (command.Type)
+        {
+        case PendingLayoutCommandType::LoadLayout:
+        {
+            const auto layoutResult = m_LayoutManager.LoadLayout(command.LayoutId);
+            if (layoutResult.IsFailure())
+            {
+                LOG_WARN("Failed to load editor layout '{}': {}", command.LayoutId.Name, layoutResult.GetError().GetErrorMessage());
+                break;
+            }
+
+            ApplyLayout(layoutResult.GetValue(), visibility);
+            LOG_INFO("Loaded {} editor layout '{}'.", command.LayoutId.Scope == EditorLayoutScope::Project ? "project" : "global", command.LayoutId.Name);
+            break;
+        }
+        case PendingLayoutCommandType::ApplyDefault:
+            ApplyDefaultLayout(visibility);
+            LOG_INFO("Applied default editor layout.");
+            break;
+        case PendingLayoutCommandType::Revert:
+            if (m_ActiveLayout.has_value())
+                QueueLoadLayout(*m_ActiveLayout);
+            else
+                ApplyDefaultLayout(visibility);
+            break;
+        case PendingLayoutCommandType::None:
+        default:
+            break;
+        }
+
+        if (m_PendingLayoutCommand.Type == PendingLayoutCommandType::LoadLayout)
+            ProcessPendingLayoutCommand(visibility);
+#else
+        (void)visibility;
+#endif
+    }
+
+    void EditorShell::QueueLoadLayout(const EditorLayoutId& layoutId)
+    {
+        m_PendingLayoutCommand.Type = PendingLayoutCommandType::LoadLayout;
+        m_PendingLayoutCommand.LayoutId = layoutId;
+    }
+
+    void EditorShell::QueueApplyDefaultLayout() noexcept
+    {
+        m_PendingLayoutCommand = { PendingLayoutCommandType::ApplyDefault, {} };
+    }
+
+    void EditorShell::QueueRevertLayout() noexcept
+    {
+        m_PendingLayoutCommand = { PendingLayoutCommandType::Revert, {} };
+    }
+
+    void EditorShell::ApplyDefaultLayout(EditorPanelVisibility& visibility)
+    {
+#if __has_include(<imgui.h>)
+        visibility = EditorLayoutManager::GetDefaultPanelVisibility();
+        ImGui::ClearIniSettings();
+        m_ActiveLayout.reset();
+        m_UseDefaultLayout = true;
+        m_LayoutInitialized = false;
+        BuildDefaultLayout();
+#else
+        (void)visibility;
+#endif
+    }
+
+    void EditorShell::ApplySession(const EditorLayoutSession& session, EditorPanelVisibility& visibility)
+    {
+#if __has_include(<imgui.h>)
+        visibility = session.PanelVisibility;
+        m_UseDefaultLayout = session.UseDefaultLayout;
+        if (session.HasActiveLayout && session.ActiveLayout.IsValid())
+            m_ActiveLayout = session.ActiveLayout;
+        else
+            m_ActiveLayout.reset();
+
+        ImGui::ClearIniSettings();
+        if (!session.ImGuiIni.empty())
+        {
+            ImGui::LoadIniSettingsFromMemory(session.ImGuiIni.c_str(), session.ImGuiIni.size());
+            m_LayoutInitialized = true;
+        }
+        else
+        {
+            m_LayoutInitialized = false;
+            BuildDefaultLayout();
+        }
+#else
+        (void)session;
+        (void)visibility;
+#endif
+    }
+
+    void EditorShell::ApplyLayout(const EditorLayoutDefinition& layout, EditorPanelVisibility& visibility)
+    {
+#if __has_include(<imgui.h>)
+        visibility = layout.PanelVisibility;
+        m_ActiveLayout = EditorLayoutId{ layout.Scope, layout.Name };
+        m_UseDefaultLayout = false;
+        ImGui::ClearIniSettings();
+        if (!layout.ImGuiIni.empty())
+        {
+            ImGui::LoadIniSettingsFromMemory(layout.ImGuiIni.c_str(), layout.ImGuiIni.size());
+            m_LayoutInitialized = true;
+        }
+        else
+        {
+            ApplyDefaultLayout(visibility);
+            m_UseDefaultLayout = false;
+            m_ActiveLayout = EditorLayoutId{ layout.Scope, layout.Name };
+        }
+#else
+        (void)layout;
+        (void)visibility;
 #endif
     }
 
@@ -125,6 +339,8 @@ namespace EditorApp
             ImGui::EndMenu();
         }
 
+        RenderLayoutMenu(visibility);
+
         ImGui::Separator();
         ImGui::TextUnformatted("Life Editor");
         if (context.ActiveProjectName != nullptr && context.ActiveProjectName[0] != '\0')
@@ -143,5 +359,292 @@ namespace EditorApp
         (void)actions;
         (void)context;
 #endif
+    }
+
+    void EditorShell::RenderLayoutMenu(EditorPanelVisibility& visibility)
+    {
+#if __has_include(<imgui.h>)
+        if (!ImGui::BeginMenu("Layout"))
+            return;
+
+        if (ImGui::MenuItem("Default Layout"))
+            QueueApplyDefaultLayout();
+
+        if (ImGui::MenuItem("Revert Layout", nullptr, false, m_UseDefaultLayout || m_ActiveLayout.has_value()))
+            QueueRevertLayout();
+
+        if (ImGui::MenuItem("Save Layout"))
+        {
+            if (m_ActiveLayout.has_value())
+            {
+                const auto snapshot = CaptureLayoutSnapshot(visibility);
+                if (snapshot.has_value())
+                {
+                    EditorLayoutDefinition layout;
+                    layout.Name = m_ActiveLayout->Name;
+                    layout.Scope = m_ActiveLayout->Scope;
+                    layout.PanelVisibility = snapshot->PanelVisibility;
+                    layout.ImGuiIni = snapshot->ImGuiIni;
+                    HandleResult("save editor layout", m_LayoutManager.SaveLayout(layout));
+                }
+            }
+            else
+            {
+                OpenSaveLayoutAsDialog(m_LayoutManager.HasProjectScope() ? EditorLayoutScope::Project : EditorLayoutScope::Global);
+            }
+        }
+
+        if (ImGui::MenuItem("Save Layout As..."))
+            OpenSaveLayoutAsDialog(m_ActiveLayout.has_value() ? m_ActiveLayout->Scope : (m_LayoutManager.HasProjectScope() ? EditorLayoutScope::Project : EditorLayoutScope::Global));
+
+        if (ImGui::BeginMenu("Load Global Layout"))
+        {
+            const auto layouts = m_LayoutManager.ListLayouts(EditorLayoutScope::Global);
+            if (layouts.empty())
+                ImGui::MenuItem("No Global Layouts", nullptr, false, false);
+            for (const auto& layout : layouts)
+            {
+                if (ImGui::MenuItem(layout.Id.Name.c_str()))
+                    QueueLoadLayout(layout.Id);
+            }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Load Project Layout", m_LayoutManager.HasProjectScope()))
+        {
+            const auto layouts = m_LayoutManager.ListLayouts(EditorLayoutScope::Project);
+            if (layouts.empty())
+                ImGui::MenuItem("No Project Layouts", nullptr, false, false);
+            for (const auto& layout : layouts)
+            {
+                if (ImGui::MenuItem(layout.Id.Name.c_str()))
+                    QueueLoadLayout(layout.Id);
+            }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Delete Global Layout"))
+        {
+            const auto layouts = m_LayoutManager.ListLayouts(EditorLayoutScope::Global);
+            if (layouts.empty())
+                ImGui::MenuItem("No Global Layouts", nullptr, false, false);
+            for (const auto& layout : layouts)
+            {
+                if (ImGui::MenuItem(layout.Id.Name.c_str()))
+                {
+                    m_DeleteLayoutTarget = layout.Id;
+                    m_OpenDeleteLayoutPopup = true;
+                }
+            }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Delete Project Layout", m_LayoutManager.HasProjectScope()))
+        {
+            const auto layouts = m_LayoutManager.ListLayouts(EditorLayoutScope::Project);
+            if (layouts.empty())
+                ImGui::MenuItem("No Project Layouts", nullptr, false, false);
+            for (const auto& layout : layouts)
+            {
+                if (ImGui::MenuItem(layout.Id.Name.c_str()))
+                {
+                    m_DeleteLayoutTarget = layout.Id;
+                    m_OpenDeleteLayoutPopup = true;
+                }
+            }
+            ImGui::EndMenu();
+        }
+
+        ImGui::EndMenu();
+#else
+        (void)visibility;
+#endif
+    }
+
+    void EditorShell::RenderLayoutDialogs(EditorPanelVisibility& visibility)
+    {
+#if __has_include(<imgui.h>)
+        if (m_OpenSaveLayoutAsPopup)
+        {
+            ImGui::OpenPopup("Save Layout As");
+            m_OpenSaveLayoutAsPopup = false;
+        }
+        if (m_OpenDeleteLayoutPopup)
+        {
+            ImGui::OpenPopup("Delete Layout");
+            m_OpenDeleteLayoutPopup = false;
+        }
+
+        if (ImGui::BeginPopupModal("Save Layout As", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            InputTextString("Layout Name", m_SaveLayoutName);
+            int layoutScope = m_SaveLayoutScope == EditorLayoutScope::Project ? 1 : 0;
+            if (ImGui::RadioButton("Global", layoutScope == 0))
+                layoutScope = 0;
+            if (m_LayoutManager.HasProjectScope())
+            {
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Project", layoutScope == 1))
+                    layoutScope = 1;
+            }
+            m_SaveLayoutScope = layoutScope == 1 && m_LayoutManager.HasProjectScope() ? EditorLayoutScope::Project : EditorLayoutScope::Global;
+
+            if (ImGui::Button("Save", ImVec2(120.0f, 0.0f)))
+            {
+                const std::string layoutName = EditorLayoutManager::SanitizeLayoutName(m_SaveLayoutName);
+                const auto snapshot = CaptureLayoutSnapshot(visibility);
+                if (layoutName.empty())
+                {
+                    LOG_WARN("Editor layout name must not be empty.");
+                }
+                else if (snapshot.has_value())
+                {
+                    EditorLayoutDefinition layout;
+                    layout.Name = layoutName;
+                    layout.Scope = m_SaveLayoutScope;
+                    layout.PanelVisibility = snapshot->PanelVisibility;
+                    layout.ImGuiIni = snapshot->ImGuiIni;
+
+                    const auto saveResult = m_LayoutManager.SaveLayout(layout);
+                    if (saveResult.IsFailure())
+                    {
+                        LOG_WARN("Failed to save editor layout '{}': {}", layout.Name, saveResult.GetError().GetErrorMessage());
+                    }
+                    else
+                    {
+                        m_ActiveLayout = EditorLayoutId{ layout.Scope, layout.Name };
+                        m_UseDefaultLayout = false;
+                        LOG_INFO("Saved {} editor layout '{}'.", layout.Scope == EditorLayoutScope::Project ? "project" : "global", layout.Name);
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f)))
+                ImGui::CloseCurrentPopup();
+
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::BeginPopupModal("Delete Layout", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            if (m_DeleteLayoutTarget.has_value())
+                ImGui::Text("Delete %s layout '%s'?", m_DeleteLayoutTarget->Scope == EditorLayoutScope::Project ? "project" : "global", m_DeleteLayoutTarget->Name.c_str());
+
+            if (ImGui::Button("Delete", ImVec2(120.0f, 0.0f)))
+            {
+                if (m_DeleteLayoutTarget.has_value())
+                {
+                    const EditorLayoutId deletedLayout = *m_DeleteLayoutTarget;
+                    const auto deleteResult = m_LayoutManager.DeleteLayout(deletedLayout);
+                    if (deleteResult.IsFailure())
+                    {
+                        LOG_WARN("Failed to delete editor layout '{}': {}", deletedLayout.Name, deleteResult.GetError().GetErrorMessage());
+                    }
+                    else
+                    {
+                        if (m_ActiveLayout.has_value() && m_ActiveLayout->Scope == deletedLayout.Scope && m_ActiveLayout->Name == deletedLayout.Name)
+                            m_ActiveLayout.reset();
+                        m_DeleteLayoutTarget.reset();
+                        LOG_INFO("Deleted {} editor layout '{}'.", deletedLayout.Scope == EditorLayoutScope::Project ? "project" : "global", deletedLayout.Name);
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f)))
+            {
+                m_DeleteLayoutTarget.reset();
+                ImGui::CloseCurrentPopup();
+            }
+
+            if (!ImGui::IsPopupOpen("Delete Layout"))
+                m_DeleteLayoutTarget.reset();
+
+            ImGui::EndPopup();
+        }
+#else
+        (void)visibility;
+#endif
+    }
+
+    std::optional<EditorShell::LayoutSnapshot> EditorShell::CaptureLayoutSnapshot(const EditorPanelVisibility& visibility) const
+    {
+#if __has_include(<imgui.h>)
+        size_t iniSize = 0;
+        const char* iniData = ImGui::SaveIniSettingsToMemory(&iniSize);
+        if (iniData == nullptr)
+            return std::nullopt;
+
+        LayoutSnapshot snapshot;
+        snapshot.PanelVisibility = visibility;
+        snapshot.ImGuiIni.assign(iniData, iniSize);
+        return snapshot;
+#else
+        (void)visibility;
+        return std::nullopt;
+#endif
+    }
+
+    void EditorShell::PersistLayoutSessions(const EditorPanelVisibility& visibility)
+    {
+#if __has_include(<imgui.h>)
+        const auto snapshot = CaptureLayoutSnapshot(visibility);
+        if (!snapshot.has_value())
+            return;
+
+        const double currentTime = ImGui::GetTime();
+        const bool globalDirty = !m_LastPersistedGlobalSession.has_value() || m_LastPersistedGlobalSession.value() != snapshot.value();
+        const bool projectDirty = m_LayoutManager.HasProjectScope() && (!m_LastPersistedProjectSession.has_value() || m_LastPersistedProjectSession.value() != snapshot.value());
+        if (!globalDirty && !projectDirty)
+            return;
+
+        if (currentTime < m_NextPersistTime)
+            return;
+
+        EditorLayoutSession session;
+        session.PanelVisibility = snapshot->PanelVisibility;
+        session.ImGuiIni = snapshot->ImGuiIni;
+        session.UseDefaultLayout = m_UseDefaultLayout;
+        session.HasActiveLayout = m_ActiveLayout.has_value();
+        if (m_ActiveLayout.has_value())
+            session.ActiveLayout = *m_ActiveLayout;
+
+        const auto globalSaveResult = m_LayoutManager.SaveGlobalSession(session);
+        if (globalSaveResult.IsSuccess())
+            m_LastPersistedGlobalSession = snapshot;
+        else
+            LOG_WARN("Failed to persist global editor layout session: {}", globalSaveResult.GetError().GetErrorMessage());
+
+        if (m_LayoutManager.HasProjectScope())
+        {
+            const auto projectSaveResult = m_LayoutManager.SaveProjectSession(session);
+            if (projectSaveResult.IsSuccess())
+                m_LastPersistedProjectSession = snapshot;
+            else
+                LOG_WARN("Failed to persist project editor layout session: {}", projectSaveResult.GetError().GetErrorMessage());
+        }
+
+        m_NextPersistTime = currentTime + 0.75;
+#else
+        (void)visibility;
+#endif
+    }
+
+    void EditorShell::HandleResult(const char* action, const Life::Result<void>& result) const
+    {
+        if (result.IsFailure())
+            LOG_WARN("Failed to {}: {}", action, result.GetError().GetErrorMessage());
+        else
+            LOG_INFO("{} succeeded.", action);
+    }
+
+    void EditorShell::OpenSaveLayoutAsDialog(EditorLayoutScope preferredScope)
+    {
+        m_SaveLayoutName = m_ActiveLayout.has_value() ? m_ActiveLayout->Name : "Layout";
+        m_SaveLayoutScope = preferredScope == EditorLayoutScope::Project && m_LayoutManager.HasProjectScope()
+            ? EditorLayoutScope::Project
+            : EditorLayoutScope::Global;
+        m_OpenSaveLayoutAsPopup = true;
     }
 }

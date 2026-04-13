@@ -35,7 +35,7 @@ namespace Life
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
             io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
             io.ConfigWindowsMoveFromTitleBarOnly = true;
-            io.IniFilename = "imgui.ini";
+            io.IniFilename = nullptr;
 
             ImGuiStyle& style = ImGui::GetStyle();
             style.WindowRounding = 6.0f;

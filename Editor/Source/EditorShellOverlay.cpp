@@ -402,6 +402,9 @@ namespace EditorApp
         frameContext.ActiveProjectName = projectService.HasActiveProject()
             ? projectService.GetActiveProject().Descriptor.Name.c_str()
             : nullptr;
+        frameContext.ActiveProject = projectService.HasActiveProject()
+            ? &projectService.GetActiveProject()
+            : nullptr;
         if (m_Services.SceneService && m_Services.SceneService->get().HasActiveScene())
         {
             frameContext.ActiveSceneName = m_Services.SceneService->get().GetActiveScene().GetName().c_str();
@@ -419,7 +422,7 @@ namespace EditorApp
         m_SceneViewportPanel.Render(m_PanelVisibility.ShowScene, m_Services, m_SceneState, m_CameraTool);
         m_FpsOverlayPanel.Render(m_PanelVisibility.ShowFpsOverlay);
         RenderSceneDialogs();
-        m_Shell.End();
+        m_Shell.End(m_PanelVisibility);
 
         HandleShellActions(actions);
 
