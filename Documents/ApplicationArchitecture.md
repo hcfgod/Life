@@ -53,8 +53,8 @@ It owns:
 - the `ApplicationEventRouter`
 - the authoritative `ServiceRegistry`
 - the host-owned `LayerStack` and `InputSystem`
-- the host-owned `AssetDatabase`, `AssetBundle`, and `AssetManager`
-- the host-owned `CameraManager`
+- the host-owned `AssetDatabase`, `AssetBundle`, `AssetManager`, and `ProjectService`
+- the host-owned `SceneService` and `CameraManager`
 - optional graphics and tooling services including `GraphicsDevice`, `Renderer`, `Renderer2D`, `SceneRenderer2D`, and `ImGuiSystem`
 
 The host also becomes the point where application specification values become operational. In practice that means logging is configured here, crash diagnostics are re-bound to application-specific settings here, and platform detection is initialized here before the window is created.
@@ -186,6 +186,8 @@ Host-managed registrations currently include:
 - `Assets::AssetDatabase`
 - `Assets::AssetBundle`
 - `Assets::AssetManager`
+- `Assets::ProjectService`
+- `SceneService`
 - `CameraManager`
 - `ImGuiSystem`
 - `GraphicsDevice` when device creation succeeds
@@ -215,12 +217,13 @@ At a high level, the normal lifecycle is:
 6. the platform window is created
 7. graphics-device creation is attempted and may fail without aborting the rest of the runtime
 8. shared engine systems such as the job system and async I/O are acquired
-9. core services are registered, then host-owned asset, camera, tooling, and optional rendering services are registered
-10. the context is bound to the host-owned state and service registry
-11. `ApplicationHost::Initialize()` enters the running phase, invokes application initialization, and marks the host initialized only after initialization completes successfully
-12. each runner iteration dispatches queued events, polls runtime events if needed, updates input-capture state, updates input actions, begins graphics and ImGui frames when available, runs the application update phase, pumps host-thread asset hot reload, runs layer update and render phases, refreshes input-capture state, renders ImGui, and presents when a graphics frame is active
-13. shutdown clears the running state
-14. finalization invokes host/application teardown, clears layers, resets optional rendering services, and releases shared systems
+9. core services are registered, then host-owned asset, project, scene, camera, tooling, and optional rendering services are registered
+10. if `ApplicationSpecification.ProjectDescriptorPath` is set, the host opens that project through `ProjectService` and opens the configured startup scene through `SceneService` when one is specified
+11. the active host service registry is exposed globally for ambient integration boundaries, asset hot reload is enabled, and the context is bound to the host-owned state and service registry
+12. `ApplicationHost::Initialize()` enters the running phase, invokes application initialization, and marks the host initialized only after initialization completes successfully
+13. each runner iteration dispatches queued events, polls runtime events if needed, updates input-capture state, updates input actions, begins graphics and ImGui frames when available, runs the application update phase, pumps host-thread asset hot reload, runs layer update and render phases, refreshes input-capture state, renders ImGui, and presents when a graphics frame is active
+14. shutdown clears the running state
+15. finalization closes the active project, unbinds project-owned asset roots, clears layers, disables ambient global services and hot reload, resets optional rendering services, and releases shared systems
 
 ## Event Flow in Context
 

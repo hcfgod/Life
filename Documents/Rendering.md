@@ -35,7 +35,7 @@ In practice:
 - host-owned infrastructure may use `ApplicationHost::GetServices()` or host-owned direct state
 - global service lookup should remain a last resort for ambient integration boundaries
 
-The current runtime sample in `Runtime/Source/GameLayer.cpp` follows that model: it resolves `CameraManager` and `SceneRenderer2D` from the bound application, builds a `SceneRenderer2D::Scene2D`, performs camera selection in update and event paths, and renders during `OnRender()`.
+The current runtime and editor code both follow that model. `Runtime/Source/GameLayer.cpp` resolves `SceneService`, `CameraManager`, and `SceneRenderer2D` from the bound application, keeps an active `Scene`, and renders that scene during `OnRender()`. The editor scene viewport similarly resolves `SceneRenderer2D` and renders the active scene to a `SceneSurface`.
 
 ## Current Render Stack
 
@@ -106,11 +106,12 @@ The current implementation uploads a small scene constant buffer containing the 
 It currently provides:
 
 - a lightweight `Scene2D` description with a required camera plus queued `QuadCommand` values
+- direct scene rendering from `Scene` plus `Camera`
 - direct scene rendering through `Render(...)`
 - offscreen scene rendering through `RenderToSurface(...)`
 - a stable consumer-facing seam for runtime and editor code that should not manually sequence `Renderer2D::BeginScene(...)` and `EndScene()`
 
-In practice, `SceneRenderer2D` keeps scene assembly in higher-level code while centralizing the actual `Renderer2D` submission path in one host-owned service.
+In practice, `SceneRenderer2D` is the main engine seam between scene data and the lower-level quad renderer. When given a `Scene`, it enumerates enabled entities with `TransformComponent` and `SpriteComponent`, computes world transforms through `Scene::GetWorldTransformMatrix(...)`, builds explicit world-space quad axes from those transforms, and submits the final draw intent through `Renderer2D`.
 
 ### `SceneSurface`
 
@@ -157,8 +158,9 @@ Current implementation characteristics:
 For most higher-level engine consumers, the intended path is now:
 
 1. choose or build a `Camera`
-2. assemble a `SceneRenderer2D::Scene2D`
-3. render through `SceneRenderer2D::Render(...)` for back-buffer rendering or `SceneRenderer2D::RenderToSurface(...)` for an offscreen `SceneSurface`
+2. keep or resolve an active `Scene` through `SceneService` when scene-driven rendering is desired
+3. render through `SceneRenderer2D::Render(scene, camera)` for back-buffer rendering or `SceneRenderer2D::RenderToSurface(surface, scene, camera)` for an offscreen `SceneSurface`
+4. use `SceneRenderer2D::Scene2D` only when a caller needs to assemble manual quad commands rather than render engine scene data directly
 
 That keeps application and tooling code focused on scene intent rather than low-level render sequencing.
 
@@ -182,7 +184,7 @@ The current recovery policy is intentionally defensive:
 
 - shader-library replacement is transactional, so a failed replacement attempt does not discard the last working shader object
 - `Renderer2D` treats lost or invalid core GPU resources as recoverable and will rebuild them on the next `BeginScene(...)` path instead of treating the first failure as terminal
-- higher-level textured-quad consumers in `Runtime/Source/GameLayer.cpp` and `Editor/Source/Viewport/SceneViewportPanel.cpp` retry their checker-texture acquisition during later updates so missing content can recover after startup
+- higher-level scene consumers such as `Runtime/Source/GameLayer.cpp` tolerate temporarily missing scene assets and can recover naturally once the underlying asset keys resolve again through `AssetManager`
 
 ## ImGui and Tooling Integration
 

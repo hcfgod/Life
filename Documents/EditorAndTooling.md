@@ -10,10 +10,11 @@ This document explains how the current editor/tooling path fits into the broader
 
 ## Current High-Level Shape
 
-The current tooling stack has four main pieces:
+The current tooling stack has five main pieces:
 
 - the `Editor` application target
 - the host-owned `ImGuiSystem`
+- the project-first editor flow built around `ProjectService`
 - the layer/overlay model used to host editor UI
 - the offscreen scene-surface path used by the editor shell
 
@@ -31,6 +32,42 @@ The editor entry path is straightforward:
 - the same entrypoint and host bootstrap model used by the runtime remains authoritative
 
 That means the editor is a real consumer of the engine API, not a special case that bypasses the public architecture.
+
+## Project Hub and Workspace Flow
+
+The editor no longer assumes it should drop directly into a workspace every time.
+
+`EditorShellOverlay` now has two explicit modes:
+
+- `ProjectHub`
+- `Workspace`
+
+On attach, the overlay resolves editor services once, initializes the project hub UI state, attaches the scene viewport panel, and then chooses its starting mode based on whether `ProjectService` already has an active project.
+
+### Project hub mode
+
+`Editor/Source/ProjectHub/EditorProjectHub.cpp` is the current project-entry surface.
+
+Current behavior includes:
+
+- creating new projects through `ProjectService::CreateProject(...)`
+- opening existing projects through `ProjectService::OpenProject(...)`
+- tracking a recent-project list in a user-data JSON file
+- accepting either a direct `.lifeproject` path or a project folder path that can be resolved to one
+- deleting a recent project entry or deleting the underlying project files from disk
+
+The project hub is intentionally application-facing rather than bootstrap-only. It uses the same host-owned project service as the rest of the engine.
+
+### Workspace mode
+
+Once a project is opened, the overlay switches into `Workspace` mode.
+
+At that point the editor shell becomes the main UI surface and the overlay ensures scene state is coherent with the active project:
+
+- if the active project descriptor specifies `Startup.Scene`, the editor opens it through `SceneService`
+- otherwise the editor creates a fresh scene document for the workspace
+- scene create, open, save, save-as, and close operations are handled through `SceneService`
+- when scene operations succeed, the editor updates the active project's `Startup.Scene` field and saves the project descriptor
 
 ## `ImGuiSystem`
 
@@ -108,15 +145,35 @@ It uses the normal `Layer`/`LayerStack` model rather than a separate editor-only
 Current behavior includes:
 
 - creating a root dockspace window
-- building a default docking layout for `Hierarchy`, `Inspector`, `Console`, `Stats`, `Renderer Stress`, and `Scene`
-- reporting renderer and ImGui capture state in the stats panel
+- presenting a project hub first when no project is active
+- switching between project-hub and workspace modes inside one overlay
+- building a default docking layout for `Project Assets`, `Hierarchy`, `Inspector`, `Console`, `Stats`, and `Scene`
+- rendering a workspace chrome strip that shows the active project and scene state
+- exposing project, scene, window, and layout commands through the main menu bar
+- reporting renderer, surface, and scene-render stats in the stats panel
 - inspecting camera state through `CameraManager`
 - managing a dedicated editor camera
 - rendering an offscreen scene-surface and displaying it as an ImGui image
 
-This is important architecturally. The editor is using the same host-owned services as runtime code: `AssetManager`, `CameraManager`, `Renderer`, `SceneRenderer2D`, `GraphicsDevice`, `ImGuiSystem`, and `LayerStack`.
+This is important architecturally. The editor is using the same host-owned services as runtime code: `Application`, `InputSystem`, `AssetManager`, `ProjectService`, `SceneService`, `CameraManager`, `Renderer`, `SceneRenderer2D`, `GraphicsDevice`, `ImGuiSystem`, and `LayerStack`.
 
 The overlay acquires those dependencies once through `EditorServices::Acquire(...)`, stores optional references for the lifetime of the overlay attachment, and clears them on detach. That keeps normal editor code owner-bound without repeatedly resolving services on hot paths.
+
+## Workspace Panels
+
+The current editor workspace is composed from focused panel types rather than one monolithic overlay file.
+
+Important current panels include:
+
+- `ProjectAssetsPanel` for project-folder browsing, search, creation, rename, move, delete, drag/drop, and external file import into the active project's `Assets` directory
+- `HierarchyPanel` for scene entity hierarchy inspection and selection
+- `InspectorPanel` for entity/component inspection and editing
+- `ConsolePanel` for log viewing
+- `StatsPanel` for renderer, camera, surface, and scene statistics
+- `SceneViewportPanel` for offscreen scene presentation and scene interaction
+- `FpsOverlayPanel` for optional lightweight runtime frame-rate display
+
+`EditorShell` owns the main dockspace, menu bar, layout persistence flow, and workspace chrome, while `EditorShellOverlay` coordinates the panels and routes scene/project actions.
 
 ## Scene Surface Path
 
@@ -124,15 +181,17 @@ The current editor scene-surface is a real engine rendering path, not a placehol
 
 At a high level, `EditorShellOverlay` delegates scene-panel rendering to `SceneViewportPanel`, which currently:
 
-1. acquires or retries the checker texture asset through the host-bound `AssetManager`
-2. creates a `SceneSurface` once renderer, scene-renderer, and ImGui services are available
-3. creates or resizes that engine-owned `SceneSurface` to the current viewport region
-4. ensures the dedicated editor camera exists and updates its aspect ratio to match the actual surface size
-5. assembles a `SceneRenderer2D::Scene2D` describing the current stress-scene content
-6. renders that scene through `SceneRenderer2D::RenderToSurface(...)`
+1. creates a `SceneSurface` once renderer, scene-renderer, and ImGui services are available
+2. creates or resizes that engine-owned `SceneSurface` to the current viewport region
+3. ensures the dedicated editor camera exists and updates its aspect ratio to match the actual surface size
+4. enables Unity-style right-mouse fly-camera navigation inside the viewport using SDL relative mouse mode when available
+5. renders the active `SceneService` scene through `SceneRenderer2D::RenderToSurface(...)`, or an empty scene when no scene is active
+6. gathers scene-quad and renderer statistics for the stats panel
 7. presents the completed surface through `ImGuiSystem`
 
 This gives the editor a proper offscreen-rendered scene-surface panel while still staying inside the same frame and renderer ownership model as the runtime.
+
+The scene viewport is also integrated with project-asset drag and drop. Scene assets dragged from `ProjectAssetsPanel` onto the viewport are opened through `SceneService`.
 
 ## Camera Usage in the Editor
 
@@ -161,7 +220,8 @@ Current expectations:
 - if Dear ImGui is unavailable in the build, `ImGuiSystem` remains unavailable rather than crashing the host
 - if the active backend lacks a renderer backend, the editor UI path is unavailable rather than pretending to work
 - if offscreen texture creation or texture-handle acquisition fails, the editor logs the failure and avoids invalid rendering for that frame
-- if the checker texture or other scene content is missing at attach time, `SceneViewportPanel` retries acquisition during later updates so scene rendering can recover when content becomes available
+- if no active project exists, the editor remains in project-hub mode rather than trying to operate on a missing workspace
+- if no active scene exists when entering the workspace, the editor opens the configured startup scene or creates a fresh scene document instead of failing hard
 - if `SceneSurface::BeginScene2D(...)` cannot start a valid 2D scene, it unwinds the offscreen render state instead of leaving the surface mid-frame
 - if `Renderer2D` loses internal GPU resources after an earlier successful initialization, later scene attempts will retry resource creation instead of requiring a process restart
 

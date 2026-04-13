@@ -7,6 +7,8 @@ The intent is to explain how the current systems fit together, what owns what at
 ## Recommended Reading Order
 
 - `ApplicationArchitecture.md` for the canonical startup path, ownership model, and service boundaries.
+- `ProjectSystem.md` for the engine-owned project descriptor model, active-project service behavior, and asset-root rebinding.
+- `SceneSystem.md` for `Scene`, `Entity`, built-in components, scene serialization, and `SceneService` workflow.
 - `EntryPointsAndBootstrap.md` for executable entry, SDL callback bootstrap, runner state, and exception boundaries.
 - `LayersAndOverlays.md` for the host-owned layer model, overlay ordering, attach/detach rules, and layer participation in frame and event flow.
 - `Rendering.md` for rendering ownership, service boundaries, cameras, `Renderer`, `Renderer2D`, `SceneRenderer2D`, scene surfaces, shader asset flow, and current Vulkan/NVRHI runtime behavior.
@@ -22,6 +24,8 @@ The intent is to explain how the current systems fit together, what owns what at
 ## Documents
 
 - `ApplicationArchitecture.md` - startup flow, ownership boundaries, service registry behavior, and the authoritative application loop.
+- `ProjectSystem.md` - project descriptor shape, serializer rules, `ProjectService` lifecycle, active-project rebinding, and editor integration.
+- `SceneSystem.md` - `Scene`/`Entity` structure, built-in components, scene serialization, scene dirty/save behavior, and `SceneService` workflow.
 - `EntryPointsAndBootstrap.md` - executable entry, SDL callback bootstrap, runner iteration, event injection, and teardown responsibilities.
 - `LayersAndOverlays.md` - the host-owned layer model, overlay ordering, update/render/event traversal, and attach/detach semantics.
 - `Rendering.md` - rendering ownership, frame sequencing, service responsibilities, camera integration, `Renderer2D`, `SceneRenderer2D`, scene surfaces, shader assets, and current Vulkan/NVRHI behavior.

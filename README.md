@@ -21,11 +21,13 @@ Building on the core engine library, the repository now provides a broader engin
 - `ServiceRegistry` is host-owned and exposed through application-facing accessors so runtime systems can be consumed without falling back to globals.
 - `LayerStack` is host-owned and integrated into update, render, and event routing, with distinct layer and overlay ordering semantics.
 - `InputSystem` is host-owned and provides raw-state polling, action-based input, rebinding, and SDL-fed device state.
+- `ProjectService` is host-owned and provides the active-project boundary, descriptor persistence, and project-root rebinding for asset resolution.
+- `Scene`, `Entity`, and `SceneService` provide an engine-owned scene layer with built-in components, serialization, hierarchy support, and active-scene workflow.
 - `GraphicsDevice` is the backend abstraction, with `Renderer` as the general rendering service, `Renderer2D` as the built-in quad renderer, `SceneRenderer2D` as the higher-level scene submission seam, and `SceneSurface` as the engine-owned offscreen tooling surface.
 - `Camera` and `CameraManager` provide named camera ownership, orthographic and perspective projections, primary-camera selection, per-camera clear settings, aspect-ratio updates, and viewport handling.
 - `ImGuiSystem` is host-owned and provides the current tooling bridge for docking UI, input capture, and texture-backed editor panels.
 - `Runtime` demonstrates scene-facing rendering, input actions, multi-camera usage, overlays, and host-owned engine services in a normal app context.
-- `Editor` demonstrates a dedicated tooling app with docking panels, stats, hierarchy/inspector-style UI, and an offscreen scene surface rendered through engine services.
+- `Editor` demonstrates a dedicated tooling app with a project hub, docking panels, scene authoring workflow, and an offscreen scene surface rendered through engine services.
 - Logging, crash diagnostics, structured error handling, and platform/runtime metadata are integrated as first-class engine systems rather than ad hoc utilities.
 
 ## Current Goals
@@ -187,13 +189,14 @@ To target Intel explicitly:
 `Runtime` is the current executable entrypoint for exercising the engine in a real app context. It is the place to wire up engine systems, validate gameplay-facing runtime behavior, and evolve the public engine-facing API from a consumer's point of view.
 
 At the moment it serves as a practical integration sample for:
-
-- layer attachment and teardown
-- action-based input
-- host-owned camera registration and switching
-- camera-driven 2D scene submission through `SceneRenderer2D`, backed by `Renderer2D` textured-quad batching
-- resize-driven camera aspect-ratio updates
-- runtime overlays and diagnostics logging
+  * layer attachment and teardown
+  * action-based input
+  * active-project-aware asset resolution through host-owned services
+  * host-owned camera registration and switching
+  * active-scene management through `SceneService`
+  * camera-driven 2D scene submission through `SceneRenderer2D`, backed by `Renderer2D` textured-quad batching
+  * resize-driven camera aspect-ratio updates
+  * runtime overlays and diagnostics logging
 
 ## What `Editor` Is For
 
@@ -202,12 +205,14 @@ At the moment it serves as a practical integration sample for:
 It exercises the same host-owned architecture as the runtime while focusing on editor-style workflows rather than gameplay/runtime presentation.
 
 At the moment it serves as a practical integration sample for:
-
-- host-owned `ImGuiSystem` initialization and docking UI
-- overlay-driven editor shell composition
-- offscreen scene-surface rendering into the editor `Scene` panel through `SceneRenderer2D` and `SceneSurface`
-- camera inspection and perspective editor-camera ownership through `CameraManager`
-- tooling input capture layered on top of the normal event and input pipeline
+  * the project-first editor hub for creating, opening, and deleting projects before entering the workspace
+  * host-owned `ImGuiSystem` initialization and docking UI
+  * overlay-driven editor shell composition
+  * scene document create/open/save flows through `SceneService`
+  * project asset browsing, drag/drop, and external file import into the active project
+  * offscreen scene-surface rendering into the editor `Scene` panel through `SceneRenderer2D` and `SceneSurface`
+  * camera inspection and perspective editor-camera ownership through `CameraManager`
+  * tooling input capture layered on top of the normal event and input pipeline
 
 ## What `Test` Is For
 
@@ -227,6 +232,8 @@ At the moment it serves as a practical integration sample for:
 
 - `Documents/README.md` - index and reading order for the implementation-facing documentation set.
 - `Documents/ApplicationArchitecture.md` - the canonical startup path, ownership model, service registry boundaries, and authoritative loop structure.
+- `Documents/ProjectSystem.md` - project descriptor model, serializer behavior, `ProjectService`, active-project rebinding, and editor/runtime integration.
+- `Documents/SceneSystem.md` - `Scene`, `Entity`, built-in components, scene serialization, `SceneService`, and runtime/editor scene workflows.
 - `Documents/EntryPointsAndBootstrap.md` - executable entry, SDL callback bootstrap, runner state, exception phases, and teardown boundaries.
 - `Documents/LayersAndOverlays.md` - the host-owned layer model, overlay ordering, traversal rules, and attach/detach semantics.
 - `Documents/Rendering.md` - rendering ownership, service boundaries, `GraphicsDevice`, `Renderer`, `Renderer2D`, `SceneRenderer2D`, scene surfaces, cameras, and current Vulkan/NVRHI behavior.
