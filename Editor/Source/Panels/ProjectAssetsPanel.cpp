@@ -152,6 +152,16 @@ namespace EditorApp
             return value.size() >= suffix.size() && value.substr(value.size() - suffix.size()) == suffix;
         }
 
+        bool IsMetaEntry(const std::filesystem::path& path, bool isDirectory)
+        {
+            return !isDirectory && ToLowerAscii(path.extension().string()) == ".meta";
+        }
+
+        std::filesystem::path GetMetaPathForAsset(const std::filesystem::path& assetPath)
+        {
+            return std::filesystem::path(assetPath.string() + ".meta");
+        }
+
         ProjectEntryKind ClassifyEntry(const std::filesystem::path& path, bool isDirectory)
         {
             if (isDirectory)
@@ -217,6 +227,11 @@ namespace EditorApp
             return entry.AbsolutePath.stem().string();
         }
 
+        std::string ResolveVisibleName(const ProjectAssetEntry& entry)
+        {
+            return ResolveDisplayStem(entry);
+        }
+
         std::string SanitizeName(std::string value)
         {
             value.erase(value.begin(), std::find_if(value.begin(), value.end(), [](unsigned char character)
@@ -259,6 +274,9 @@ namespace EditorApp
 
                 entry.IsDirectory = child.is_directory(ec);
                 if (ec)
+                    continue;
+
+                if (IsMetaEntry(child.path(), entry.IsDirectory))
                     continue;
 
                 entry.DisplayName = child.path().filename().string();
@@ -497,11 +515,27 @@ namespace EditorApp
                 return false;
             }
 
+            const std::filesystem::path sourceMetaPath = GetMetaPathForAsset(entry.AbsolutePath);
+            const std::filesystem::path destinationMetaPath = GetMetaPathForAsset(destination);
+
             std::filesystem::rename(entry.AbsolutePath, destination, ec);
             if (ec)
             {
                 sceneState.SetStatusMessage("Failed to rename '" + entry.DisplayName + "'.", true);
                 return false;
+            }
+
+            if (!entry.IsDirectory && std::filesystem::exists(sourceMetaPath, ec))
+            {
+                ec.clear();
+                std::filesystem::rename(sourceMetaPath, destinationMetaPath, ec);
+                if (ec)
+                {
+                    std::error_code rollbackEc;
+                    std::filesystem::rename(destination, entry.AbsolutePath, rollbackEc);
+                    sceneState.SetStatusMessage("Failed to rename metadata for '" + entry.DisplayName + "'.", true);
+                    return false;
+                }
             }
 
             sceneState.SetStatusMessage("Renamed '" + entry.DisplayName + "'.", false);
@@ -526,6 +560,18 @@ namespace EditorApp
                 {
                     sceneState.SetStatusMessage("Failed to delete file '" + entry.DisplayName + "'.", true);
                     return false;
+                }
+
+                ec.clear();
+                const std::filesystem::path metaPath = GetMetaPathForAsset(entry.AbsolutePath);
+                if (std::filesystem::exists(metaPath, ec))
+                {
+                    ec.clear();
+                    if (!std::filesystem::remove(metaPath, ec) || ec)
+                    {
+                        sceneState.SetStatusMessage("Failed to delete metadata for '" + entry.DisplayName + "'.", true);
+                        return false;
+                    }
                 }
             }
 
@@ -566,11 +612,28 @@ namespace EditorApp
                 return false;
             }
 
+            const std::filesystem::path sourceMetaPath = GetMetaPathForAsset(sourcePath);
+            const std::filesystem::path destinationMetaPath = GetMetaPathForAsset(destinationPath);
+
             std::filesystem::rename(sourcePath, destinationPath, ec);
             if (ec)
             {
                 sceneState.SetStatusMessage("Failed to move '" + sourcePath.filename().string() + "'.", true);
                 return false;
+            }
+
+            ec.clear();
+            if (!std::filesystem::is_directory(destinationPath, ec) && std::filesystem::exists(sourceMetaPath, ec))
+            {
+                ec.clear();
+                std::filesystem::rename(sourceMetaPath, destinationMetaPath, ec);
+                if (ec)
+                {
+                    std::error_code rollbackEc;
+                    std::filesystem::rename(destinationPath, sourcePath, rollbackEc);
+                    sceneState.SetStatusMessage("Failed to move metadata for '" + sourcePath.filename().string() + "'.", true);
+                    return false;
+                }
             }
 
             sceneState.SetStatusMessage("Moved '" + sourcePath.filename().string() + "'.", false);
@@ -858,6 +921,8 @@ namespace EditorApp
                 {
                     m_SelectedRelativePath = RebasePath(m_SelectedRelativePath, entry.RelativePath, renamedRelativePath);
                     m_ActiveFolderRelativePath = RebasePath(m_ActiveFolderRelativePath, entry.RelativePath, renamedRelativePath);
+                    if (!m_SelectedRelativePath.empty())
+                        sceneState.SelectProjectAsset(m_SelectedRelativePath);
                     ImGui::CloseCurrentPopup();
                 }
             }
@@ -896,6 +961,7 @@ namespace EditorApp
                     {
                         m_ActiveFolderRelativePath = relativePath;
                         m_SelectedRelativePath = relativePath;
+                        sceneState.SelectProjectAsset(relativePath);
                     }
 
                     if (ImGui::BeginPopupContextItem())
@@ -933,7 +999,10 @@ namespace EditorApp
                                     if (IsSameOrDescendant(m_ActiveFolderRelativePath, relativePath))
                                         m_ActiveFolderRelativePath = relativePath.parent_path();
                                     if (IsSameOrDescendant(m_SelectedRelativePath, relativePath))
+                                    {
                                         m_SelectedRelativePath.clear();
+                                        sceneState.ClearSelection();
+                                    }
                                 }
                             }
                         }
@@ -944,7 +1013,8 @@ namespace EditorApp
                     {
                         const ProjectAssetEntry entry = FindEntryByRelativePath(assetsDirectory, relativePath);
                         SetPayload(entry);
-                        ImGui::TextUnformatted(entry.DisplayName.c_str());
+                        const std::string visibleName = ResolveVisibleName(entry);
+                        ImGui::TextUnformatted(visibleName.c_str());
                         ImGui::EndDragDropSource();
                     }
 
@@ -957,7 +1027,10 @@ namespace EditorApp
                             {
                                 const std::filesystem::path sourceRelativePath(assetPayload->RelativePath.data());
                                 if (MoveEntry(assetsDirectory, sourceRelativePath, relativePath, sceneState) && m_SelectedRelativePath == sourceRelativePath)
+                                {
                                     m_SelectedRelativePath = relativePath / sourceRelativePath.filename();
+                                    sceneState.SelectProjectAsset(m_SelectedRelativePath);
+                                }
                             }
                         }
                         ImGui::EndDragDropTarget();
@@ -1043,7 +1116,10 @@ namespace EditorApp
                         {
                             const std::filesystem::path sourceRelativePath(assetPayload->RelativePath.data());
                             if (MoveEntry(assetsDirectory, sourceRelativePath, m_ActiveFolderRelativePath, sceneState) && m_SelectedRelativePath == sourceRelativePath)
+                            {
                                 m_SelectedRelativePath = m_ActiveFolderRelativePath / sourceRelativePath.filename();
+                                sceneState.SelectProjectAsset(m_SelectedRelativePath);
+                            }
                         }
                     }
                     ImGui::EndDragDropTarget();
@@ -1082,10 +1158,12 @@ namespace EditorApp
                         ImGui::PushStyleColor(ImGuiCol_Header, selected ? ImVec4(accentColor.x * 0.42f, accentColor.y * 0.42f, accentColor.z * 0.42f, 0.88f) : ImVec4(0.12f, 0.15f, 0.20f, 0.68f));
                         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(accentColor.x * 0.32f, accentColor.y * 0.32f, accentColor.z * 0.32f, 0.90f));
                         ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(accentColor.x * 0.46f, accentColor.y * 0.46f, accentColor.z * 0.46f, 0.94f));
-                        const std::string rowLabel = std::string("[") + ResolveBadge(entry.Kind) + "] " + entry.DisplayName;
+                        const std::string visibleName = ResolveVisibleName(entry);
+                        const std::string rowLabel = std::string("[") + ResolveBadge(entry.Kind) + "] " + visibleName;
                         if (ImGui::Selectable(rowLabel.c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick))
                         {
                             m_SelectedRelativePath = entry.RelativePath;
+                            sceneState.SelectProjectAsset(entry.RelativePath);
                             if (entry.IsDirectory && ImGui::IsMouseDoubleClicked(0))
                             {
                                 m_ActiveFolderRelativePath = entry.RelativePath;
@@ -1141,7 +1219,10 @@ namespace EditorApp
                                     if (entry.IsDirectory && IsSameOrDescendant(m_ActiveFolderRelativePath, entry.RelativePath))
                                         m_ActiveFolderRelativePath = entry.RelativePath.parent_path();
                                     if (IsSameOrDescendant(m_SelectedRelativePath, entry.RelativePath))
+                                    {
                                         m_SelectedRelativePath.clear();
+                                        sceneState.ClearSelection();
+                                    }
                                 }
                             }
                             ImGui::EndPopup();
@@ -1150,7 +1231,7 @@ namespace EditorApp
                         if (ImGui::BeginDragDropSource())
                         {
                             SetPayload(entry);
-                            ImGui::TextUnformatted(entry.DisplayName.c_str());
+                            ImGui::TextUnformatted(visibleName.c_str());
                             ImGui::EndDragDropSource();
                         }
 
@@ -1163,7 +1244,10 @@ namespace EditorApp
                                 {
                                     const std::filesystem::path sourceRelativePath(assetPayload->RelativePath.data());
                                     if (MoveEntry(assetsDirectory, sourceRelativePath, entry.RelativePath, sceneState) && m_SelectedRelativePath == sourceRelativePath)
+                                    {
                                         m_SelectedRelativePath = entry.RelativePath / sourceRelativePath.filename();
+                                        sceneState.SelectProjectAsset(m_SelectedRelativePath);
+                                    }
                                 }
                             }
                             ImGui::EndDragDropTarget();
@@ -1198,6 +1282,7 @@ namespace EditorApp
                         if (ImGui::Button((std::string("[") + ResolveBadge(entry.Kind) + "]##Button").c_str(), ImVec2(cellSize - 12.0f, cellSize - 28.0f)))
                         {
                             m_SelectedRelativePath = entry.RelativePath;
+                            sceneState.SelectProjectAsset(entry.RelativePath);
                             if (entry.IsDirectory)
                                 m_ActiveFolderRelativePath = entry.RelativePath;
                         }
@@ -1256,7 +1341,10 @@ namespace EditorApp
                                     if (entry.IsDirectory && IsSameOrDescendant(m_ActiveFolderRelativePath, entry.RelativePath))
                                         m_ActiveFolderRelativePath = entry.RelativePath.parent_path();
                                     if (IsSameOrDescendant(m_SelectedRelativePath, entry.RelativePath))
+                                    {
                                         m_SelectedRelativePath.clear();
+                                        sceneState.ClearSelection();
+                                    }
                                 }
                             }
                             ImGui::EndPopup();
@@ -1265,7 +1353,8 @@ namespace EditorApp
                         if (ImGui::BeginDragDropSource())
                         {
                             SetPayload(entry);
-                            ImGui::TextUnformatted(entry.DisplayName.c_str());
+                            const std::string visibleName = ResolveVisibleName(entry);
+                            ImGui::TextUnformatted(visibleName.c_str());
                             ImGui::EndDragDropSource();
                         }
 
@@ -1278,13 +1367,17 @@ namespace EditorApp
                                 {
                                     const std::filesystem::path sourceRelativePath(assetPayload->RelativePath.data());
                                     if (MoveEntry(assetsDirectory, sourceRelativePath, entry.RelativePath, sceneState) && m_SelectedRelativePath == sourceRelativePath)
+                                    {
                                         m_SelectedRelativePath = entry.RelativePath / sourceRelativePath.filename();
+                                        sceneState.SelectProjectAsset(m_SelectedRelativePath);
+                                    }
                                 }
                             }
                             ImGui::EndDragDropTarget();
                         }
 
-                        ImGui::TextWrapped("%s", entry.DisplayName.c_str());
+                        const std::string visibleName = ResolveVisibleName(entry);
+                        ImGui::TextWrapped("%s", visibleName.c_str());
                         ImGui::EndGroup();
                         ImGui::NextColumn();
                         ImGui::PopID();

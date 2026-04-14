@@ -2,6 +2,7 @@
 
 #include "Engine.h"
 
+#include <filesystem>
 #include <string>
 #include <utility>
 
@@ -12,11 +13,19 @@ namespace EditorApp
         void SelectEntity(const Life::Entity& entity)
         {
             SelectedEntityId = entity.IsValid() ? entity.GetId() : std::string{};
+            SelectedProjectAssetRelativePath.clear();
+        }
+
+        void SelectProjectAsset(const std::filesystem::path& relativePath)
+        {
+            SelectedEntityId.clear();
+            SelectedProjectAssetRelativePath = relativePath.lexically_normal().generic_string();
         }
 
         void ClearSelection() noexcept
         {
             SelectedEntityId.clear();
+            SelectedProjectAssetRelativePath.clear();
         }
 
         Life::Entity GetSelectedEntity(const Life::SceneService& sceneService) const
@@ -32,6 +41,16 @@ namespace EditorApp
             return GetSelectedEntity(sceneService).IsValid();
         }
 
+        std::filesystem::path GetSelectedProjectAssetRelativePath() const
+        {
+            return SelectedProjectAssetRelativePath.empty() ? std::filesystem::path{} : std::filesystem::path(SelectedProjectAssetRelativePath);
+        }
+
+        bool HasSelectedProjectAsset() const noexcept
+        {
+            return !SelectedProjectAssetRelativePath.empty();
+        }
+
         void SetStatusMessage(std::string message, bool isError)
         {
             StatusMessage = std::move(message);
@@ -45,6 +64,7 @@ namespace EditorApp
         }
 
         std::string SelectedEntityId;
+        std::string SelectedProjectAssetRelativePath;
         std::string StatusMessage;
         bool StatusIsError = false;
     };

@@ -303,6 +303,14 @@ namespace Life::Assets
             }
         }
 
+        const auto writeImporterSettingsResult = WriteImporterSettings(record.ResolvedPath, record.ImporterSettings);
+        if (writeImporterSettingsResult.IsFailure())
+        {
+            LOG_CORE_WARN("AssetDatabase: failed to write importer settings meta for '{}': {}",
+                          record.ResolvedPath,
+                          writeImporterSettingsResult.GetError().GetErrorMessage());
+        }
+
         return record;
     }
 

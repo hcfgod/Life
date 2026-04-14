@@ -22,6 +22,9 @@ namespace Life::Assets
     [[nodiscard]] Result<std::string> ForceRegenerateGuid(const std::string& assetPath,
                                                            const nlohmann::json& extraMeta = nlohmann::json::object());
 
+    [[nodiscard]] Result<void> WriteImporterSettings(const std::string& assetPath,
+                                                      const nlohmann::json& importerSettings);
+
     [[nodiscard]] Result<void> WriteDependencies(const std::string& assetPath,
                                                   const std::vector<std::string>& dependencies);
 }

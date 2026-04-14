@@ -9,6 +9,7 @@ namespace EditorApp
         services.Window = Life::MakeOptionalRef(application.GetService<Life::Window>());
         services.GraphicsDevice = Life::MakeOptionalRef(application.TryGetService<Life::GraphicsDevice>());
         services.InputSystem = Life::MakeOptionalRef(application.GetService<Life::InputSystem>());
+        services.AssetDatabase = Life::MakeOptionalRef(application.GetService<Life::Assets::AssetDatabase>());
         services.AssetManager = Life::MakeOptionalRef(application.GetService<Life::Assets::AssetManager>());
         services.ProjectService = Life::MakeOptionalRef(application.GetService<Life::Assets::ProjectService>());
         services.CameraManager = Life::MakeOptionalRef(application.GetService<Life::CameraManager>());
@@ -28,6 +29,7 @@ namespace EditorApp
         CameraManager.reset();
         ProjectService.reset();
         AssetManager.reset();
+        AssetDatabase.reset();
         InputSystem.reset();
         GraphicsDevice.reset();
         Window.reset();

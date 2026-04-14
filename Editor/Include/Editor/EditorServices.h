@@ -10,6 +10,7 @@ namespace EditorApp
         Life::OptionalRef<Life::Window> Window;
         Life::OptionalRef<Life::GraphicsDevice> GraphicsDevice;
         Life::OptionalRef<Life::InputSystem> InputSystem;
+        Life::OptionalRef<Life::Assets::AssetDatabase> AssetDatabase;
         Life::OptionalRef<Life::Assets::AssetManager> AssetManager;
         Life::OptionalRef<Life::Assets::ProjectService> ProjectService;
         Life::OptionalRef<Life::CameraManager> CameraManager;

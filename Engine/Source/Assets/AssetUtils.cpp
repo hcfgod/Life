@@ -233,6 +233,58 @@ namespace Life::Assets
         }
     }
 
+    Result<void> WriteImporterSettings(const std::string& assetPath, const nlohmann::json& importerSettings)
+    {
+        if (assetPath.empty())
+        {
+            return Result<void>(ErrorCode::InvalidArgument, "Asset path is empty");
+        }
+
+        const std::string metaPath = GetMetaPath(assetPath);
+        nlohmann::json j;
+
+        try
+        {
+            if (std::filesystem::exists(metaPath))
+            {
+                std::ifstream in(metaPath, std::ios::in | std::ios::binary);
+                if (in.is_open())
+                {
+                    in >> j;
+                }
+            }
+        }
+        catch (const std::exception& e)
+        {
+            LOG_CORE_WARN("Assets::WriteImporterSettings: failed to read meta '{}': {}", metaPath, e.what());
+        }
+
+        j["importerSettings"] = importerSettings;
+
+        try
+        {
+            const std::filesystem::path metaFsPath(metaPath);
+            if (metaFsPath.has_parent_path())
+            {
+                std::filesystem::create_directories(metaFsPath.parent_path());
+            }
+
+            std::ofstream out(metaPath, std::ios::out | std::ios::binary);
+            if (!out.is_open())
+            {
+                return Result<void>(ErrorCode::FileAccessDenied, "Failed to write meta file: " + metaPath);
+            }
+
+            out << j.dump(4);
+        }
+        catch (const std::exception& e)
+        {
+            return Result<void>(ErrorCode::FileAccessDenied, std::string("Failed to write meta file: ") + e.what());
+        }
+
+        return Result<void>();
+    }
+
     Result<void> WriteDependencies(const std::string& assetPath, const std::vector<std::string>& dependencies)
     {
         if (assetPath.empty())
