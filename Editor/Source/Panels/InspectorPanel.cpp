@@ -334,7 +334,8 @@ namespace EditorApp
             return false;
         }
 
-        void RenderSelectedEntityInspector(Life::SceneService& sceneService,
+        void RenderSelectedEntityInspector(Life::Scene& scene,
+                                           Life::SceneService& sceneService,
                                            Life::Entity selectedEntity,
                                            const EditorServices& services,
                                            EditorSceneState& sceneState)
@@ -392,7 +393,7 @@ namespace EditorApp
                         {
                             const std::string deletedId = selectedEntity.GetId();
                             sceneState.ClearSelection();
-                            changed |= sceneService.GetActiveScene().DestroyEntity(selectedEntity);
+                            changed |= scene.DestroyEntity(selectedEntity);
                             if (changed)
                                 sceneState.SetStatusMessage("Deleted entity '" + deletedId + "'.", false);
                         }
@@ -475,9 +476,10 @@ namespace EditorApp
                             ImGui::TextDisabled("No additional components available.");
                         }
 
-                        if (changed)
+                        if (changed && sceneState.ExecutionMode == EditorSceneExecutionMode::Edit)
                             sceneService.MarkActiveSceneDirty();
             #else
+                        (void)scene;
                         (void)sceneService;
                         (void)selectedEntity;
                         (void)services;
@@ -495,17 +497,20 @@ namespace EditorApp
                 if (ImGui::Begin("Inspector", &isOpen))
                 {
                     Life::SceneService* sceneService = services.SceneService ? &services.SceneService->get() : nullptr;
+                    Life::Scene* effectiveScene = nullptr;
                     Life::Entity selectedEntity;
                     if (sceneService && sceneService->HasActiveScene())
                     {
-                        selectedEntity = sceneState.GetSelectedEntity(*sceneService);
+                        effectiveScene = sceneState.GetEffectiveScene(*sceneService);
+                        if (effectiveScene != nullptr)
+                            selectedEntity = sceneState.GetSelectedEntity(*effectiveScene);
                         if (!selectedEntity.IsValid() && !sceneState.SelectedEntityId.empty())
                             sceneState.SelectedEntityId.clear();
                     }
 
-                    if (selectedEntity.IsValid() && sceneService != nullptr)
+                    if (selectedEntity.IsValid() && sceneService != nullptr && effectiveScene != nullptr)
                     {
-                        RenderSelectedEntityInspector(*sceneService, selectedEntity, services, sceneState);
+                        RenderSelectedEntityInspector(*effectiveScene, *sceneService, selectedEntity, services, sceneState);
                     }
                     else
                     {

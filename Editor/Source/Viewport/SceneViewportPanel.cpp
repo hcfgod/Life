@@ -121,6 +121,7 @@ namespace EditorApp
                             static_cast<uint32_t>(viewportRegion.x),
                             static_cast<uint32_t>(viewportRegion.y),
                             services,
+                            sceneState,
                             cameraTool,
                             viewportHovered,
                             viewportFocused);
@@ -142,6 +143,7 @@ namespace EditorApp
                                     assetPayload->RelativePath[0] != '\0' &&
                                     services.SceneService)
                                 {
+                                    sceneState.ResetRuntimeState();
                                     const std::string sceneAssetKey = std::string("Assets/") + assetPayload->RelativePath.data();
                                     const auto loadResult = services.SceneService->get().LoadScene(sceneAssetKey);
                                     if (loadResult.IsFailure())
@@ -240,9 +242,12 @@ namespace EditorApp
         }
     }
 
-    bool SceneViewportPanel::RenderSceneSurface(uint32_t width, uint32_t height, const EditorServices& services, EditorCameraTool& cameraTool, bool viewportHovered, bool viewportFocused)
+    bool SceneViewportPanel::RenderSceneSurface(uint32_t width, uint32_t height, const EditorServices& services, EditorSceneState& sceneState, EditorCameraTool& cameraTool, bool viewportHovered, bool viewportFocused)
     {
         m_State.LastRenderSucceeded = false;
+        m_State.ExecutionMode = sceneState.ExecutionMode;
+        m_State.UsingEditorCamera = sceneState.ExecutionMode == EditorSceneExecutionMode::Edit;
+        m_State.UsingSceneCamera = sceneState.ExecutionMode != EditorSceneExecutionMode::Edit;
         m_State.SurfaceReady = m_SceneSurface && m_SceneSurface->IsReady();
         m_State.SurfaceWidth = m_SceneSurface ? m_SceneSurface->GetWidth() : 0;
         m_State.SurfaceHeight = m_SceneSurface ? m_SceneSurface->GetHeight() : 0;
@@ -278,17 +283,36 @@ namespace EditorApp
         const float actualAspectRatio = m_SceneSurface->GetHeight() > 0
             ? static_cast<float>(m_SceneSurface->GetWidth()) / static_cast<float>(m_SceneSurface->GetHeight())
             : requestedAspectRatio;
-        camera.SetAspectRatio(actualAspectRatio);
-        UpdateCameraNavigation(cameraTool, camera, viewportHovered, viewportFocused);
+
+        const Life::Scene* effectiveScene = services.SceneService ? sceneState.GetEffectiveScene(services.SceneService->get()) : nullptr;
+        Life::Camera sceneCamera;
+        const bool useSceneCamera = sceneState.ExecutionMode != EditorSceneExecutionMode::Edit
+            && effectiveScene != nullptr
+            && effectiveScene->BuildPrimaryCamera(actualAspectRatio, sceneCamera);
+
+        Life::Camera* activeCamera = &camera;
+        if (useSceneCamera)
+        {
+            SetCameraNavigationActive(false);
+            activeCamera = &sceneCamera;
+        }
+        else
+        {
+            camera.SetAspectRatio(actualAspectRatio);
+            UpdateCameraNavigation(cameraTool, camera, viewportHovered, viewportFocused);
+        }
+
+        m_State.UsingEditorCamera = !useSceneCamera;
+        m_State.UsingSceneCamera = useSceneCamera;
 
         bool renderSucceeded = false;
-        if (services.SceneService && services.SceneService->get().HasActiveScene())
+        if (effectiveScene != nullptr)
         {
             m_State.RequestedQuadCount = 0;
             m_State.TexturedQuadCount = 0;
             m_State.UntexturedQuadCount = 0;
 
-            for (const Life::Entity entity : services.SceneService->get().GetActiveScene().GetEntities())
+            for (const Life::Entity entity : effectiveScene->GetEntities())
             {
                 if (const Life::SpriteComponent* sprite = entity.TryGetComponent<Life::SpriteComponent>())
                 {
@@ -302,12 +326,12 @@ namespace EditorApp
 
             renderSucceeded = services.SceneRenderer2D->get().RenderToSurface(
                 *m_SceneSurface,
-                services.SceneService->get().GetActiveScene(),
-                camera);
+                *effectiveScene,
+                *activeCamera);
         }
         else
         {
-            const Life::SceneRenderer2D::Scene2D emptyScene{ .Camera = &camera };
+            const Life::SceneRenderer2D::Scene2D emptyScene{ .Camera = activeCamera };
             renderSucceeded = services.SceneRenderer2D->get().RenderToSurface(*m_SceneSurface, emptyScene);
         }
 

@@ -279,7 +279,15 @@ namespace EditorApp
             else
             {
                 Life::SceneService& sceneService = services.SceneService->get();
-                Life::Scene& scene = sceneService.GetActiveScene();
+                Life::Scene* effectiveScene = sceneState.GetEffectiveScene(sceneService);
+                if (effectiveScene == nullptr)
+                {
+                    ImGui::TextUnformatted("No active scene.");
+                    ImGui::End();
+                    return;
+                }
+
+                Life::Scene& scene = *effectiveScene;
                 bool changed = false;
                 Life::Entity pendingDelete;
 
@@ -323,7 +331,10 @@ namespace EditorApp
                 }
 
                 if (changed)
-                    sceneService.MarkActiveSceneDirty();
+                {
+                    if (sceneState.ExecutionMode == EditorSceneExecutionMode::Edit)
+                        sceneService.MarkActiveSceneDirty();
+                }
             }
         }
         ImGui::End();

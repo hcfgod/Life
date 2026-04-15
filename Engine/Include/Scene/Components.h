@@ -2,6 +2,7 @@
 
 #include <entt/entity/entity.hpp>
 #include "Core/Memory.h"
+#include "Graphics/Camera.h"
 
 #include <glm/glm.hpp>
 
@@ -37,6 +38,22 @@ namespace Life
     {
         entt::entity Parent{ entt::null };
         std::vector<entt::entity> Children;
+    };
+
+    struct CameraComponent
+    {
+        ProjectionType Projection = ProjectionType::Perspective;
+        float PerspectiveFieldOfView = 60.0f;
+        float PerspectiveNearClip = 0.1f;
+        float PerspectiveFarClip = 1000.0f;
+        float OrthographicSize = 5.0f;
+        float OrthographicNearClip = -1.0f;
+        float OrthographicFarClip = 1.0f;
+        int32_t Priority = 0;
+        bool Primary = false;
+        CameraClearMode ClearMode = CameraClearMode::SolidColor;
+        glm::vec4 ClearColor{ 0.1f, 0.1f, 0.1f, 1.0f };
+        Viewport ViewportRect{ 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f };
     };
 
     struct SpriteComponent

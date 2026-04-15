@@ -96,6 +96,7 @@ namespace EditorApp
 
         if (mode == Mode::ProjectHub)
         {
+            m_SceneState.ResetRuntimeState();
             if (m_Services.SceneService)
                 m_Services.SceneService->get().CloseScene();
             m_SceneState.ClearSelection();
@@ -134,6 +135,39 @@ namespace EditorApp
             return;
 
         Life::SceneService& sceneService = m_Services.SceneService->get();
+
+        if (actions.RequestPlayScene)
+            BeginSceneExecution(EditorSceneExecutionMode::Play);
+
+        if (actions.RequestSimulateScene)
+            BeginSceneExecution(EditorSceneExecutionMode::Simulation);
+
+        if (actions.RequestPauseScene && m_SceneState.IsRuntimeMode())
+        {
+            m_SceneState.Paused = !m_SceneState.Paused;
+            m_SceneState.StepSingleFrame = false;
+            SetSceneStatus(m_SceneState.Paused ? "Scene execution paused." : "Scene execution resumed.", false);
+        }
+
+        if (actions.RequestStepScene)
+        {
+            if (!m_SceneState.IsRuntimeMode())
+            {
+                SetSceneStatus("Step is only available while the scene is playing or simulating.", true);
+            }
+            else if (!m_SceneState.Paused)
+            {
+                SetSceneStatus("Pause scene execution before stepping a single frame.", true);
+            }
+            else
+            {
+                m_SceneState.StepSingleFrame = true;
+                SetSceneStatus("Advancing scene execution by one frame.", false);
+            }
+        }
+
+        if (actions.RequestStopScene)
+            StopSceneExecution();
 
         if (actions.RequestNewScene)
         {
@@ -194,6 +228,7 @@ namespace EditorApp
 
         if (actions.RequestCloseScene)
         {
+            m_SceneState.ResetRuntimeState();
             if (sceneService.CloseScene())
             {
                 m_SceneState.ClearSelection();
@@ -233,6 +268,7 @@ namespace EditorApp
 
             if (ImGui::Button("Create", ImVec2(120.0f, 0.0f)))
             {
+                m_SceneState.ResetRuntimeState();
                 Life::Scene& scene = sceneService.CreateScene(m_NewSceneName.empty() ? "Untitled" : m_NewSceneName);
                 m_SceneState.ClearSelection();
                 if (!m_NewScenePath.empty())
@@ -271,6 +307,7 @@ namespace EditorApp
 
             if (ImGui::Button("Open", ImVec2(120.0f, 0.0f)))
             {
+                m_SceneState.ResetRuntimeState();
                 const auto loadResult = sceneService.LoadScene(m_OpenScenePath);
                 if (loadResult.IsFailure())
                 {
@@ -341,6 +378,87 @@ namespace EditorApp
             LOG_INFO("{}", m_SceneState.StatusMessage);
     }
 
+    bool EditorShellOverlay::BeginSceneExecution(EditorSceneExecutionMode executionMode)
+    {
+        if (!m_Services.SceneService)
+        {
+            SetSceneStatus("Scene execution is unavailable because SceneService is not registered.", true);
+            return false;
+        }
+
+        Life::SceneService& sceneService = m_Services.SceneService->get();
+        if (!sceneService.HasActiveScene())
+        {
+            SetSceneStatus("Open or create a scene before entering play or simulation mode.", true);
+            return false;
+        }
+
+        if (executionMode == EditorSceneExecutionMode::Edit)
+        {
+            StopSceneExecution();
+            return true;
+        }
+
+        const bool insertedCamera = sceneService.EnsureActiveSceneHasCamera();
+        Life::Scene& editScene = sceneService.GetActiveScene();
+        if (!editScene.HasCamera())
+        {
+            SetSceneStatus("The active scene needs a camera before it can be played.", true);
+            return false;
+        }
+
+        Life::Scope<Life::Scene> runtimeScene = editScene.Clone();
+        if (!runtimeScene || !runtimeScene->HasCamera())
+        {
+            SetSceneStatus("Failed to prepare a runtime scene copy with a usable camera.", true);
+            return false;
+        }
+
+        m_SceneState.RuntimeScene = std::move(runtimeScene);
+        m_SceneState.ExecutionMode = executionMode;
+        m_SceneState.Paused = false;
+        m_SceneState.StepSingleFrame = false;
+
+        const char* modeLabel = executionMode == EditorSceneExecutionMode::Simulation ? "Simulation" : "Play";
+        if (insertedCamera)
+            SetSceneStatus(std::string(modeLabel) + " mode started after inserting a default scene camera.", false);
+        else
+            SetSceneStatus(std::string(modeLabel) + " mode started.", false);
+        return true;
+    }
+
+    void EditorShellOverlay::StopSceneExecution()
+    {
+        if (!m_SceneState.IsRuntimeMode())
+            return;
+
+        m_SceneState.ResetRuntimeState();
+        SetSceneStatus("Returned to edit mode.", false);
+    }
+
+    void EditorShellOverlay::UpdateSceneExecution(float timestep)
+    {
+        (void)timestep;
+
+        if (!m_SceneState.IsRuntimeMode())
+            return;
+
+        if (!m_SceneState.RuntimeScene)
+        {
+            StopSceneExecution();
+            SetSceneStatus("Runtime scene state was lost. Returning to edit mode.", true);
+            return;
+        }
+
+        if (m_SceneState.Paused && !m_SceneState.StepSingleFrame)
+            return;
+
+        // The editor now runs against a cloned runtime scene. Scene-wide gameplay systems
+        // can hook into this path later without mutating the editable document scene.
+        if (m_SceneState.StepSingleFrame)
+            m_SceneState.StepSingleFrame = false;
+    }
+
     void EditorShellOverlay::OnAttach()
     {
         m_Services = EditorServices::Acquire(GetApplication());
@@ -362,6 +480,7 @@ namespace EditorApp
 
     void EditorShellOverlay::OnDetach()
     {
+        m_SceneState.ResetRuntimeState();
         m_ProjectHub.Detach();
         m_SceneViewportPanel.Detach();
 
@@ -376,6 +495,7 @@ namespace EditorApp
     {
         if (m_Mode == Mode::Workspace)
         {
+            UpdateSceneExecution(timestep);
             m_SceneViewportPanel.Update(m_Services, timestep);
             m_FpsOverlayPanel.Update(timestep);
         }
@@ -407,10 +527,14 @@ namespace EditorApp
             : nullptr;
         if (m_Services.SceneService && m_Services.SceneService->get().HasActiveScene())
         {
-            frameContext.ActiveSceneName = m_Services.SceneService->get().GetActiveScene().GetName().c_str();
+            Life::SceneService& sceneService = m_Services.SceneService->get();
+            frameContext.ActiveSceneName = sceneService.GetActiveScene().GetName().c_str();
             frameContext.HasActiveScene = true;
-            frameContext.IsSceneDirty = m_Services.SceneService->get().IsActiveSceneDirty();
+            frameContext.IsSceneDirty = sceneService.IsActiveSceneDirty();
+            frameContext.HasSceneCamera = sceneService.ActiveSceneHasCamera();
         }
+        frameContext.ExecutionMode = m_SceneState.ExecutionMode;
+        frameContext.IsPaused = m_SceneState.Paused;
 
         m_Shell.Begin(m_PanelVisibility, m_PanelState, actions, frameContext);
         m_ProjectAssetsPanel.ApplyState(m_PanelState.ProjectAssets);

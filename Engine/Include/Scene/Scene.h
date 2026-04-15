@@ -1,6 +1,6 @@
 #pragma once
 
-
+#include "Scene/Entity.h"
 #include "Scene/Components.h"
 
 #include <entt/entt.hpp>
@@ -10,14 +10,11 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace Life
 {
-    class Entity;
-
     class Scene
     {
     public:
@@ -76,6 +73,17 @@ namespace Life
 
         glm::mat4 GetLocalTransformMatrix(Entity entity) const;
         glm::mat4 GetWorldTransformMatrix(Entity entity) const;
+        Entity CreateDefaultCameraEntity(std::string tag = "Main Camera");
+        bool HasCamera() const noexcept;
+        std::size_t GetCameraCount() const noexcept;
+        bool EnsureAtLeastOneCamera();
+        Entity FindPrimaryCameraEntity();
+        Entity FindPrimaryCameraEntity() const;
+        Entity ResolveRenderCameraEntity();
+        Entity ResolveRenderCameraEntity() const;
+        bool BuildCameraFromEntity(Entity entity, float aspectRatio, Camera& camera) const;
+        bool BuildPrimaryCamera(float aspectRatio, Camera& camera) const;
+        Scope<Scene> Clone() const;
 
         entt::registry& GetRegistry() noexcept;
         const entt::registry& GetRegistry() const noexcept;
@@ -93,6 +101,7 @@ namespace Life
         void DetachFromParent(entt::entity child, bool makeRoot = false);
         void RemoveFromRootOrder(entt::entity handle);
         bool WouldCreateCycle(ParentRelation relation) const;
+        void NormalizeCameraPrimaryState();
         static glm::mat4 ComposeTransform(const TransformComponent& transform);
         static std::string GenerateEntityId();
 
@@ -105,66 +114,4 @@ namespace Life
 
 }
 
-#include "Scene/Entity.h"
-
-namespace Life
-{
-    template<typename TComponent, typename... TArguments>
-    TComponent& Entity::AddComponent(TArguments&&... arguments)
-    {
-        return m_Scene->m_Registry.emplace<TComponent>(m_Handle, std::forward<TArguments>(arguments)...);
-    }
-
-    template<typename TComponent, typename... TArguments>
-    TComponent& Entity::AddOrReplaceComponent(TArguments&&... arguments)
-    {
-        return m_Scene->m_Registry.emplace_or_replace<TComponent>(m_Handle, std::forward<TArguments>(arguments)...);
-    }
-
-    template<typename TComponent>
-    bool Entity::HasComponent() const
-    {
-        return m_Scene != nullptr && m_Scene->m_Registry.all_of<TComponent>(m_Handle);
-    }
-
-    template<typename TComponent>
-    TComponent& Entity::GetComponent()
-    {
-        return m_Scene->m_Registry.get<TComponent>(m_Handle);
-    }
-
-    template<typename TComponent>
-    const TComponent& Entity::GetComponent() const
-    {
-        return m_Scene->m_Registry.get<TComponent>(m_Handle);
-    }
-
-    template<typename TComponent>
-    TComponent* Entity::TryGetComponent() noexcept
-    {
-        return m_Scene != nullptr ? m_Scene->m_Registry.try_get<TComponent>(m_Handle) : nullptr;
-    }
-
-    template<typename TComponent>
-    const TComponent* Entity::TryGetComponent() const noexcept
-    {
-        return m_Scene != nullptr ? m_Scene->m_Registry.try_get<TComponent>(m_Handle) : nullptr;
-    }
-
-    template<typename TComponent>
-    bool Entity::RemoveComponent()
-    {
-        if (m_Scene == nullptr)
-            return false;
-
-        if constexpr (std::is_same_v<TComponent, IdComponent> ||
-                      std::is_same_v<TComponent, TagComponent> ||
-                      std::is_same_v<TComponent, TransformComponent> ||
-                      std::is_same_v<TComponent, HierarchyComponent>)
-        {
-            return false;
-        }
-
-        return m_Scene->m_Registry.remove<TComponent>(m_Handle) > 0;
-    }
-}
+#include "Scene/Entity.inl"

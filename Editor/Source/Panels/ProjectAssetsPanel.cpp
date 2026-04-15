@@ -391,6 +391,7 @@ namespace EditorApp
             if (!services.SceneService)
                 return false;
 
+            sceneState.ResetRuntimeState();
             const auto result = services.SceneService->get().LoadScene(sceneIdentifier);
             if (result.IsFailure())
             {
@@ -478,6 +479,7 @@ namespace EditorApp
 
             Life::Scene scene(sanitizedName);
             scene.SetState(Life::Scene::State::Ready);
+            scene.EnsureAtLeastOneCamera();
             const auto saveResult = Life::SceneSerializer::Save(scene, targetPath);
             if (saveResult.IsFailure())
             {

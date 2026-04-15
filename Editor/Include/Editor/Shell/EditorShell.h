@@ -23,6 +23,9 @@ namespace EditorApp
             const Life::Assets::Project* ActiveProject = nullptr;
             bool HasActiveScene = false;
             bool IsSceneDirty = false;
+            bool HasSceneCamera = false;
+            EditorSceneExecutionMode ExecutionMode = EditorSceneExecutionMode::Edit;
+            bool IsPaused = false;
         };
 
         void ResetLayout() noexcept;
@@ -67,7 +70,7 @@ namespace EditorApp
         void ApplySession(const EditorLayoutSession& session, EditorPanelVisibility& visibility, EditorPanelState& panelState);
         void ApplyLayout(const EditorLayoutDefinition& layout, EditorPanelVisibility& visibility, EditorPanelState& panelState);
         void RenderMenuBar(EditorPanelVisibility& visibility, const EditorPanelState& panelState, EditorShellActions& actions, const FrameContext& context);
-        void RenderWorkspaceChrome(const FrameContext& context) const;
+        void RenderWorkspaceChrome(EditorShellActions& actions, const FrameContext& context) const;
         void RenderLayoutMenu(EditorPanelVisibility& visibility, const EditorPanelState& panelState);
         void RenderLayoutDialogs(EditorPanelVisibility& visibility, const EditorPanelState& panelState);
         std::optional<LayoutSnapshot> CaptureLayoutSnapshot(const EditorPanelVisibility& visibility, const EditorPanelState& panelState) const;

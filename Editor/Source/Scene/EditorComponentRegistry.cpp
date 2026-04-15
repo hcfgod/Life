@@ -237,6 +237,106 @@ namespace EditorApp
                 return true;
             }
 
+            const char* ResolveProjectionLabel(Life::ProjectionType projection) noexcept
+            {
+                switch (projection)
+                {
+                    case Life::ProjectionType::Orthographic: return "Orthographic";
+                    case Life::ProjectionType::Perspective:
+                    default: return "Perspective";
+                }
+            }
+
+            bool DrawProjectionCombo(const char* label, Life::ProjectionType& value)
+            {
+                constexpr std::array<std::pair<Life::ProjectionType, const char*>, 2> options{{
+                    { Life::ProjectionType::Perspective, "Perspective" },
+                    { Life::ProjectionType::Orthographic, "Orthographic" }
+                }};
+
+                bool changed = false;
+                if (ImGui::BeginCombo(label, ResolveProjectionLabel(value)))
+                {
+                    for (const auto& option : options)
+                    {
+                        const bool selected = option.first == value;
+                        if (ImGui::Selectable(option.second, selected) && !selected)
+                        {
+                            value = option.first;
+                            changed = true;
+                        }
+                        if (selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+
+                return changed;
+            }
+
+            const char* ResolveClearModeLabel(Life::CameraClearMode clearMode) noexcept
+            {
+                switch (clearMode)
+                {
+                    case Life::CameraClearMode::DepthOnly: return "Depth Only";
+                    case Life::CameraClearMode::None: return "None";
+                    case Life::CameraClearMode::SolidColor:
+                    default: return "Solid Color";
+                }
+            }
+
+            bool DrawClearModeCombo(const char* label, Life::CameraClearMode& value)
+            {
+                constexpr std::array<std::pair<Life::CameraClearMode, const char*>, 3> options{{
+                    { Life::CameraClearMode::SolidColor, "Solid Color" },
+                    { Life::CameraClearMode::DepthOnly, "Depth Only" },
+                    { Life::CameraClearMode::None, "None" }
+                }};
+
+                bool changed = false;
+                if (ImGui::BeginCombo(label, ResolveClearModeLabel(value)))
+                {
+                    for (const auto& option : options)
+                    {
+                        const bool selected = option.first == value;
+                        if (ImGui::Selectable(option.second, selected) && !selected)
+                        {
+                            value = option.first;
+                            changed = true;
+                        }
+                        if (selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+
+                return changed;
+            }
+
+            bool ApplyPrimaryCameraSelection(Life::Entity& entity, bool primary)
+            {
+                Life::CameraComponent* camera = entity.TryGetComponent<Life::CameraComponent>();
+                if (camera == nullptr)
+                    return false;
+
+                bool changed = camera->Primary != primary;
+                camera->Primary = primary;
+                if (primary)
+                {
+                    for (Life::Entity other : entity.GetScene().GetEntities())
+                    {
+                        if (other == entity)
+                            continue;
+
+                        if (Life::CameraComponent* otherCamera = other.TryGetComponent<Life::CameraComponent>())
+                            otherCamera->Primary = false;
+                    }
+                }
+
+                entity.GetScene().EnsureAtLeastOneCamera();
+                return changed;
+            }
+
             template <typename TDrawFn>
             bool DrawLeftLabelRow(const char* rowId, const char* label, TDrawFn&& drawFn)
             {
@@ -372,6 +472,106 @@ namespace EditorApp
             };
             return descriptor;
         }
+
+        EditorComponentDescriptor MakeCameraDescriptor()
+        {
+            EditorComponentDescriptor descriptor;
+            descriptor.Id = "camera";
+            descriptor.DisplayName = "Camera";
+            descriptor.Removable = true;
+            descriptor.HasComponent = [](const Life::Entity& entity) { return entity.HasComponent<Life::CameraComponent>(); };
+            descriptor.CanAddComponent = [](const Life::Entity& entity) { return !entity.HasComponent<Life::CameraComponent>(); };
+            descriptor.AddComponent = [](Life::Entity& entity)
+            {
+                if (entity.HasComponent<Life::CameraComponent>())
+                    return;
+
+                Life::CameraComponent camera;
+                camera.Projection = Life::ProjectionType::Orthographic;
+                camera.OrthographicSize = 5.0f;
+                camera.OrthographicNearClip = 0.1f;
+                camera.OrthographicFarClip = 100.0f;
+                camera.PerspectiveNearClip = 0.1f;
+                camera.PerspectiveFarClip = 1000.0f;
+                camera.ClearColor = { 0.08f, 0.08f, 0.12f, 1.0f };
+                camera.Primary = !entity.GetScene().HasCamera();
+                entity.AddComponent<Life::CameraComponent>(camera);
+                entity.GetScene().EnsureAtLeastOneCamera();
+            };
+            descriptor.RemoveComponent = [](Life::Entity& entity)
+            {
+                return entity.RemoveComponent<Life::CameraComponent>();
+            };
+            descriptor.DrawInspector = [](Life::Entity& entity, const EditorServices&) -> bool
+            {
+#if __has_include(<imgui.h>)
+                bool changed = false;
+                Life::CameraComponent& camera = entity.GetComponent<Life::CameraComponent>();
+
+                changed |= DrawLeftLabelRow("ProjectionRow", "Projection", [&]()
+                    {
+                        return DrawProjectionCombo("##Value", camera.Projection);
+                    });
+
+                bool primary = camera.Primary;
+                if (ImGui::Checkbox("Primary Camera", &primary))
+                    changed |= ApplyPrimaryCameraSelection(entity, primary);
+
+                if (camera.Projection == Life::ProjectionType::Perspective)
+                {
+                    changed |= DrawLeftLabelRow("PerspectiveFovRow", "Field Of View", [&]()
+                        {
+                            return ImGui::DragFloat("##Value", &camera.PerspectiveFieldOfView, 0.25f, 1.0f, 179.0f);
+                        });
+                    changed |= DrawLeftLabelRow("PerspectiveNearRow", "Near Clip", [&]()
+                        {
+                            return ImGui::DragFloat("##Value", &camera.PerspectiveNearClip, 0.01f, 0.001f, 1000.0f);
+                        });
+                    changed |= DrawLeftLabelRow("PerspectiveFarRow", "Far Clip", [&]()
+                        {
+                            return ImGui::DragFloat("##Value", &camera.PerspectiveFarClip, 0.1f, 0.01f, 100000.0f);
+                        });
+                }
+                else
+                {
+                    changed |= DrawLeftLabelRow("OrthographicSizeRow", "Size", [&]()
+                        {
+                            return ImGui::DragFloat("##Value", &camera.OrthographicSize, 0.05f, 0.01f, 100000.0f);
+                        });
+                    changed |= DrawLeftLabelRow("OrthographicNearRow", "Near Clip", [&]()
+                        {
+                            return ImGui::DragFloat("##Value", &camera.OrthographicNearClip, 0.01f, -100000.0f, 100000.0f);
+                        });
+                    changed |= DrawLeftLabelRow("OrthographicFarRow", "Far Clip", [&]()
+                        {
+                            return ImGui::DragFloat("##Value", &camera.OrthographicFarClip, 0.01f, -100000.0f, 100000.0f);
+                        });
+                }
+
+                changed |= DrawLeftLabelRow("CameraPriorityRow", "Priority", [&]()
+                    {
+                        return ImGui::DragInt("##Value", &camera.Priority, 1.0f);
+                    });
+                changed |= DrawLeftLabelRow("CameraClearModeRow", "Clear Mode", [&]()
+                    {
+                        return DrawClearModeCombo("##Value", camera.ClearMode);
+                    });
+
+                if (camera.ClearMode == Life::CameraClearMode::SolidColor)
+                {
+                    ImGui::TextUnformatted("Clear Color");
+                    ImGui::SetNextItemWidth(-1.0f);
+                    changed |= ImGui::ColorEdit4("##CameraClearColor", &camera.ClearColor.x);
+                }
+
+                return changed;
+#else
+                (void)entity;
+                return false;
+#endif
+            };
+            return descriptor;
+        }
     }
 
     EditorComponentRegistry& EditorComponentRegistry::Get()
@@ -384,6 +584,7 @@ namespace EditorApp
         {
             Register(MakeTagDescriptor());
             Register(MakeTransformDescriptor());
+            Register(MakeCameraDescriptor());
             Register(MakeSpriteDescriptor());
         }
 

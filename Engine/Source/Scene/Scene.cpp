@@ -3,8 +3,11 @@
 #include "Assets/AssetUtils.h"
 
 #include <glm/gtc/matrix_transform.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/matrix_decompose.hpp>
 
 #include <algorithm>
+#include <functional>
 #include <stdexcept>
 #include <utility>
 
@@ -15,6 +18,37 @@ namespace Life
         Entity MakeEntity(entt::entity handle, Scene* scene) noexcept
         {
             return Entity(handle, scene);
+        }
+
+        CameraSpecification BuildCameraSpecification(const CameraComponent& component, const std::string& name, float aspectRatio)
+        {
+            CameraSpecification specification;
+            specification.Name = name;
+            specification.Projection = component.Projection;
+            specification.FieldOfView = component.PerspectiveFieldOfView;
+            specification.NearClip = component.PerspectiveNearClip;
+            specification.FarClip = component.PerspectiveFarClip;
+            specification.OrthoSize = component.OrthographicSize;
+            specification.OrthoNear = component.OrthographicNearClip;
+            specification.OrthoFar = component.OrthographicFarClip;
+            specification.AspectRatio = aspectRatio > 0.0f ? aspectRatio : 16.0f / 9.0f;
+            specification.Priority = component.Priority;
+            specification.ClearMode = component.ClearMode;
+            specification.ClearColor = component.ClearColor;
+            specification.ViewportRect = component.ViewportRect;
+            return specification;
+        }
+
+        bool DecomposeTransform(const glm::mat4& transform, glm::vec3& position, glm::quat& orientation)
+        {
+            glm::vec3 scale;
+            glm::vec3 skew;
+            glm::vec4 perspective;
+            if (!glm::decompose(transform, scale, orientation, position, skew, perspective))
+                return false;
+
+            orientation = glm::normalize(orientation);
+            return true;
         }
     }
 
@@ -80,6 +114,10 @@ namespace Life
         DetachFromParent(entity.GetHandle());
         RemoveFromRootOrder(entity.GetHandle());
         m_Registry.destroy(entity.GetHandle());
+        if (!HasCamera())
+            CreateDefaultCameraEntity();
+        else
+            NormalizeCameraPrimaryState();
         return true;
     }
 
@@ -346,6 +384,185 @@ namespace Life
         return transform;
     }
 
+    Entity Scene::CreateDefaultCameraEntity(std::string tag)
+    {
+        Entity cameraEntity = CreateEntity(tag.empty() ? std::string("Main Camera") : std::move(tag));
+        TransformComponent& transform = cameraEntity.GetComponent<TransformComponent>();
+        transform.LocalPosition = { 0.0f, 0.0f, 10.0f };
+        transform.LocalRotation = { 0.0f, 0.0f, 0.0f };
+        transform.LocalScale = { 1.0f, 1.0f, 1.0f };
+
+        CameraComponent camera;
+        camera.Projection = ProjectionType::Orthographic;
+        camera.OrthographicSize = 5.0f;
+        camera.OrthographicNearClip = 0.1f;
+        camera.OrthographicFarClip = 100.0f;
+        camera.PerspectiveNearClip = 0.1f;
+        camera.PerspectiveFarClip = 1000.0f;
+        camera.Primary = true;
+        camera.ClearColor = { 0.08f, 0.08f, 0.12f, 1.0f };
+        cameraEntity.AddComponent<CameraComponent>(camera);
+        NormalizeCameraPrimaryState();
+        return cameraEntity;
+    }
+
+    bool Scene::HasCamera() const noexcept
+    {
+        const auto view = m_Registry.view<CameraComponent>();
+        return view.begin() != view.end();
+    }
+
+    std::size_t Scene::GetCameraCount() const noexcept
+    {
+        std::size_t count = 0;
+        const auto view = m_Registry.view<CameraComponent>();
+        for ([[maybe_unused]] const entt::entity handle : view)
+            ++count;
+        return count;
+    }
+
+    bool Scene::EnsureAtLeastOneCamera()
+    {
+        if (!HasCamera())
+        {
+            CreateDefaultCameraEntity();
+            return true;
+        }
+
+        NormalizeCameraPrimaryState();
+        return false;
+    }
+
+    Entity Scene::FindPrimaryCameraEntity()
+    {
+        const auto view = m_Registry.view<CameraComponent>();
+        for (const entt::entity handle : view)
+        {
+            if (view.get<CameraComponent>(handle).Primary)
+                return WrapEntity(handle);
+        }
+
+        return {};
+    }
+
+    Entity Scene::FindPrimaryCameraEntity() const
+    {
+        const auto view = m_Registry.view<CameraComponent>();
+        for (const entt::entity handle : view)
+        {
+            if (view.get<CameraComponent>(handle).Primary)
+                return WrapEntity(handle);
+        }
+
+        return {};
+    }
+
+    Entity Scene::ResolveRenderCameraEntity()
+    {
+        return static_cast<const Scene&>(*this).ResolveRenderCameraEntity();
+    }
+
+    Entity Scene::ResolveRenderCameraEntity() const
+    {
+        Entity firstCamera;
+        Entity firstEnabledCamera;
+        Entity primaryCamera;
+        Entity primaryEnabledCamera;
+
+        const auto view = m_Registry.view<CameraComponent>();
+        for (const entt::entity handle : view)
+        {
+            const Entity entity = WrapEntity(handle);
+            if (!firstCamera.IsValid())
+                firstCamera = entity;
+            if (entity.IsEnabled() && !firstEnabledCamera.IsValid())
+                firstEnabledCamera = entity;
+
+            const CameraComponent& camera = view.get<CameraComponent>(handle);
+            if (!camera.Primary)
+                continue;
+
+            if (!primaryCamera.IsValid())
+                primaryCamera = entity;
+            if (entity.IsEnabled() && !primaryEnabledCamera.IsValid())
+                primaryEnabledCamera = entity;
+        }
+
+        if (primaryEnabledCamera.IsValid())
+            return primaryEnabledCamera;
+        if (firstEnabledCamera.IsValid())
+            return firstEnabledCamera;
+        if (primaryCamera.IsValid())
+            return primaryCamera;
+        return firstCamera;
+    }
+
+    bool Scene::BuildCameraFromEntity(Entity entity, float aspectRatio, Camera& camera) const
+    {
+        if (!IsValid(entity) || !entity.HasComponent<CameraComponent>())
+            return false;
+
+        const CameraComponent& component = entity.GetComponent<CameraComponent>();
+        const CameraSpecification specification = BuildCameraSpecification(
+            component,
+            entity.GetTag().empty() ? std::string("SceneCamera") : entity.GetTag(),
+            aspectRatio);
+
+        camera = Camera(specification);
+
+        glm::vec3 position{ 0.0f, 0.0f, 0.0f };
+        glm::quat orientation{ 1.0f, 0.0f, 0.0f, 0.0f };
+        const glm::mat4 worldTransform = GetWorldTransformMatrix(entity);
+        if (!DecomposeTransform(worldTransform, position, orientation))
+            position = glm::vec3(worldTransform[3]);
+
+        camera.SetTransform(position, orientation);
+        camera.SetViewportRect(component.ViewportRect);
+        return true;
+    }
+
+    bool Scene::BuildPrimaryCamera(float aspectRatio, Camera& camera) const
+    {
+        const Entity entity = ResolveRenderCameraEntity();
+        if (!entity.IsValid())
+            return false;
+
+        return BuildCameraFromEntity(entity, aspectRatio, camera);
+    }
+
+    Scope<Scene> Scene::Clone() const
+    {
+        auto clone = CreateScope<Scene>(m_Name);
+        clone->SetSourcePath(m_SourcePath);
+        clone->SetState(m_State);
+
+        std::function<void(Entity, Entity)> cloneEntityRecursive;
+        cloneEntityRecursive = [&](Entity sourceEntity, Entity destinationParent)
+        {
+            Entity destinationEntity = destinationParent.IsValid()
+                ? clone->CreateChildEntity(destinationParent, sourceEntity.GetTag())
+                : clone->CreateEntity(sourceEntity.GetTag());
+
+            destinationEntity.GetComponent<IdComponent>().Id = sourceEntity.GetId();
+            destinationEntity.SetEnabled(sourceEntity.IsEnabled());
+            destinationEntity.GetComponent<TransformComponent>() = sourceEntity.GetComponent<TransformComponent>();
+
+            if (const CameraComponent* camera = sourceEntity.TryGetComponent<CameraComponent>())
+                destinationEntity.AddComponent<CameraComponent>(*camera);
+            if (const SpriteComponent* sprite = sourceEntity.TryGetComponent<SpriteComponent>())
+                destinationEntity.AddComponent<SpriteComponent>(*sprite);
+
+            for (const Entity child : sourceEntity.GetChildren())
+                cloneEntityRecursive(child, destinationEntity);
+        };
+
+        for (const Entity rootEntity : GetRootEntities())
+            cloneEntityRecursive(rootEntity, {});
+
+        clone->EnsureAtLeastOneCamera();
+        return clone;
+    }
+
     entt::registry& Scene::GetRegistry() noexcept
     {
         return m_Registry;
@@ -406,6 +623,30 @@ namespace Life
         }
 
         return false;
+    }
+
+    void Scene::NormalizeCameraPrimaryState()
+    {
+        const auto view = m_Registry.view<CameraComponent>();
+        entt::entity primaryHandle = entt::null;
+        for (const entt::entity handle : view)
+        {
+            CameraComponent& camera = view.get<CameraComponent>(handle);
+            if (!camera.Primary)
+                continue;
+
+            if (primaryHandle == entt::null)
+            {
+                primaryHandle = handle;
+            }
+            else
+            {
+                camera.Primary = false;
+            }
+        }
+
+        if (primaryHandle == entt::null && view.begin() != view.end())
+            view.get<CameraComponent>(*view.begin()).Primary = true;
     }
 
     glm::mat4 Scene::ComposeTransform(const TransformComponent& transform)

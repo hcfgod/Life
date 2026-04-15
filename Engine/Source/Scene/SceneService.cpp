@@ -50,6 +50,7 @@ namespace Life
     {
         auto scene = CreateScope<Scene>(std::move(name));
         scene->SetState(Scene::State::Ready);
+        scene->EnsureAtLeastOneCamera();
         m_ActiveScene = std::move(scene);
         m_IsActiveSceneDirty = false;
         return *m_ActiveScene;
@@ -70,8 +71,15 @@ namespace Life
     {
         m_ActiveScene = std::move(scene);
         if (m_ActiveScene)
+        {
+            const bool insertedCamera = m_ActiveScene->EnsureAtLeastOneCamera();
             ResolveSceneAssetReferences(*m_ActiveScene);
-        m_IsActiveSceneDirty = false;
+            m_IsActiveSceneDirty = insertedCamera;
+        }
+        else
+        {
+            m_IsActiveSceneDirty = false;
+        }
     }
 
     bool SceneService::CloseScene() noexcept
@@ -89,6 +97,8 @@ namespace Life
             return Result<void>(ErrorCode::InvalidState,
                                 "No active scene is available to save.");
         }
+
+        (void)m_ActiveScene->EnsureAtLeastOneCamera();
 
         if (m_ActiveScene->GetSourcePath().empty())
         {
@@ -109,6 +119,8 @@ namespace Life
             return Result<void>(ErrorCode::InvalidState,
                                 "No active scene is available to save.");
         }
+
+        (void)m_ActiveScene->EnsureAtLeastOneCamera();
 
         const std::filesystem::path resolvedPath = ResolveScenePath(sourcePath);
         if (resolvedPath.empty())
@@ -158,6 +170,22 @@ namespace Life
         m_IsActiveSceneDirty = false;
     }
 
+    bool SceneService::ActiveSceneHasCamera() const noexcept
+    {
+        return m_ActiveScene != nullptr && m_ActiveScene->HasCamera();
+    }
+
+    bool SceneService::EnsureActiveSceneHasCamera()
+    {
+        if (!m_ActiveScene)
+            return false;
+
+        const bool insertedCamera = m_ActiveScene->EnsureAtLeastOneCamera();
+        if (insertedCamera)
+            m_IsActiveSceneDirty = true;
+        return insertedCamera;
+    }
+
     Scene& SceneService::GetActiveScene()
     {
         if (!m_ActiveScene)
@@ -193,6 +221,7 @@ namespace Life
             {
                 auto scene = CreateScope<Scene>("Scene");
                 scene->SetState(Scene::State::Ready);
+                scene->EnsureAtLeastOneCamera();
                 m_ActiveScene = std::move(scene);
                 m_IsActiveSceneDirty = false;
                 return Result<void>();
@@ -215,7 +244,7 @@ namespace Life
             else
             {
                 m_ActiveScene = std::move(loadResult.GetValue());
-                m_IsActiveSceneDirty = false;
+                m_IsActiveSceneDirty = m_ActiveScene->EnsureAtLeastOneCamera();
                 return Result<void>();
             }
         }
@@ -229,6 +258,7 @@ namespace Life
         auto scene = CreateScope<Scene>(resolvedPath.stem().string().empty() ? std::string("Scene") : resolvedPath.stem().string());
         scene->SetSourcePath(resolvedPath);
         scene->SetState(Scene::State::Ready);
+        scene->EnsureAtLeastOneCamera();
         m_ActiveScene = std::move(scene);
         ResolveSceneAssetReferences(*m_ActiveScene);
         m_IsActiveSceneDirty = false;

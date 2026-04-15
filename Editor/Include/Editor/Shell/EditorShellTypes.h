@@ -2,6 +2,13 @@
 
 namespace EditorApp
 {
+    enum class EditorSceneExecutionMode
+    {
+        Edit = 0,
+        Play,
+        Simulation
+    };
+
     struct ProjectAssetsPanelState
     {
         float GridScale = 1.0f;
@@ -67,5 +74,10 @@ namespace EditorApp
         bool RequestSaveScene = false;
         bool RequestSaveSceneAs = false;
         bool RequestCloseScene = false;
+        bool RequestPlayScene = false;
+        bool RequestSimulateScene = false;
+        bool RequestPauseScene = false;
+        bool RequestStopScene = false;
+        bool RequestStepScene = false;
     };
 }

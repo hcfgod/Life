@@ -12,6 +12,9 @@ namespace EditorApp
     {
         bool SurfaceReady = false;
         bool LastRenderSucceeded = false;
+        bool UsingEditorCamera = true;
+        bool UsingSceneCamera = false;
+        EditorSceneExecutionMode ExecutionMode = EditorSceneExecutionMode::Edit;
         uint32_t SurfaceWidth = 0;
         uint32_t SurfaceHeight = 0;
         uint32_t RequestedQuadCount = 0;
@@ -35,7 +38,7 @@ namespace EditorApp
     private:
         void UpdateCameraNavigation(EditorCameraTool& cameraTool, Life::Camera& camera, bool viewportHovered, bool viewportFocused);
         void SetCameraNavigationActive(bool active) noexcept;
-        bool RenderSceneSurface(uint32_t width, uint32_t height, const EditorServices& services, EditorCameraTool& cameraTool, bool viewportHovered, bool viewportFocused);
+        bool RenderSceneSurface(uint32_t width, uint32_t height, const EditorServices& services, EditorSceneState& sceneState, EditorCameraTool& cameraTool, bool viewportHovered, bool viewportFocused);
 
         float m_LastTimestep = 0.0f;
         Life::Scope<Life::SceneSurface> m_SceneSurface;

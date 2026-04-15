@@ -40,6 +40,9 @@ namespace EditorApp
         void RenderSceneDialogs();
         std::string BuildDefaultScenePath(const std::string& sceneName) const;
         void SetSceneStatus(std::string message, bool isError);
+        bool BeginSceneExecution(EditorSceneExecutionMode executionMode);
+        void StopSceneExecution();
+        void UpdateSceneExecution(float timestep);
 
         EditorServices m_Services;
         EditorPanelVisibility m_PanelVisibility;

@@ -30,6 +30,17 @@ namespace EditorApp
             value = buffer.data();
             return true;
         }
+
+        const char* ResolveExecutionModeLabel(EditorSceneExecutionMode executionMode)
+        {
+            switch (executionMode)
+            {
+                case EditorSceneExecutionMode::Play: return "Play";
+                case EditorSceneExecutionMode::Simulation: return "Simulation";
+                case EditorSceneExecutionMode::Edit:
+                default: return "Edit";
+            }
+        }
 #endif
     }
 
@@ -70,7 +81,7 @@ namespace EditorApp
             BuildDefaultLayout();
 
         RenderMenuBar(visibility, panelState, actions, context);
-        RenderWorkspaceChrome(context);
+        RenderWorkspaceChrome(actions, context);
 
         const ImGuiID dockspaceId = ImGui::GetID("EditorDockspace");
         ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
@@ -321,6 +332,23 @@ namespace EditorApp
                 actions.RequestSaveSceneAs = true;
             else if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
                 actions.RequestSaveScene = true;
+
+            if (ImGui::Shortcut(ImGuiKey_F5, ImGuiInputFlags_RouteGlobal))
+            {
+                if (context.ExecutionMode == EditorSceneExecutionMode::Edit)
+                    actions.RequestPlayScene = true;
+                else
+                    actions.RequestStopScene = true;
+            }
+
+            if (ImGui::Shortcut(ImGuiKey_F6, ImGuiInputFlags_RouteGlobal) && context.ExecutionMode == EditorSceneExecutionMode::Edit)
+                actions.RequestSimulateScene = true;
+
+            if (ImGui::Shortcut(ImGuiKey_F7, ImGuiInputFlags_RouteGlobal) && context.ExecutionMode != EditorSceneExecutionMode::Edit)
+                actions.RequestPauseScene = true;
+
+            if (ImGui::Shortcut(ImGuiKey_F10, ImGuiInputFlags_RouteGlobal) && context.ExecutionMode != EditorSceneExecutionMode::Edit)
+                actions.RequestStepScene = true;
         }
 
         if (ImGui::BeginMenu("Project"))
@@ -342,6 +370,17 @@ namespace EditorApp
                 actions.RequestSaveSceneAs = true;
             if (ImGui::MenuItem("Close Scene", nullptr, false, context.HasActiveScene))
                 actions.RequestCloseScene = true;
+            ImGui::Separator();
+            if (ImGui::MenuItem("Play", "F5", false, context.HasActiveScene && context.ExecutionMode == EditorSceneExecutionMode::Edit && context.HasSceneCamera))
+                actions.RequestPlayScene = true;
+            if (ImGui::MenuItem("Simulate", "F6", false, context.HasActiveScene && context.ExecutionMode == EditorSceneExecutionMode::Edit && context.HasSceneCamera))
+                actions.RequestSimulateScene = true;
+            if (ImGui::MenuItem(context.IsPaused ? "Resume" : "Pause", "F7", false, context.ExecutionMode != EditorSceneExecutionMode::Edit))
+                actions.RequestPauseScene = true;
+            if (ImGui::MenuItem("Stop", "F5", false, context.ExecutionMode != EditorSceneExecutionMode::Edit))
+                actions.RequestStopScene = true;
+            if (ImGui::MenuItem("Step", "F10", false, context.ExecutionMode != EditorSceneExecutionMode::Edit))
+                actions.RequestStepScene = true;
             ImGui::EndMenu();
         }
 
@@ -374,7 +413,7 @@ namespace EditorApp
 #endif
     }
 
-    void EditorShell::RenderWorkspaceChrome(const FrameContext& context) const
+    void EditorShell::RenderWorkspaceChrome(EditorShellActions& actions, const FrameContext& context) const
     {
 #if __has_include(<imgui.h>)
         constexpr float chromeHeight = 42.0f;
@@ -407,15 +446,53 @@ namespace EditorApp
             const char* sceneLabel = (context.ActiveSceneName != nullptr && context.ActiveSceneName[0] != '\0') ? context.ActiveSceneName : "No Scene";
             drawChip("Scene", sceneLabel, context.IsSceneDirty ? ImVec4(0.36f, 0.26f, 0.08f, 1.0f) : ImVec4(0.17f, 0.25f, 0.20f, 1.0f));
 
+            ImGui::SameLine();
+            const ImVec4 modeColor = context.ExecutionMode == EditorSceneExecutionMode::Play
+                ? ImVec4(0.18f, 0.34f, 0.18f, 1.0f)
+                : context.ExecutionMode == EditorSceneExecutionMode::Simulation
+                    ? ImVec4(0.30f, 0.25f, 0.12f, 1.0f)
+                    : ImVec4(0.20f, 0.20f, 0.24f, 1.0f);
+            drawChip("Mode", ResolveExecutionModeLabel(context.ExecutionMode), modeColor);
+
+            ImGui::SameLine();
+            const bool canPlay = context.HasActiveScene && context.HasSceneCamera;
+            const bool isEditMode = context.ExecutionMode == EditorSceneExecutionMode::Edit;
+            if (ImGui::Button(isEditMode ? "Play" : "Stop") && canPlay)
+            {
+                if (isEditMode)
+                    actions.RequestPlayScene = true;
+                else
+                    actions.RequestStopScene = true;
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Simulate") && context.ExecutionMode == EditorSceneExecutionMode::Edit && canPlay)
+                actions.RequestSimulateScene = true;
+
+            ImGui::SameLine();
+            if (ImGui::Button(context.IsPaused ? "Resume" : "Pause") && context.ExecutionMode != EditorSceneExecutionMode::Edit)
+                actions.RequestPauseScene = true;
+
+            ImGui::SameLine();
+            if (ImGui::Button("Step") && context.ExecutionMode != EditorSceneExecutionMode::Edit)
+                actions.RequestStepScene = true;
+
             if (context.IsSceneDirty)
             {
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(0.95f, 0.73f, 0.30f, 1.0f), "Unsaved changes");
             }
+
+            if (!context.HasSceneCamera)
+            {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "No scene camera");
+            }
         }
         ImGui::EndChild();
         ImGui::PopStyleVar(4);
 #else
+        (void)actions;
         (void)context;
 #endif
     }
