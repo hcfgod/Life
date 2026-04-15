@@ -119,7 +119,9 @@ namespace EditorApp
                     }
                     else
                     {
-                        sceneService.CreateScene(project.Descriptor.Name.empty() ? "EditorScene" : project.Descriptor.Name);
+                        Life::Scene& scene = sceneService.CreateScene(project.Descriptor.Name.empty() ? "EditorScene" : project.Descriptor.Name);
+                        scene.EnsureAtLeastOneCamera();
+                        sceneService.MarkActiveSceneDirty();
                         SetSceneStatus("Created editor scene document.", false);
                     }
                 }
@@ -144,9 +146,16 @@ namespace EditorApp
 
         if (actions.RequestPauseScene && m_SceneState.IsRuntimeMode())
         {
-            m_SceneState.Paused = !m_SceneState.Paused;
-            m_SceneState.StepSingleFrame = false;
-            SetSceneStatus(m_SceneState.Paused ? "Scene execution paused." : "Scene execution resumed.", false);
+            if (!m_SceneState.SupportsRuntimeTicks)
+            {
+                SetSceneStatus("Pause and resume are unavailable until runtime scene tick hooks are connected.", true);
+            }
+            else
+            {
+                m_SceneState.Paused = !m_SceneState.Paused;
+                m_SceneState.StepSingleFrame = false;
+                SetSceneStatus(m_SceneState.Paused ? "Scene execution paused." : "Scene execution resumed.", false);
+            }
         }
 
         if (actions.RequestStepScene)
@@ -154,6 +163,10 @@ namespace EditorApp
             if (!m_SceneState.IsRuntimeMode())
             {
                 SetSceneStatus("Step is only available while the scene is playing or simulating.", true);
+            }
+            else if (!m_SceneState.SupportsRuntimeTicks)
+            {
+                SetSceneStatus("Single-frame step is unavailable until runtime scene tick hooks are connected.", true);
             }
             else if (!m_SceneState.Paused)
             {
@@ -270,6 +283,7 @@ namespace EditorApp
             {
                 m_SceneState.ResetRuntimeState();
                 Life::Scene& scene = sceneService.CreateScene(m_NewSceneName.empty() ? "Untitled" : m_NewSceneName);
+                scene.EnsureAtLeastOneCamera();
                 m_SceneState.ClearSelection();
                 if (!m_NewScenePath.empty())
                 {
@@ -378,6 +392,11 @@ namespace EditorApp
             LOG_INFO("{}", m_SceneState.StatusMessage);
     }
 
+    bool EditorShellOverlay::SupportsRuntimeSceneTicks() noexcept
+    {
+        return false;
+    }
+
     bool EditorShellOverlay::BeginSceneExecution(EditorSceneExecutionMode executionMode)
     {
         if (!m_Services.SceneService)
@@ -399,7 +418,6 @@ namespace EditorApp
             return true;
         }
 
-        const bool insertedCamera = sceneService.EnsureActiveSceneHasCamera();
         Life::Scene& editScene = sceneService.GetActiveScene();
         if (!editScene.HasCamera())
         {
@@ -418,12 +436,20 @@ namespace EditorApp
         m_SceneState.ExecutionMode = executionMode;
         m_SceneState.Paused = false;
         m_SceneState.StepSingleFrame = false;
+        m_SceneState.SupportsRuntimeTicks = SupportsRuntimeSceneTicks();
 
         const char* modeLabel = executionMode == EditorSceneExecutionMode::Simulation ? "Simulation" : "Play";
-        if (insertedCamera)
-            SetSceneStatus(std::string(modeLabel) + " mode started after inserting a default scene camera.", false);
-        else
+        if (m_SceneState.SupportsRuntimeTicks)
+        {
             SetSceneStatus(std::string(modeLabel) + " mode started.", false);
+        }
+        else
+        {
+            SetSceneStatus(
+                std::string(modeLabel) +
+                    " preview started. The editor is rendering a runtime scene copy through the scene camera, but runtime update ticks are not connected yet.",
+                false);
+        }
         return true;
     }
 
@@ -453,8 +479,12 @@ namespace EditorApp
         if (m_SceneState.Paused && !m_SceneState.StepSingleFrame)
             return;
 
-        // The editor now runs against a cloned runtime scene. Scene-wide gameplay systems
-        // can hook into this path later without mutating the editable document scene.
+        if (!m_SceneState.SupportsRuntimeTicks)
+        {
+            m_SceneState.StepSingleFrame = false;
+            return;
+        }
+
         if (m_SceneState.StepSingleFrame)
             m_SceneState.StepSingleFrame = false;
     }
@@ -535,6 +565,7 @@ namespace EditorApp
         }
         frameContext.ExecutionMode = m_SceneState.ExecutionMode;
         frameContext.IsPaused = m_SceneState.Paused;
+        frameContext.SupportsRuntimeTicks = m_SceneState.SupportsRuntimeTicks;
 
         m_Shell.Begin(m_PanelVisibility, m_PanelState, actions, frameContext);
         m_ProjectAssetsPanel.ApplyState(m_PanelState.ProjectAssets);

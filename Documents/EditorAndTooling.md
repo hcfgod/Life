@@ -184,8 +184,11 @@ At a high level, `EditorShellOverlay` delegates scene-panel rendering to `SceneV
 1. creates a `SceneSurface` once renderer, scene-renderer, and ImGui services are available
 2. creates or resizes that engine-owned `SceneSurface` to the current viewport region
 3. ensures the dedicated editor camera exists and updates its aspect ratio to match the actual surface size
-4. enables Unity-style right-mouse fly-camera navigation inside the viewport using SDL relative mouse mode when available
-5. renders the active `SceneService` scene through `SceneRenderer2D::RenderToSurface(...)`, or an empty scene when no scene is active
+4. uses the editor fly camera only while the editor is in `Edit` mode
+5. switches to the scene's resolved primary camera while the editor is in `Play` or `Simulation`
+6. enables Unity-style right-mouse fly-camera navigation inside the viewport using SDL relative mouse mode when available in `Edit`
+7. renders either the editable scene document or the current runtime-scene clone through `SceneRenderer2D::RenderToSurface(...)`
+8. refuses runtime preview rendering when no usable scene camera exists instead of silently falling back to the editor camera
 6. gathers scene-quad and renderer statistics for the stats panel
 7. presents the completed surface through `ImGuiSystem`
 
@@ -201,14 +204,32 @@ Current behavior:
 
 - the editor camera tool ensures the editor camera exists on attach and before rendering
 - the camera is perspective in the current implementation
-- the camera is made primary while the editor shell is active
-- the camera's aspect ratio is updated to match the current scene-surface size
-- right mouse inside the `Scene` viewport enables fly-camera look with SDL relative mouse mode
+- the camera is used only for `Edit` mode viewport navigation and rendering
+- the camera's aspect ratio is updated to match the current scene-surface size while editing
+- right mouse inside the `Scene` viewport enables fly-camera look with SDL relative mouse mode in `Edit`
 - movement uses `W`, `A`, `S`, `D`, vertical motion uses `Q` and `E`, and `Shift` applies a speed boost
 - the camera tool maintains yaw and pitch state and updates the persistent camera orientation and position over time
 - the overlay destroys the camera on detach if it created it
 
-That keeps camera ownership consistent across runtime and tooling code.
+Scene-owned cameras are now authoritative for runtime preview. Entering `Play` or `Simulation` requires the active scene to already have a usable camera; the editor does not auto-insert one at preview start.
+
+## Editor Transport State
+
+The editor now has a first-pass transport model with:
+
+- `Edit`
+- `Play`
+- `Simulation`
+- runtime-scene clone ownership
+
+Current behavior:
+
+- entering `Play` or `Simulation` clones the editable scene into a transient runtime preview scene
+- `Stop` discards that preview scene and restores normal edit-mode rendering
+- the current preview path is render-authoritative but not gameplay-authoritative yet
+- pause and single-frame step remain disabled until a real runtime scene tick hook exists for the editor
+
+This keeps the editor honest about what is implemented today while preserving the runtime-scene/document split needed for fuller play-mode work later.
 
 ## Tooling Availability and Fallback Behavior
 

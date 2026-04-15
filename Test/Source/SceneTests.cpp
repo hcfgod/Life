@@ -119,13 +119,14 @@ TEST_CASE("SceneService manages the active scene boundary")
     CHECK(&sceneService.GetActiveScene() == &createdScene);
     CHECK(createdScene.GetName() == "ActiveScene");
     CHECK(createdScene.IsReady());
+    CHECK_FALSE(createdScene.HasCamera());
 
     CHECK(sceneService.CloseScene());
     CHECK_FALSE(sceneService.HasActiveScene());
     CHECK(sceneService.TryGetActiveScene() == nullptr);
 }
 
-TEST_CASE("SceneSerializer round-trips hierarchy order, ids, transforms, and sprite asset keys")
+TEST_CASE("SceneSerializer round-trips hierarchy order, ids, transforms, sprite asset keys, and scene cameras")
 {
     const std::filesystem::path rootDirectory = MakeUniqueSceneTestDirectory("life-scene-roundtrip");
     TemporaryDirectoryScope cleanup(rootDirectory);
@@ -135,6 +136,7 @@ TEST_CASE("SceneSerializer round-trips hierarchy order, ids, transforms, and spr
     Life::Entity rootA = scene.CreateEntity("RootA");
     Life::Entity rootB = scene.CreateEntity("RootB");
     Life::Entity rootC = scene.CreateEntity("RootC");
+    Life::Entity cameraEntity = scene.CreateEntity("MainCamera");
     CHECK(scene.SetSiblingIndex(rootC, 1));
 
     Life::Entity childA = scene.CreateChildEntity(rootA, "ChildA");
@@ -150,8 +152,22 @@ TEST_CASE("SceneSerializer round-trips hierarchy order, ids, transforms, and spr
     sprite.TextureAssetKey = "Assets/Textures/TestChecker.ppm";
     childB.AddComponent<Life::SpriteComponent>(sprite);
 
+    cameraEntity.GetComponent<Life::TransformComponent>().LocalPosition = { 7.0f, 8.0f, 9.0f };
+    Life::CameraComponent camera;
+    camera.Projection = Life::ProjectionType::Perspective;
+    camera.PerspectiveFieldOfView = 47.5f;
+    camera.PerspectiveNearClip = 0.2f;
+    camera.PerspectiveFarClip = 250.0f;
+    camera.Priority = 4;
+    camera.Primary = true;
+    camera.ClearMode = Life::CameraClearMode::DepthOnly;
+    camera.ClearColor = { 0.15f, 0.20f, 0.25f, 1.0f };
+    camera.ViewportRect = { 0.1f, 0.2f, 0.7f, 0.6f, 0.05f, 0.95f };
+    cameraEntity.AddComponent<Life::CameraComponent>(camera);
+
     const std::string rootAId = rootA.GetId();
     const std::string childBId = childB.GetId();
+    const std::string cameraEntityId = cameraEntity.GetId();
 
     REQUIRE(Life::SceneSerializer::Save(scene, scenePath).IsSuccess());
 
@@ -161,18 +177,22 @@ TEST_CASE("SceneSerializer round-trips hierarchy order, ids, transforms, and spr
     Life::Scope<Life::Scene> loadedScene = std::move(loadResult.GetValue());
     REQUIRE(loadedScene != nullptr);
     CHECK(loadedScene->GetName() == "RoundTrip");
-    CHECK(loadedScene->GetEntityCount() == 5);
+    CHECK(loadedScene->GetEntityCount() == 6);
+    CHECK(loadedScene->HasCamera());
 
     const auto roots = loadedScene->GetRootEntities();
-    REQUIRE(roots.size() == 3);
+    REQUIRE(roots.size() == 4);
     CHECK(roots[0].GetTag() == "RootA");
     CHECK(roots[1].GetTag() == "RootC");
     CHECK(roots[2].GetTag() == "RootB");
+    CHECK(roots[3].GetTag() == "MainCamera");
 
     Life::Entity loadedRootA = loadedScene->FindEntityById(rootAId);
     Life::Entity loadedChildB = loadedScene->FindEntityById(childBId);
+    Life::Entity loadedCameraEntity = loadedScene->FindEntityById(cameraEntityId);
     REQUIRE(loadedRootA.IsValid());
     REQUIRE(loadedChildB.IsValid());
+    REQUIRE(loadedCameraEntity.IsValid());
 
     const auto loadedChildren = loadedRootA.GetChildren();
     REQUIRE(loadedChildren.size() == 2);
@@ -195,6 +215,56 @@ TEST_CASE("SceneSerializer round-trips hierarchy order, ids, transforms, and spr
     CHECK(loadedSprite.Color.z == doctest::Approx(0.75f));
     CHECK(loadedSprite.Color.w == doctest::Approx(1.0f));
     CHECK(loadedSprite.TextureAssetKey == "Assets/Textures/TestChecker.ppm");
+
+    REQUIRE(loadedCameraEntity.HasComponent<Life::CameraComponent>());
+    const Life::CameraComponent& loadedCamera = loadedCameraEntity.GetComponent<Life::CameraComponent>();
+    CHECK(loadedCamera.Projection == Life::ProjectionType::Perspective);
+    CHECK(loadedCamera.PerspectiveFieldOfView == doctest::Approx(47.5f));
+    CHECK(loadedCamera.PerspectiveNearClip == doctest::Approx(0.2f));
+    CHECK(loadedCamera.PerspectiveFarClip == doctest::Approx(250.0f));
+    CHECK(loadedCamera.Priority == 4);
+    CHECK(loadedCamera.Primary);
+    CHECK(loadedCamera.ClearMode == Life::CameraClearMode::DepthOnly);
+    CHECK(loadedCamera.ClearColor.x == doctest::Approx(0.15f));
+    CHECK(loadedCamera.ClearColor.y == doctest::Approx(0.20f));
+    CHECK(loadedCamera.ClearColor.z == doctest::Approx(0.25f));
+    CHECK(loadedCamera.ViewportRect.X == doctest::Approx(0.1f));
+    CHECK(loadedCamera.ViewportRect.Y == doctest::Approx(0.2f));
+    CHECK(loadedCamera.ViewportRect.Width == doctest::Approx(0.7f));
+    CHECK(loadedCamera.ViewportRect.Height == doctest::Approx(0.6f));
+    CHECK(loadedCamera.ViewportRect.MinDepth == doctest::Approx(0.05f));
+    CHECK(loadedCamera.ViewportRect.MaxDepth == doctest::Approx(0.95f));
+}
+
+TEST_CASE("Scene cloning and SceneService save-load do not synthesize missing cameras")
+{
+    const std::filesystem::path rootDirectory = MakeUniqueSceneTestDirectory("life-scene-no-camera");
+    TemporaryDirectoryScope cleanup(rootDirectory);
+    const std::filesystem::path scenePath = rootDirectory / "Assets" / "Scenes" / "NoCamera.scene";
+
+    Life::Scene scene("NoCamera");
+    scene.SetState(Life::Scene::State::Ready);
+    scene.CreateEntity("Marker");
+    CHECK_FALSE(scene.HasCamera());
+
+    Life::Scope<Life::Scene> clone = scene.Clone();
+    REQUIRE(clone != nullptr);
+    CHECK_FALSE(clone->HasCamera());
+    CHECK(clone->GetEntityCount() == 1);
+
+    Life::SceneService sceneService;
+    Life::Scene& activeScene = sceneService.CreateScene("ActiveNoCamera");
+    activeScene.CreateEntity("Marker");
+    CHECK_FALSE(sceneService.ActiveSceneHasCamera());
+    sceneService.MarkActiveSceneDirty();
+
+    REQUIRE(sceneService.SaveActiveSceneAs(scenePath).IsSuccess());
+    CHECK_FALSE(sceneService.ActiveSceneHasCamera());
+
+    REQUIRE(sceneService.LoadScene(scenePath).IsSuccess());
+    CHECK(sceneService.HasActiveScene());
+    CHECK_FALSE(sceneService.ActiveSceneHasCamera());
+    CHECK(sceneService.GetActiveScene().FindEntityByTag("Marker").IsValid());
 }
 
 TEST_CASE("SceneService saves, reloads, and strictly reports missing scene files")

@@ -262,44 +262,42 @@ namespace EditorApp
             return false;
         }
 
-        const float requestedAspectRatio = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 16.0f / 9.0f;
-        cameraTool.Ensure(services.CameraManager->get(), requestedAspectRatio);
-
-        auto editorCamera = cameraTool.TryGetCamera(services.CameraManager->get());
-        if (!editorCamera)
-        {
-            SetCameraNavigationActive(false);
-            return false;
-        }
-
-        Life::Camera& camera = editorCamera->get();
-
         if (!m_SceneSurface->Resize(width, height))
         {
             SetCameraNavigationActive(false);
             return false;
         }
 
+        const float requestedAspectRatio = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 16.0f / 9.0f;
         const float actualAspectRatio = m_SceneSurface->GetHeight() > 0
             ? static_cast<float>(m_SceneSurface->GetWidth()) / static_cast<float>(m_SceneSurface->GetHeight())
             : requestedAspectRatio;
 
         const Life::Scene* effectiveScene = services.SceneService ? sceneState.GetEffectiveScene(services.SceneService->get()) : nullptr;
         Life::Camera sceneCamera;
-        const bool useSceneCamera = sceneState.ExecutionMode != EditorSceneExecutionMode::Edit
-            && effectiveScene != nullptr
-            && effectiveScene->BuildPrimaryCamera(actualAspectRatio, sceneCamera);
-
-        Life::Camera* activeCamera = &camera;
+        Life::Camera* activeCamera = nullptr;
+        const bool useSceneCamera = sceneState.ExecutionMode != EditorSceneExecutionMode::Edit;
         if (useSceneCamera)
         {
             SetCameraNavigationActive(false);
+            if (effectiveScene == nullptr || !effectiveScene->BuildPrimaryCamera(actualAspectRatio, sceneCamera))
+                return false;
             activeCamera = &sceneCamera;
         }
         else
         {
+            cameraTool.Ensure(services.CameraManager->get(), requestedAspectRatio);
+            auto editorCamera = cameraTool.TryGetCamera(services.CameraManager->get());
+            if (!editorCamera)
+            {
+                SetCameraNavigationActive(false);
+                return false;
+            }
+
+            Life::Camera& camera = editorCamera->get();
             camera.SetAspectRatio(actualAspectRatio);
             UpdateCameraNavigation(cameraTool, camera, viewportHovered, viewportFocused);
+            activeCamera = &camera;
         }
 
         m_State.UsingEditorCamera = !useSceneCamera;

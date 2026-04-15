@@ -560,7 +560,6 @@ namespace Life
         for (const Entity rootEntity : GetRootEntities())
             cloneEntityRecursive(rootEntity, {});
 
-        clone->EnsureAtLeastOneCamera();
         return clone;
     }
 

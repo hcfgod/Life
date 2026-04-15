@@ -336,18 +336,30 @@ namespace EditorApp
             if (ImGui::Shortcut(ImGuiKey_F5, ImGuiInputFlags_RouteGlobal))
             {
                 if (context.ExecutionMode == EditorSceneExecutionMode::Edit)
-                    actions.RequestPlayScene = true;
+                {
+                    if (context.HasActiveScene && context.HasSceneCamera)
+                        actions.RequestPlayScene = true;
+                }
                 else
+                {
                     actions.RequestStopScene = true;
+                }
             }
 
-            if (ImGui::Shortcut(ImGuiKey_F6, ImGuiInputFlags_RouteGlobal) && context.ExecutionMode == EditorSceneExecutionMode::Edit)
+            if (ImGui::Shortcut(ImGuiKey_F6, ImGuiInputFlags_RouteGlobal) &&
+                context.ExecutionMode == EditorSceneExecutionMode::Edit &&
+                context.HasActiveScene &&
+                context.HasSceneCamera)
                 actions.RequestSimulateScene = true;
 
-            if (ImGui::Shortcut(ImGuiKey_F7, ImGuiInputFlags_RouteGlobal) && context.ExecutionMode != EditorSceneExecutionMode::Edit)
+            if (ImGui::Shortcut(ImGuiKey_F7, ImGuiInputFlags_RouteGlobal) &&
+                context.ExecutionMode != EditorSceneExecutionMode::Edit &&
+                context.SupportsRuntimeTicks)
                 actions.RequestPauseScene = true;
 
-            if (ImGui::Shortcut(ImGuiKey_F10, ImGuiInputFlags_RouteGlobal) && context.ExecutionMode != EditorSceneExecutionMode::Edit)
+            if (ImGui::Shortcut(ImGuiKey_F10, ImGuiInputFlags_RouteGlobal) &&
+                context.ExecutionMode != EditorSceneExecutionMode::Edit &&
+                context.SupportsRuntimeTicks)
                 actions.RequestStepScene = true;
         }
 
@@ -375,11 +387,15 @@ namespace EditorApp
                 actions.RequestPlayScene = true;
             if (ImGui::MenuItem("Simulate", "F6", false, context.HasActiveScene && context.ExecutionMode == EditorSceneExecutionMode::Edit && context.HasSceneCamera))
                 actions.RequestSimulateScene = true;
-            if (ImGui::MenuItem(context.IsPaused ? "Resume" : "Pause", "F7", false, context.ExecutionMode != EditorSceneExecutionMode::Edit))
+            if (ImGui::MenuItem(
+                    context.IsPaused ? "Resume" : "Pause",
+                    "F7",
+                    false,
+                    context.ExecutionMode != EditorSceneExecutionMode::Edit && context.SupportsRuntimeTicks))
                 actions.RequestPauseScene = true;
             if (ImGui::MenuItem("Stop", "F5", false, context.ExecutionMode != EditorSceneExecutionMode::Edit))
                 actions.RequestStopScene = true;
-            if (ImGui::MenuItem("Step", "F10", false, context.ExecutionMode != EditorSceneExecutionMode::Edit))
+            if (ImGui::MenuItem("Step", "F10", false, context.ExecutionMode != EditorSceneExecutionMode::Edit && context.SupportsRuntimeTicks))
                 actions.RequestStepScene = true;
             ImGui::EndMenu();
         }
@@ -455,27 +471,44 @@ namespace EditorApp
             drawChip("Mode", ResolveExecutionModeLabel(context.ExecutionMode), modeColor);
 
             ImGui::SameLine();
-            const bool canPlay = context.HasActiveScene && context.HasSceneCamera;
+            const bool canStartExecution = context.HasActiveScene && context.HasSceneCamera;
             const bool isEditMode = context.ExecutionMode == EditorSceneExecutionMode::Edit;
-            if (ImGui::Button(isEditMode ? "Play" : "Stop") && canPlay)
+            if (isEditMode)
             {
-                if (isEditMode)
+                ImGui::BeginDisabled(!canStartExecution);
+                if (ImGui::Button("Play"))
                     actions.RequestPlayScene = true;
-                else
+                ImGui::EndDisabled();
+            }
+            else
+            {
+                if (ImGui::Button("Stop"))
                     actions.RequestStopScene = true;
             }
 
             ImGui::SameLine();
-            if (ImGui::Button("Simulate") && context.ExecutionMode == EditorSceneExecutionMode::Edit && canPlay)
+            ImGui::BeginDisabled(context.ExecutionMode != EditorSceneExecutionMode::Edit || !canStartExecution);
+            if (ImGui::Button("Simulate"))
                 actions.RequestSimulateScene = true;
+            ImGui::EndDisabled();
 
             ImGui::SameLine();
-            if (ImGui::Button(context.IsPaused ? "Resume" : "Pause") && context.ExecutionMode != EditorSceneExecutionMode::Edit)
+            ImGui::BeginDisabled(context.ExecutionMode == EditorSceneExecutionMode::Edit || !context.SupportsRuntimeTicks);
+            if (ImGui::Button(context.IsPaused ? "Resume" : "Pause"))
                 actions.RequestPauseScene = true;
+            ImGui::EndDisabled();
 
             ImGui::SameLine();
-            if (ImGui::Button("Step") && context.ExecutionMode != EditorSceneExecutionMode::Edit)
+            ImGui::BeginDisabled(context.ExecutionMode == EditorSceneExecutionMode::Edit || !context.SupportsRuntimeTicks);
+            if (ImGui::Button("Step"))
                 actions.RequestStepScene = true;
+            ImGui::EndDisabled();
+
+            if (context.ExecutionMode != EditorSceneExecutionMode::Edit && !context.SupportsRuntimeTicks)
+            {
+                ImGui::SameLine();
+                ImGui::TextDisabled("Preview only");
+            }
 
             if (context.IsSceneDirty)
             {

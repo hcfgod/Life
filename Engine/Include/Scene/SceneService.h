@@ -42,7 +42,6 @@ namespace Life
         void MarkActiveSceneDirty() noexcept;
         void ClearDirty() noexcept;
         bool ActiveSceneHasCamera() const noexcept;
-        bool EnsureActiveSceneHasCamera();
         Scene& GetActiveScene();
         const Scene& GetActiveScene() const;
         Scene* TryGetActiveScene() noexcept;

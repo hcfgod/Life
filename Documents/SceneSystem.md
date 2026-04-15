@@ -18,6 +18,7 @@ The current scene-system surface is centered on:
 - `TagComponent`
 - `TransformComponent`
 - `HierarchyComponent`
+- `CameraComponent`
 - `SpriteComponent`
 - `SceneSerializer`
 - `SceneService`
@@ -116,6 +117,17 @@ Carries the current built-in 2D renderable payload:
 
 This is the component `SceneRenderer2D` currently consumes for scene-driven 2D rendering.
 
+### `CameraComponent`
+
+Carries the current built-in scene-camera authoring payload:
+
+- projection type
+- perspective and orthographic settings
+- clear mode and clear color
+- viewport rectangle
+- priority
+- primary-camera flag
+
 ## Component Rules
 
 A few built-in component rules are enforced today.
@@ -130,6 +142,8 @@ The canonical built-ins:
 cannot be removed through `Entity::RemoveComponent<T>()`.
 
 That preserves the minimum structural assumptions the rest of the scene system relies on.
+
+`CameraComponent` is removable, but the last camera cannot be removed through `Entity::RemoveComponent<CameraComponent>()`. If camera state still exists after camera edits, the scene normalizes the primary-camera flag so one usable primary camera remains.
 
 ## Hierarchy Model
 
@@ -166,6 +180,30 @@ Local transforms come from `TransformComponent`. World transforms are composed b
 
 This matters because scene rendering uses the world transform, not just local position and a single Z rotation.
 
+## Scene Camera Model
+
+`Scene` now also owns scene-camera queries and camera-to-render translation helpers.
+
+Current camera-facing helpers include:
+
+- `HasCamera()`
+- `GetCameraCount()`
+- `EnsureAtLeastOneCamera()`
+- `FindPrimaryCameraEntity()`
+- `ResolveRenderCameraEntity()`
+- `BuildCameraFromEntity(...)`
+- `BuildPrimaryCamera(...)`
+- `CreateDefaultCameraEntity(...)`
+- `Clone()`
+
+Important current behavior:
+
+- a scene may legitimately exist without a camera
+- explicit authoring flows can seed a default camera with `EnsureAtLeastOneCamera()`
+- render-camera resolution prefers an enabled primary camera, then an enabled fallback camera, then any surviving camera
+- deleting the last camera entity from a scene that already had camera state repairs that scene with a default camera entity
+- cloning preserves the source scene faithfully and does not synthesize a camera into camera-less scenes
+
 ## Serialization
 
 `SceneSerializer` is the authoritative on-disk scene translation layer.
@@ -177,7 +215,7 @@ It currently provides:
 
 Important current constant:
 
-- `SceneFileCurrentVersion = 1`
+- `SceneFileCurrentVersion = 2`
 
 ## Scene File Format
 
@@ -198,6 +236,18 @@ Each serialized entity can include:
 - `transform.position`
 - `transform.rotation`
 - `transform.scale`
+- `camera.projection`
+- `camera.perspectiveFieldOfView`
+- `camera.perspectiveNearClip`
+- `camera.perspectiveFarClip`
+- `camera.orthographicSize`
+- `camera.orthographicNearClip`
+- `camera.orthographicFarClip`
+- `camera.priority`
+- `camera.primary`
+- `camera.clearMode`
+- `camera.clearColor`
+- `camera.viewport`
 - `sprite.size`
 - `sprite.color`
 - `sprite.textureAssetKey`
@@ -214,6 +264,7 @@ The serializer writes entities by recursively visiting root entities and their c
 - creates a new `Scene`
 - sets the scene source path
 - creates entities and restores built-in data
+- restores camera components when versioned scene data contains them
 - resolves sprite texture assets immediately when an `AssetManager` is provided
 - replays parent-child links after entity creation
 - marks the scene `Ready`
@@ -280,6 +331,8 @@ That lets editor and runtime code open scenes through either project-relative as
 ### `CreateScene(...)`
 
 Creates a fresh in-memory scene, marks it `Ready`, makes it active, and clears dirty state.
+
+It does not automatically inject a camera. Higher-level authoring flows decide whether a new scene should start blank or seed a default camera.
 
 ### `LoadScene(...)`
 
@@ -350,6 +403,8 @@ Current editor behavior includes:
 - saving active scenes and save-as flows through `SceneService`
 - clearing selection when the active scene changes
 - updating the active project's `Startup.Scene` after successful scene open/save flows
+- seeding default cameras only in explicit authoring flows such as new-scene creation
+- refusing runtime preview entry when the active scene has no usable camera instead of silently mutating the scene document
 
 ## Runtime Integration
 

@@ -95,6 +95,7 @@ namespace EditorApp
             ExecutionMode = EditorSceneExecutionMode::Edit;
             Paused = false;
             StepSingleFrame = false;
+            SupportsRuntimeTicks = false;
             RuntimeScene.reset();
         }
 
@@ -119,6 +120,7 @@ namespace EditorApp
         EditorSceneExecutionMode ExecutionMode = EditorSceneExecutionMode::Edit;
         bool Paused = false;
         bool StepSingleFrame = false;
+        bool SupportsRuntimeTicks = false;
         Life::Scope<Life::Scene> RuntimeScene;
     };
 }

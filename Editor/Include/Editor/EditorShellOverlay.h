@@ -43,6 +43,7 @@ namespace EditorApp
         bool BeginSceneExecution(EditorSceneExecutionMode executionMode);
         void StopSceneExecution();
         void UpdateSceneExecution(float timestep);
+        static bool SupportsRuntimeSceneTicks() noexcept;
 
         EditorServices m_Services;
         EditorPanelVisibility m_PanelVisibility;

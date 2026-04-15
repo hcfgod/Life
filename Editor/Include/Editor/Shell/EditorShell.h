@@ -26,6 +26,7 @@ namespace EditorApp
             bool HasSceneCamera = false;
             EditorSceneExecutionMode ExecutionMode = EditorSceneExecutionMode::Edit;
             bool IsPaused = false;
+            bool SupportsRuntimeTicks = false;
         };
 
         void ResetLayout() noexcept;
