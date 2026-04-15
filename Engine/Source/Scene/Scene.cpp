@@ -107,6 +107,7 @@ namespace Life
         if (!IsValid(entity))
             return false;
 
+        const bool hadCameraBeforeDestroy = HasCamera();
         std::vector<Entity> children = GetChildren(entity);
         for (Entity child : children)
             DestroyEntity(child);
@@ -114,9 +115,9 @@ namespace Life
         DetachFromParent(entity.GetHandle());
         RemoveFromRootOrder(entity.GetHandle());
         m_Registry.destroy(entity.GetHandle());
-        if (!HasCamera())
+        if (hadCameraBeforeDestroy && !HasCamera())
             CreateDefaultCameraEntity();
-        else
+        else if (HasCamera())
             NormalizeCameraPrimaryState();
         return true;
     }
