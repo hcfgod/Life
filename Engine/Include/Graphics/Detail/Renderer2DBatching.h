@@ -21,6 +21,7 @@ namespace Life
                 glm::vec2 UVMin{};
                 glm::vec2 UVMax{ 1.0f, 1.0f };
                 const TextureResource* Texture = nullptr;
+                bool Opaque = false;
             };
 
             explicit Renderer2DBatching(Renderer2D& renderer2D);

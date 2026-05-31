@@ -34,7 +34,7 @@ namespace Life
         }
     }
 
-    void SceneService::BindAssetManager(Assets::AssetManager& assetManager) noexcept
+    void SceneService::BindAssetManager(Assets::AssetManager& assetManager)
     {
         m_AssetManager = &assetManager;
         if (m_ActiveScene)

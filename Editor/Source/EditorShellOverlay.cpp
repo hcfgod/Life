@@ -1,5 +1,7 @@
 #include "Editor/EditorShellOverlay.h"
 
+#include "Graphics/Renderer.h"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -14,6 +16,8 @@ namespace EditorApp
 {
     namespace
     {
+        constexpr glm::vec4 kEditorBackBufferClearColor(0.07f, 0.085f, 0.11f, 1.0f);
+
 #if __has_include(<imgui.h>)
         bool InputTextString(const char* label, std::string& value)
         {
@@ -97,6 +101,7 @@ namespace EditorApp
         if (mode == Mode::ProjectHub)
         {
             m_SceneState.ResetRuntimeState();
+            m_UndoStack.Clear();
             if (m_Services.SceneService)
                 m_Services.SceneService->get().CloseScene();
             m_SceneState.ClearSelection();
@@ -127,6 +132,7 @@ namespace EditorApp
                 }
 
                 m_SceneState.ClearSelection();
+                m_UndoStack.Clear();
             }
         }
     }
@@ -245,6 +251,7 @@ namespace EditorApp
             if (sceneService.CloseScene())
             {
                 m_SceneState.ClearSelection();
+                m_UndoStack.Clear();
                 SetSceneStatus("Scene closed.", false);
             }
         }
@@ -285,6 +292,7 @@ namespace EditorApp
                 Life::Scene& scene = sceneService.CreateScene(m_NewSceneName.empty() ? "Untitled" : m_NewSceneName);
                 scene.EnsureAtLeastOneCamera();
                 m_SceneState.ClearSelection();
+                m_UndoStack.Clear();
                 if (!m_NewScenePath.empty())
                 {
                     const auto saveResult = sceneService.SaveActiveSceneAs(m_NewScenePath);
@@ -330,6 +338,7 @@ namespace EditorApp
                 else
                 {
                     m_SceneState.ClearSelection();
+                    m_UndoStack.Clear();
                     if (m_Services.ProjectService)
                         TryUpdateProjectStartupScene(m_Services.ProjectService->get(), sceneService);
                     SetSceneStatus("Opened scene '" + sceneService.GetActiveScene().GetName() + "'.", false);
@@ -390,6 +399,51 @@ namespace EditorApp
             LOG_WARN("{}", m_SceneState.StatusMessage);
         else
             LOG_INFO("{}", m_SceneState.StatusMessage);
+    }
+
+    void EditorShellOverlay::HandleWorkspaceShortcuts()
+    {
+#if __has_include(<imgui.h>)
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.WantTextInput)
+            return;
+
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z, false))
+        {
+            if (m_Services.SceneService &&
+                m_Services.SceneService->get().HasActiveScene() &&
+                m_UndoStack.Undo(m_Services.SceneService->get().GetActiveScene()))
+            {
+                m_Services.SceneService->get().MarkActiveSceneDirty();
+                SetSceneStatus("Undo transform.", false);
+            }
+            return;
+        }
+
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y, false))
+        {
+            if (m_Services.SceneService &&
+                m_Services.SceneService->get().HasActiveScene() &&
+                m_UndoStack.Redo(m_Services.SceneService->get().GetActiveScene()))
+            {
+                m_Services.SceneService->get().MarkActiveSceneDirty();
+                SetSceneStatus("Redo transform.", false);
+            }
+            return;
+        }
+
+        if (io.KeyCtrl || io.KeyAlt || io.KeyShift)
+            return;
+
+        if (ImGui::IsKeyPressed(ImGuiKey_Q, false))
+            m_SceneState.ViewportTool = EditorViewportTool::Select;
+        else if (ImGui::IsKeyPressed(ImGuiKey_W, false))
+            m_SceneState.ViewportTool = EditorViewportTool::Translate;
+        else if (ImGui::IsKeyPressed(ImGuiKey_E, false))
+            m_SceneState.ViewportTool = EditorViewportTool::Rotate;
+        else if (ImGui::IsKeyPressed(ImGuiKey_R, false))
+            m_SceneState.ViewportTool = EditorViewportTool::Scale;
+#endif
     }
 
     bool EditorShellOverlay::SupportsRuntimeSceneTicks() noexcept
@@ -539,6 +593,15 @@ namespace EditorApp
         if (!m_Services.Application || !m_Services.HasImGui() || !m_Services.ProjectService)
             return;
 
+        if (m_Services.Renderer)
+        {
+            m_Services.Renderer->get().Clear(
+                kEditorBackBufferClearColor.r,
+                kEditorBackBufferClearColor.g,
+                kEditorBackBufferClearColor.b,
+                kEditorBackBufferClearColor.a);
+        }
+
         Life::Assets::ProjectService& projectService = m_Services.ProjectService->get();
         if (m_Mode == Mode::ProjectHub)
         {
@@ -568,6 +631,7 @@ namespace EditorApp
         frameContext.SupportsRuntimeTicks = m_SceneState.SupportsRuntimeTicks;
 
         m_Shell.Begin(m_PanelVisibility, m_PanelState, actions, frameContext);
+        HandleWorkspaceShortcuts();
         m_ProjectAssetsPanel.ApplyState(m_PanelState.ProjectAssets);
         m_ProjectAssetsPanel.Render(m_PanelVisibility.ShowProjectAssets, m_Services, m_SceneState);
         m_PanelState.ProjectAssets = m_ProjectAssetsPanel.CaptureState();
@@ -575,7 +639,7 @@ namespace EditorApp
         m_InspectorPanel.Render(m_PanelVisibility.ShowInspector, m_Services, m_SceneState);
         m_ConsolePanel.Render(m_PanelVisibility.ShowConsole);
         m_StatsPanel.Render(m_PanelVisibility.ShowStats, m_Services, m_SceneViewportPanel.GetState());
-        m_SceneViewportPanel.Render(m_PanelVisibility.ShowScene, m_Services, m_SceneState, m_CameraTool);
+        m_SceneViewportPanel.Render(m_PanelVisibility.ShowScene, m_Services, m_SceneState, m_CameraTool, m_UndoStack);
         m_FpsOverlayPanel.Render(m_PanelVisibility.ShowFpsOverlay);
         RenderSceneDialogs();
         m_Shell.End(m_PanelVisibility, m_PanelState);

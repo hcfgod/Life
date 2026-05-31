@@ -302,7 +302,7 @@ namespace Life
 #endif
     }
 
-    bool ImGuiSystem::DrawImage(TextureResource& texture, float width, float height)
+    bool ImGuiSystem::DrawImage(TextureResource& texture, float width, float height, ImGuiTextureSampling sampling)
     {
 #if LIFE_HAS_IMGUI
         if (!m_Initialized || !m_Available || m_Impl == nullptr || !m_Impl->RendererBackend)
@@ -311,7 +311,10 @@ namespace Life
         if (width <= 0.0f || height <= 0.0f)
             return false;
 
-        void* textureHandle = m_Impl->RendererBackend->GetTextureHandle(texture);
+        const Detail::ImGuiTextureSampling backendSampling = sampling == ImGuiTextureSampling::Nearest
+            ? Detail::ImGuiTextureSampling::Nearest
+            : Detail::ImGuiTextureSampling::Linear;
+        void* textureHandle = m_Impl->RendererBackend->GetTextureHandle(texture, backendSampling);
         if (textureHandle == nullptr)
             return false;
 
@@ -321,6 +324,7 @@ namespace Life
         (void)texture;
         (void)width;
         (void)height;
+        (void)sampling;
         return false;
 #endif
     }

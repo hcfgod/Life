@@ -217,9 +217,18 @@ namespace Life
 
     void VulkanGraphicsDevice::SelectPhysicalDevice()
     {
+        VkPhysicalDeviceVulkan12Features features12{};
+        features12.timelineSemaphore = VK_TRUE;
+
+        VkPhysicalDeviceVulkan13Features features13{};
+        features13.synchronization2 = VK_TRUE;
+        features13.dynamicRendering = VK_TRUE;
+
         vkb::PhysicalDeviceSelector selector(m_VkbInstance);
         selector.set_surface(m_Surface)
                 .set_minimum_version(1, 3)
+                .set_required_features_12(features12)
+                .set_required_features_13(features13)
                 .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete);
 
         auto physResult = selector.select();
@@ -242,12 +251,7 @@ namespace Life
 
     void VulkanGraphicsDevice::CreateLogicalDevice()
     {
-        VkPhysicalDeviceVulkan12Features features12{};
-        features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-        features12.timelineSemaphore = VK_TRUE;
-
         vkb::DeviceBuilder deviceBuilder(m_VkbPhysicalDevice);
-        deviceBuilder.add_pNext(&features12);
         auto deviceResult = deviceBuilder.build();
         if (!deviceResult)
         {
@@ -341,7 +345,8 @@ namespace Life
     {
         vkb::SwapchainBuilder swapchainBuilder(m_VkbDevice);
         swapchainBuilder.set_old_swapchain(m_Swapchain)
-                        .set_desired_format({ VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR });
+                        .set_desired_format({ VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR })
+                        .add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
         if (m_VSync)
             swapchainBuilder.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR);

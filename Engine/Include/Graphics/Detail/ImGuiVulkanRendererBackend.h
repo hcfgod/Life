@@ -19,7 +19,7 @@ namespace Life
             void Shutdown() noexcept override;
             void NewFrame() override;
             void RenderDrawData(ImDrawData* drawData) override;
-            void* GetTextureHandle(TextureResource& texture) override;
+            void* GetTextureHandle(TextureResource& texture, ImGuiTextureSampling sampling) override;
             void ReleaseTextureHandle(TextureResource& texture) noexcept override;
 
         private:

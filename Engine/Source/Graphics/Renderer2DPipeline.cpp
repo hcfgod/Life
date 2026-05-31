@@ -58,27 +58,67 @@ namespace Life::Detail
         if ((m_Renderer2D.m_Impl->VertexShader == nullptr) || (m_Renderer2D.m_Impl->PixelShader == nullptr))
             return false;
 
-        if (m_Renderer2D.m_Impl->Pipeline && m_Renderer2D.m_Impl->Pipeline->IsValid())
-            return true;
+        nvrhi::IFramebuffer* currentFramebuffer = m_Renderer2D.m_Renderer.GetCurrentFramebuffer();
+        if (currentFramebuffer == nullptr)
+            return false;
 
-        GraphicsPipelineDescription pipelineDescription;
-        pipelineDescription.DebugName = "Renderer2DPipeline";
-        pipelineDescription.VertexShader = m_Renderer2D.m_Impl->VertexShader;
-        pipelineDescription.PixelShader = m_Renderer2D.m_Impl->PixelShader;
-        pipelineDescription.Layout = m_Renderer2D.m_Impl->Layout;
-        pipelineDescription.Topology = PrimitiveTopology::TriangleList;
-        pipelineDescription.Rasterizer.Cull = CullMode::None;
-        pipelineDescription.DepthStencil.DepthTestEnable = false;
-        pipelineDescription.DepthStencil.DepthWriteEnable = false;
-        pipelineDescription.Blend.BlendEnable = true;
-        pipelineDescription.Blend.SrcColorFactor = BlendFactor::SrcAlpha;
-        pipelineDescription.Blend.DstColorFactor = BlendFactor::InvSrcAlpha;
-        pipelineDescription.Blend.SrcAlphaFactor = BlendFactor::One;
-        pipelineDescription.Blend.DstAlphaFactor = BlendFactor::InvSrcAlpha;
-        pipelineDescription.UseSceneConstants = true;
-        pipelineDescription.UseTextureBinding = true;
+        const bool useDepth = m_Renderer2D.m_Renderer.GetDepthRenderTarget() != nullptr;
 
-        m_Renderer2D.m_Impl->Pipeline = m_Renderer2D.m_Renderer.CreatePipeline(pipelineDescription);
-        return m_Renderer2D.m_Impl->Pipeline != nullptr && m_Renderer2D.m_Impl->Pipeline->IsValid();
+        const auto ensurePipeline =
+            [this, currentFramebuffer, useDepth](
+                Scope<GraphicsPipeline>& pipeline,
+                nvrhi::IFramebuffer*& pipelineFramebuffer,
+                bool& pipelineUsesDepth,
+                const char* debugName,
+                bool opaquePass) -> bool
+        {
+            if (pipeline &&
+                pipeline->IsValid() &&
+                pipelineFramebuffer == currentFramebuffer &&
+                pipelineUsesDepth == useDepth)
+            {
+                return true;
+            }
+
+            GraphicsPipelineDescription pipelineDescription;
+            pipelineDescription.DebugName = debugName;
+            pipelineDescription.VertexShader = m_Renderer2D.m_Impl->VertexShader;
+            pipelineDescription.PixelShader = m_Renderer2D.m_Impl->PixelShader;
+            pipelineDescription.Layout = m_Renderer2D.m_Impl->Layout;
+            pipelineDescription.Topology = PrimitiveTopology::TriangleList;
+            pipelineDescription.Rasterizer.Cull = CullMode::None;
+            pipelineDescription.DepthStencil.DepthTestEnable = useDepth;
+            pipelineDescription.DepthStencil.DepthWriteEnable = opaquePass && useDepth;
+            pipelineDescription.DepthStencil.DepthCompareOp = CompareOp::LessOrEqual;
+            pipelineDescription.Blend.BlendEnable = !opaquePass;
+            pipelineDescription.UseSceneConstants = true;
+            pipelineDescription.UseTextureBinding = true;
+
+            if (!opaquePass)
+            {
+                pipelineDescription.Blend.SrcColorFactor = BlendFactor::One;
+                pipelineDescription.Blend.DstColorFactor = BlendFactor::InvSrcAlpha;
+                pipelineDescription.Blend.SrcAlphaFactor = BlendFactor::One;
+                pipelineDescription.Blend.DstAlphaFactor = BlendFactor::InvSrcAlpha;
+            }
+
+            pipeline = m_Renderer2D.m_Renderer.CreatePipeline(pipelineDescription);
+            pipelineFramebuffer = currentFramebuffer;
+            pipelineUsesDepth = useDepth;
+            return pipeline != nullptr && pipeline->IsValid();
+        };
+
+        return ensurePipeline(
+                   m_Renderer2D.m_Impl->OpaquePipeline,
+                   m_Renderer2D.m_Impl->OpaquePipelineFramebuffer,
+                   m_Renderer2D.m_Impl->OpaquePipelineUsesDepth,
+                   "Renderer2DOpaquePipeline",
+                   true) &&
+               ensurePipeline(
+                   m_Renderer2D.m_Impl->TransparentPipeline,
+                   m_Renderer2D.m_Impl->TransparentPipelineFramebuffer,
+                   m_Renderer2D.m_Impl->TransparentPipelineUsesDepth,
+                   "Renderer2DTransparentPipeline",
+                   false);
     }
 }

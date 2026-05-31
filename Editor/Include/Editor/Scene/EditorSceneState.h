@@ -9,6 +9,20 @@
 
 namespace EditorApp
 {
+    enum class EditorViewportTool
+    {
+        Select = 0,
+        Translate,
+        Rotate,
+        Scale
+    };
+
+    enum class EditorTransformSpace
+    {
+        Local = 0,
+        World
+    };
+
     struct EditorSceneState
     {
         void SelectEntity(const Life::Entity& entity)
@@ -121,6 +135,12 @@ namespace EditorApp
         bool Paused = false;
         bool StepSingleFrame = false;
         bool SupportsRuntimeTicks = false;
+        EditorViewportTool ViewportTool = EditorViewportTool::Translate;
+        EditorTransformSpace TransformSpace = EditorTransformSpace::Local;
+        bool SnapEnabled = false;
+        float TranslationSnap = 0.25f;
+        float RotationSnapDegrees = 15.0f;
+        float ScaleSnap = 0.1f;
         Life::Scope<Life::Scene> RuntimeScene;
     };
 }

@@ -4,7 +4,10 @@ param(
     [string]$Configuration = 'Debug',
 
     [Parameter(Mandatory = $false)]
-    [string]$Platform = ''
+    [string]$Platform = '',
+
+    [Parameter(Mandatory = $false)]
+    [switch]$LiveBackendSmoke
 )
 
 $ErrorActionPreference = 'Stop'
@@ -172,11 +175,22 @@ if ($null -ne $vulkanBinDirectory) {
 }
 
 Push-Location $testDirectory
+$previousLiveBackendSmoke = $env:LIFE_ENABLE_LIVE_BACKEND_SMOKE
 try {
+    if ($LiveBackendSmoke) {
+        $env:LIFE_ENABLE_LIVE_BACKEND_SMOKE = '1'
+        Write-Host "[CI] Live backend smoke test enabled."
+    }
+
     & $testBinary
     $testExitCode = $LASTEXITCODE
 }
 finally {
+    if ($null -eq $previousLiveBackendSmoke) {
+        Remove-Item Env:\LIFE_ENABLE_LIVE_BACKEND_SMOKE -ErrorAction SilentlyContinue
+    } else {
+        $env:LIFE_ENABLE_LIVE_BACKEND_SMOKE = $previousLiveBackendSmoke
+    }
     Pop-Location
 }
 

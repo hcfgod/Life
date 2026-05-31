@@ -79,7 +79,7 @@ namespace Life
         if (!m_ColorTarget)
             return false;
 
-        return m_ImGuiSystem.DrawImage(*m_ColorTarget, width, height);
+        return m_ImGuiSystem.DrawImage(*m_ColorTarget, width, height, ImGuiTextureSampling::Nearest);
     }
 
     void SceneViewport::Reset() noexcept

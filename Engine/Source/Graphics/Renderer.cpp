@@ -68,15 +68,43 @@ namespace Life
         {
             nvrhi::IBindingLayout* Layout = nullptr;
             nvrhi::IBuffer* ConstantBuffer = nullptr;
-            nvrhi::ITexture* Texture = nullptr;
+            uint64_t TextureRuntimeId = 0;
             TextureSamplerDescription SamplerDescription{};
 
             bool operator==(const TextureBindingCacheKey& other) const noexcept
             {
                 return Layout == other.Layout &&
                        ConstantBuffer == other.ConstantBuffer &&
-                       Texture == other.Texture &&
+                       TextureRuntimeId == other.TextureRuntimeId &&
                        SamplerDescription == other.SamplerDescription;
+            }
+        };
+
+        struct FramebufferCacheKey
+        {
+            nvrhi::ITexture* ColorTarget = nullptr;
+            nvrhi::ITexture* DepthTarget = nullptr;
+            uint64_t ColorTargetRuntimeId = 0;
+            uint64_t DepthTargetRuntimeId = 0;
+
+            bool operator==(const FramebufferCacheKey& other) const noexcept
+            {
+                return ColorTarget == other.ColorTarget &&
+                       DepthTarget == other.DepthTarget &&
+                       ColorTargetRuntimeId == other.ColorTargetRuntimeId &&
+                       DepthTargetRuntimeId == other.DepthTargetRuntimeId;
+            }
+        };
+
+        struct FramebufferCacheKeyHasher
+        {
+            size_t operator()(const FramebufferCacheKey& key) const noexcept
+            {
+                const size_t colorTextureHash = std::hash<nvrhi::ITexture*>{}(key.ColorTarget);
+                const size_t depthTextureHash = std::hash<nvrhi::ITexture*>{}(key.DepthTarget);
+                const size_t colorIdHash = std::hash<uint64_t>{}(key.ColorTargetRuntimeId);
+                const size_t depthIdHash = std::hash<uint64_t>{}(key.DepthTargetRuntimeId);
+                return colorTextureHash ^ (depthTextureHash << 1) ^ (colorIdHash << 2) ^ (depthIdHash << 3);
             }
         };
 
@@ -86,7 +114,7 @@ namespace Life
             {
                 const size_t layoutHash = std::hash<nvrhi::IBindingLayout*>{}(key.Layout);
                 const size_t constantBufferHash = std::hash<nvrhi::IBuffer*>{}(key.ConstantBuffer);
-                const size_t textureHash = std::hash<nvrhi::ITexture*>{}(key.Texture);
+                const size_t textureHash = std::hash<uint64_t>{}(key.TextureRuntimeId);
                 const size_t samplerHash = TextureSamplerDescriptionHasher{}(key.SamplerDescription);
                 return layoutHash ^ (constantBufferHash << 1) ^ (textureHash << 2) ^ (samplerHash << 3);
             }
@@ -105,10 +133,17 @@ namespace Life
 
     struct Renderer::Impl
     {
+        struct RenderTargetBinding
+        {
+            TextureResource* ColorTarget = nullptr;
+            TextureResource* DepthTarget = nullptr;
+        };
+
         nvrhi::FramebufferHandle CurrentFramebuffer;
         TextureResource* ActiveColorTarget = nullptr;
-        std::vector<TextureResource*> RenderTargetStack;
-        std::unordered_map<nvrhi::ITexture*, nvrhi::FramebufferHandle> FramebufferCache;
+        TextureResource* ActiveDepthTarget = nullptr;
+        std::vector<RenderTargetBinding> RenderTargetStack;
+        std::unordered_map<FramebufferCacheKey, nvrhi::FramebufferHandle, FramebufferCacheKeyHasher> FramebufferCache;
         std::unordered_map<TextureSamplerDescription, nvrhi::SamplerHandle, TextureSamplerDescriptionHasher> TextureSamplers;
         std::unordered_map<TextureBindingCacheKey, nvrhi::BindingSetHandle, TextureBindingCacheKeyHasher> TextureBindingSets;
         nvrhi::Viewport PendingViewport = nvrhi::Viewport();
@@ -135,6 +170,7 @@ namespace Life
             {
                 m_Impl->CurrentFramebuffer = nullptr;
                 m_Impl->ActiveColorTarget = nullptr;
+                m_Impl->ActiveDepthTarget = nullptr;
                 m_Impl->RenderTargetStack.clear();
                 m_Impl->FramebufferCache.clear();
                 m_Impl->TextureSamplers.clear();
@@ -185,8 +221,25 @@ namespace Life
         if (!colorTarget || !commandList)
             return;
 
+        commandList->setTextureState(colorTarget, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
+        commandList->commitBarriers();
+
         nvrhi::Color clearColor(r, g, b, a);
         commandList->clearTextureFloat(colorTarget, nvrhi::AllSubresources, clearColor);
+    }
+
+    void Renderer::ClearDepth(float depth)
+    {
+        TextureResource* depthTarget = m_Impl->ActiveDepthTarget;
+        nvrhi::ICommandList* commandList = m_GraphicsDevice.GetCurrentCommandList();
+        nvrhi::ITexture* nativeDepthTarget = depthTarget != nullptr ? depthTarget->GetNativeHandle() : nullptr;
+
+        if (!commandList || !nativeDepthTarget)
+            return;
+
+        commandList->setTextureState(nativeDepthTarget, nvrhi::AllSubresources, nvrhi::ResourceStates::DepthWrite);
+        commandList->commitBarriers();
+        commandList->clearDepthStencilTexture(nativeDepthTarget, nvrhi::AllSubresources, true, depth, false, 0);
     }
 
     void Renderer::SetViewport(float x, float y, float width, float height)
@@ -330,7 +383,12 @@ namespace Life
                     samplerIt = m_Impl->TextureSamplers.emplace(samplerDescription, std::move(sampler)).first;
                 }
 
-                const TextureBindingCacheKey cacheKey{ bindingLayout, nativeSceneConstants, nativeTexture, samplerDescription };
+                const TextureBindingCacheKey cacheKey{
+                    bindingLayout,
+                    nativeSceneConstants,
+                    texture->GetRuntimeId(),
+                    samplerDescription
+                };
                 auto bindingSetIt = m_Impl->TextureBindingSets.find(cacheKey);
                 if (bindingSetIt == m_Impl->TextureBindingSets.end())
                 {
@@ -356,7 +414,7 @@ namespace Life
             }
             else
             {
-                const TextureBindingCacheKey cacheKey{ bindingLayout, nativeSceneConstants, nullptr, {} };
+                const TextureBindingCacheKey cacheKey{ bindingLayout, nativeSceneConstants, 0, {} };
                 auto bindingSetIt = m_Impl->TextureBindingSets.find(cacheKey);
                 if (bindingSetIt == m_Impl->TextureBindingSets.end())
                 {
@@ -469,18 +527,21 @@ namespace Life
         m_Stats.IndicesSubmitted += drawParameters.IndexCount * drawParameters.InstanceCount;
     }
 
-    bool Renderer::PushRenderTarget(TextureResource& colorTarget)
+    bool Renderer::PushRenderTarget(TextureResource& colorTarget, TextureResource* depthTarget)
     {
         nvrhi::ICommandList* commandList = m_GraphicsDevice.GetCurrentCommandList();
         nvrhi::ITexture* nativeTexture = colorTarget.GetNativeHandle();
-        if (!commandList || !nativeTexture)
+        nvrhi::ITexture* nativeDepthTexture = depthTarget != nullptr ? depthTarget->GetNativeHandle() : nullptr;
+        if (!commandList || !nativeTexture || (depthTarget != nullptr && !nativeDepthTexture))
             return false;
 
         commandList->setTextureState(nativeTexture, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
+        if (nativeDepthTexture)
+            commandList->setTextureState(nativeDepthTexture, nvrhi::AllSubresources, nvrhi::ResourceStates::DepthWrite);
         commandList->commitBarriers();
 
-        m_Impl->RenderTargetStack.push_back(m_Impl->ActiveColorTarget);
-        SetRenderTarget(&colorTarget);
+        m_Impl->RenderTargetStack.push_back({ m_Impl->ActiveColorTarget, m_Impl->ActiveDepthTarget });
+        SetRenderTarget(&colorTarget, depthTarget);
         return true;
     }
 
@@ -490,7 +551,8 @@ namespace Life
             return;
 
         TextureResource* completedRenderTarget = m_Impl->ActiveColorTarget;
-        TextureResource* previousRenderTarget = m_Impl->RenderTargetStack.back();
+        TextureResource* previousRenderTarget = m_Impl->RenderTargetStack.back().ColorTarget;
+        TextureResource* previousDepthTarget = m_Impl->RenderTargetStack.back().DepthTarget;
         m_Impl->RenderTargetStack.pop_back();
 
         if (completedRenderTarget != nullptr && completedRenderTarget != previousRenderTarget)
@@ -505,21 +567,27 @@ namespace Life
             }
         }
 
-        SetRenderTarget(previousRenderTarget);
+        SetRenderTarget(previousRenderTarget, previousDepthTarget);
     }
 
-    void Renderer::SetRenderTarget(TextureResource* colorTarget)
+    void Renderer::SetRenderTarget(TextureResource* colorTarget, TextureResource* depthTarget)
     {
-        if (m_Impl->ActiveColorTarget == colorTarget)
+        if (m_Impl->ActiveColorTarget == colorTarget && m_Impl->ActiveDepthTarget == depthTarget)
             return;
 
         m_Impl->ActiveColorTarget = colorTarget;
+        m_Impl->ActiveDepthTarget = depthTarget;
         m_Impl->CurrentFramebuffer = nullptr;
     }
 
     TextureResource* Renderer::GetRenderTarget() const noexcept
     {
         return m_Impl->ActiveColorTarget;
+    }
+
+    TextureResource* Renderer::GetDepthRenderTarget() const noexcept
+    {
+        return m_Impl->ActiveDepthTarget;
     }
 
     FramebufferExtent Renderer::GetFramebufferExtent() const
@@ -567,6 +635,9 @@ namespace Life
         nvrhi::ITexture* colorTarget = m_Impl->ActiveColorTarget != nullptr
             ? m_Impl->ActiveColorTarget->GetNativeHandle()
             : m_GraphicsDevice.GetCurrentBackBuffer();
+        nvrhi::ITexture* depthTarget = m_Impl->ActiveDepthTarget != nullptr
+            ? m_Impl->ActiveDepthTarget->GetNativeHandle()
+            : nullptr;
 
         if (!nvrhiDevice || !colorTarget)
         {
@@ -575,7 +646,14 @@ namespace Life
             return false;
         }
 
-        if (auto framebufferIt = m_Impl->FramebufferCache.find(colorTarget); framebufferIt != m_Impl->FramebufferCache.end())
+        const FramebufferCacheKey cacheKey
+        {
+            colorTarget,
+            depthTarget,
+            m_Impl->ActiveColorTarget != nullptr ? m_Impl->ActiveColorTarget->GetRuntimeId() : 0,
+            m_Impl->ActiveDepthTarget != nullptr ? m_Impl->ActiveDepthTarget->GetRuntimeId() : 0
+        };
+        if (auto framebufferIt = m_Impl->FramebufferCache.find(cacheKey); framebufferIt != m_Impl->FramebufferCache.end())
         {
             m_Impl->CurrentFramebuffer = framebufferIt->second;
             return true;
@@ -583,6 +661,8 @@ namespace Life
 
         nvrhi::FramebufferDesc fbDesc;
         fbDesc.addColorAttachment(colorTarget);
+        if (depthTarget)
+            fbDesc.setDepthAttachment(depthTarget);
 
         nvrhi::FramebufferHandle framebuffer = nvrhiDevice->createFramebuffer(fbDesc);
         if (!framebuffer)
@@ -598,7 +678,7 @@ namespace Life
         }
 
         m_Impl->CurrentFramebuffer = framebuffer;
-        m_Impl->FramebufferCache.emplace(colorTarget, std::move(framebuffer));
+        m_Impl->FramebufferCache.emplace(cacheKey, std::move(framebuffer));
         m_Impl->ReportedFramebufferFailure = false;
         return true;
     }

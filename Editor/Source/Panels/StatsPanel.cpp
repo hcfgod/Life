@@ -35,6 +35,10 @@ namespace EditorApp
 
             ImGui::SeparatorText("Scene Surface");
             ImGui::Text("Scene Surface Size: %u x %u", viewportState.SurfaceWidth, viewportState.SurfaceHeight);
+            ImGui::Text("Requested Render Size: %u x %u", viewportState.RequestedRenderWidth, viewportState.RequestedRenderHeight);
+            ImGui::Text("Displayed Scene Size: %.1f x %.1f", viewportState.DisplayWidth, viewportState.DisplayHeight);
+            ImGui::Text("Framebuffer Scale: %.3f x %.3f", viewportState.FramebufferScaleX, viewportState.FramebufferScaleY);
+            ImGui::Text("Back Buffer Size: %u x %u", viewportState.BackBufferWidth, viewportState.BackBufferHeight);
             ImGui::Text("Scene Surface Ready: %s", viewportState.SurfaceReady ? "true" : "false");
             ImGui::Text("Scene Render Succeeded: %s", viewportState.LastRenderSucceeded ? "true" : "false");
 

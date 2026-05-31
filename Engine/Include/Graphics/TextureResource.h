@@ -47,6 +47,7 @@ namespace Life
         uint32_t Width = 1;
         uint32_t Height = 1;
         uint32_t MipLevels = 1;
+        uint32_t SampleCount = 1;
         TextureFormat Format = TextureFormat::RGBA8_UNORM;
         TextureSamplerDescription Sampler;
         bool IsRenderTarget = false;
@@ -69,6 +70,7 @@ namespace Life
         uint32_t GetHeight() const noexcept { return m_Description.Height; }
         TextureFormat GetFormat() const noexcept { return m_Description.Format; }
         const TextureSamplerDescription& GetSamplerDescription() const noexcept { return m_Description.Sampler; }
+        uint64_t GetRuntimeId() const noexcept { return m_RuntimeId; }
         bool IsValid() const noexcept;
 
         void SetSamplerDescription(const TextureSamplerDescription& samplerDescription) noexcept
@@ -102,5 +104,6 @@ namespace Life
         struct Impl;
         Scope<Impl> m_Impl;
         TextureDescription m_Description;
+        uint64_t m_RuntimeId = 0;
     };
 }

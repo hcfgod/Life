@@ -107,6 +107,50 @@ TEST_CASE("Scene hierarchy maintains parent child relationships and descendant q
     CHECK(grandChild.IsValid());
 }
 
+TEST_CASE("Scene transform utilities compose and decompose transform components")
+{
+    Life::TransformComponent transform;
+    transform.LocalPosition = { 3.0f, -2.0f, 5.0f };
+    transform.LocalRotation = { 0.0f, 0.0f, 0.75f };
+    transform.LocalScale = { 2.0f, 3.0f, 1.0f };
+
+    Life::TransformComponent decomposed;
+    REQUIRE(Life::DecomposeTransform(Life::ComposeTransform(transform), decomposed));
+
+    CHECK(decomposed.LocalPosition.x == doctest::Approx(transform.LocalPosition.x));
+    CHECK(decomposed.LocalPosition.y == doctest::Approx(transform.LocalPosition.y));
+    CHECK(decomposed.LocalPosition.z == doctest::Approx(transform.LocalPosition.z));
+    CHECK(decomposed.LocalRotation.z == doctest::Approx(transform.LocalRotation.z));
+    CHECK(decomposed.LocalScale.x == doctest::Approx(transform.LocalScale.x));
+    CHECK(decomposed.LocalScale.y == doctest::Approx(transform.LocalScale.y));
+    CHECK(decomposed.LocalScale.z == doctest::Approx(transform.LocalScale.z));
+}
+
+TEST_CASE("Scene world transform assignment preserves parented entity world placement")
+{
+    Life::Scene scene("WorldTransform");
+    Life::Entity parent = scene.CreateEntity("Parent");
+    Life::Entity child = scene.CreateChildEntity(parent, "Child");
+
+    parent.GetComponent<Life::TransformComponent>().LocalPosition = { 10.0f, 2.0f, 0.0f };
+
+    Life::TransformComponent desiredWorld;
+    desiredWorld.LocalPosition = { 14.0f, 7.0f, -3.0f };
+    desiredWorld.LocalScale = { 2.0f, 1.5f, 1.0f };
+
+    REQUIRE(Life::SetEntityWorldTransform(scene, child, Life::ComposeTransform(desiredWorld)));
+
+    const glm::mat4 childWorldTransform = scene.GetWorldTransformMatrix(child);
+    CHECK(childWorldTransform[3].x == doctest::Approx(14.0f));
+    CHECK(childWorldTransform[3].y == doctest::Approx(7.0f));
+    CHECK(childWorldTransform[3].z == doctest::Approx(-3.0f));
+
+    const Life::TransformComponent& childLocal = child.GetComponent<Life::TransformComponent>();
+    CHECK(childLocal.LocalPosition.x == doctest::Approx(4.0f));
+    CHECK(childLocal.LocalPosition.y == doctest::Approx(5.0f));
+    CHECK(childLocal.LocalPosition.z == doctest::Approx(-3.0f));
+}
+
 TEST_CASE("SceneService manages the active scene boundary")
 {
     Life::SceneService sceneService;

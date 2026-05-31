@@ -4,6 +4,8 @@
 #include "Graphics/GraphicsBackend.h"
 #include "Graphics/TextureResource.h"
 
+#include <cstdint>
+
 union SDL_Event;
 
 namespace Life
@@ -12,6 +14,12 @@ namespace Life
     class GraphicsDevice;
     class TextureResource;
     class Window;
+
+    enum class ImGuiTextureSampling : uint8_t
+    {
+        Linear = 0,
+        Nearest = 1
+    };
 
     class ImGuiSystem
     {
@@ -30,7 +38,7 @@ namespace Life
         void Render();
         void OnSdlEvent(const SDL_Event& event);
         void CaptureEvent(Event& event);
-        bool DrawImage(TextureResource& texture, float width, float height);
+        bool DrawImage(TextureResource& texture, float width, float height, ImGuiTextureSampling sampling = ImGuiTextureSampling::Linear);
         void ReleaseTextureHandle(TextureResource& texture) noexcept;
 
         bool IsInitialized() const noexcept { return m_Initialized; }

@@ -11,5 +11,10 @@ layout(location = 0) out vec4 outColor;
 
 void main()
 {
-    outColor = texture(sampler2D(uTexture, uTextureSampler), fragTexCoord) * fragColor;
+    vec4 sampledColor = texture(sampler2D(uTexture, uTextureSampler), fragTexCoord);
+    if (sampledColor.a <= (0.5 / 255.0))
+        discard;
+
+    outColor = sampledColor * fragColor;
+    outColor.rgb *= outColor.a;
 }

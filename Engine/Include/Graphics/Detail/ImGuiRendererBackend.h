@@ -3,6 +3,7 @@
 #include "Core/Memory.h"
 
 #include <SDL3/SDL.h>
+#include <cstdint>
 
 namespace Life
 {
@@ -27,6 +28,12 @@ namespace Life
 namespace Life::Detail
 {
 #if LIFE_HAS_IMGUI
+    enum class ImGuiTextureSampling : uint8_t
+    {
+        Linear = 0,
+        Nearest = 1
+    };
+
     class ImGuiRendererBackend
     {
     public:
@@ -36,7 +43,7 @@ namespace Life::Detail
         virtual void Shutdown() noexcept = 0;
         virtual void NewFrame() = 0;
         virtual void RenderDrawData(ImDrawData* drawData) = 0;
-        virtual void* GetTextureHandle(TextureResource& texture) = 0;
+        virtual void* GetTextureHandle(TextureResource& texture, ImGuiTextureSampling sampling) = 0;
         virtual void ReleaseTextureHandle(TextureResource& texture) noexcept = 0;
     };
 #else

@@ -421,6 +421,68 @@ namespace EditorApp
             return true;
         }
 
+        void SyncSceneReferencesAfterAssetRebase(
+            const std::filesystem::path& assetsDirectory,
+            const std::filesystem::path& oldRelativePath,
+            const std::filesystem::path& newRelativePath,
+            bool updateActiveSceneName,
+            const std::string& renamedSceneName,
+            const EditorServices& services,
+            EditorSceneState& sceneState)
+        {
+            if (services.SceneService && services.SceneService->get().HasActiveSceneSourcePath())
+            {
+                Life::SceneService& sceneService = services.SceneService->get();
+                const std::filesystem::path oldAbsolutePath = (assetsDirectory / oldRelativePath).lexically_normal();
+                const std::filesystem::path newAbsolutePath = (assetsDirectory / newRelativePath).lexically_normal();
+                const std::filesystem::path activeSceneSourcePath = sceneService.GetActiveSceneSourcePath().lexically_normal();
+                if (IsSameOrDescendant(activeSceneSourcePath, oldAbsolutePath))
+                {
+                    const bool wasSceneDirty = sceneService.IsActiveSceneDirty();
+                    Life::Scene& activeScene = sceneService.GetActiveScene();
+                    activeScene.SetSourcePath(RebasePath(activeSceneSourcePath, oldAbsolutePath, newAbsolutePath).lexically_normal());
+                    if (updateActiveSceneName)
+                    {
+                        activeScene.SetName(renamedSceneName);
+                        if (wasSceneDirty)
+                        {
+                            sceneService.MarkActiveSceneDirty();
+                        }
+                        else
+                        {
+                            const auto saveResult = sceneService.SaveActiveScene();
+                            if (saveResult.IsFailure())
+                            {
+                                sceneService.MarkActiveSceneDirty();
+                                sceneState.SetStatusMessage(
+                                    "Renamed the active scene asset, but failed to save the updated scene name: " + saveResult.GetError().GetErrorMessage(),
+                                    true);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (services.ProjectService && services.ProjectService->get().HasActiveProject())
+            {
+                Life::Assets::ProjectService& projectService = services.ProjectService->get();
+                Life::Assets::Project& project = projectService.GetActiveProject();
+                if (!project.Descriptor.Startup.Scene.empty())
+                {
+                    const std::filesystem::path oldStartupPath = std::filesystem::path(MakeAssetKey(oldRelativePath)).lexically_normal();
+                    const std::filesystem::path newStartupPath = std::filesystem::path(MakeAssetKey(newRelativePath)).lexically_normal();
+                    const std::filesystem::path configuredStartupPath = std::filesystem::path(project.Descriptor.Startup.Scene).lexically_normal();
+                    if (IsSameOrDescendant(configuredStartupPath, oldStartupPath))
+                    {
+                        project.Descriptor.Startup.Scene = RebasePath(configuredStartupPath, oldStartupPath, newStartupPath).generic_string();
+                        const auto saveResult = projectService.SaveProject();
+                        if (saveResult.IsFailure())
+                            sceneState.SetStatusMessage(saveResult.GetError().GetErrorMessage(), true);
+                    }
+                }
+            }
+        }
+
         bool CreateFolder(const std::filesystem::path& assetsDirectory, const std::filesystem::path& parentRelativePath, const std::string& folderName, EditorSceneState& sceneState)
         {
             const std::string sanitizedName = SanitizeName(folderName);
@@ -491,7 +553,7 @@ namespace EditorApp
             return true;
         }
 
-        bool RenameEntry(const std::filesystem::path& assetsDirectory, const ProjectAssetEntry& entry, const std::string& name, EditorSceneState& sceneState)
+        bool RenameEntry(const std::filesystem::path& assetsDirectory, const ProjectAssetEntry& entry, const std::string& name, const EditorServices& services, EditorSceneState& sceneState)
         {
             const std::string sanitizedName = SanitizeName(name);
             if (sanitizedName.empty())
@@ -519,6 +581,7 @@ namespace EditorApp
 
             const std::filesystem::path sourceMetaPath = GetMetaPathForAsset(entry.AbsolutePath);
             const std::filesystem::path destinationMetaPath = GetMetaPathForAsset(destination);
+            const std::filesystem::path renamedRelativePath = (entry.RelativePath.parent_path() / destination.filename()).lexically_normal();
 
             std::filesystem::rename(entry.AbsolutePath, destination, ec);
             if (ec)
@@ -541,6 +604,14 @@ namespace EditorApp
             }
 
             sceneState.SetStatusMessage("Renamed '" + entry.DisplayName + "'.", false);
+            SyncSceneReferencesAfterAssetRebase(
+                assetsDirectory,
+                entry.RelativePath,
+                renamedRelativePath,
+                entry.Kind == ProjectEntryKind::Scene && !entry.IsDirectory,
+                sanitizedName,
+                services,
+                sceneState);
             return true;
         }
 
@@ -582,7 +653,7 @@ namespace EditorApp
             return true;
         }
 
-        bool MoveEntry(const std::filesystem::path& assetsDirectory, const std::filesystem::path& sourceRelativePath, const std::filesystem::path& destinationFolderRelativePath, EditorSceneState& sceneState)
+        bool MoveEntry(const std::filesystem::path& assetsDirectory, const std::filesystem::path& sourceRelativePath, const std::filesystem::path& destinationFolderRelativePath, const EditorServices& services, EditorSceneState& sceneState)
         {
             if (sourceRelativePath.empty())
                 return false;
@@ -590,6 +661,7 @@ namespace EditorApp
             const std::filesystem::path sourcePath = assetsDirectory / sourceRelativePath;
             const std::filesystem::path destinationFolder = destinationFolderRelativePath.empty() ? assetsDirectory : (assetsDirectory / destinationFolderRelativePath);
             const std::filesystem::path destinationPath = destinationFolder / sourcePath.filename();
+            const std::filesystem::path movedRelativePath = (destinationFolderRelativePath / sourcePath.filename()).lexically_normal();
 
             if (!IsPathInside(assetsDirectory, destinationFolder))
             {
@@ -639,6 +711,14 @@ namespace EditorApp
             }
 
             sceneState.SetStatusMessage("Moved '" + sourcePath.filename().string() + "'.", false);
+            SyncSceneReferencesAfterAssetRebase(
+                assetsDirectory,
+                sourceRelativePath,
+                movedRelativePath,
+                false,
+                {},
+                services,
+                sceneState);
             return true;
         }
 
@@ -918,8 +998,9 @@ namespace EditorApp
             if (ImGui::Button("Rename", ImVec2(120.0f, 0.0f)))
             {
                 const ProjectAssetEntry entry = FindEntryByRelativePath(assetsDirectory, m_PopupTargetRelativePath);
-                const std::filesystem::path renamedRelativePath = (entry.RelativePath.parent_path() / (m_PopupName + ResolveSuffixForRename(entry))).lexically_normal();
-                if (RenameEntry(assetsDirectory, entry, m_PopupName, sceneState))
+                const std::string sanitizedPopupName = SanitizeName(m_PopupName);
+                const std::filesystem::path renamedRelativePath = (entry.RelativePath.parent_path() / (sanitizedPopupName + ResolveSuffixForRename(entry))).lexically_normal();
+                if (RenameEntry(assetsDirectory, entry, m_PopupName, services, sceneState))
                 {
                     m_SelectedRelativePath = RebasePath(m_SelectedRelativePath, entry.RelativePath, renamedRelativePath);
                     m_ActiveFolderRelativePath = RebasePath(m_ActiveFolderRelativePath, entry.RelativePath, renamedRelativePath);
@@ -1028,7 +1109,7 @@ namespace EditorApp
                             if (assetPayload != nullptr && assetPayload->RelativePath[0] != '\0')
                             {
                                 const std::filesystem::path sourceRelativePath(assetPayload->RelativePath.data());
-                                if (MoveEntry(assetsDirectory, sourceRelativePath, relativePath, sceneState) && m_SelectedRelativePath == sourceRelativePath)
+                                if (MoveEntry(assetsDirectory, sourceRelativePath, relativePath, services, sceneState) && m_SelectedRelativePath == sourceRelativePath)
                                 {
                                     m_SelectedRelativePath = relativePath / sourceRelativePath.filename();
                                     sceneState.SelectProjectAsset(m_SelectedRelativePath);
@@ -1117,7 +1198,7 @@ namespace EditorApp
                         if (assetPayload != nullptr && assetPayload->RelativePath[0] != '\0')
                         {
                             const std::filesystem::path sourceRelativePath(assetPayload->RelativePath.data());
-                            if (MoveEntry(assetsDirectory, sourceRelativePath, m_ActiveFolderRelativePath, sceneState) && m_SelectedRelativePath == sourceRelativePath)
+                            if (MoveEntry(assetsDirectory, sourceRelativePath, m_ActiveFolderRelativePath, services, sceneState) && m_SelectedRelativePath == sourceRelativePath)
                             {
                                 m_SelectedRelativePath = m_ActiveFolderRelativePath / sourceRelativePath.filename();
                                 sceneState.SelectProjectAsset(m_SelectedRelativePath);
@@ -1245,7 +1326,7 @@ namespace EditorApp
                                 if (assetPayload != nullptr && assetPayload->RelativePath[0] != '\0')
                                 {
                                     const std::filesystem::path sourceRelativePath(assetPayload->RelativePath.data());
-                                    if (MoveEntry(assetsDirectory, sourceRelativePath, entry.RelativePath, sceneState) && m_SelectedRelativePath == sourceRelativePath)
+                                    if (MoveEntry(assetsDirectory, sourceRelativePath, entry.RelativePath, services, sceneState) && m_SelectedRelativePath == sourceRelativePath)
                                     {
                                         m_SelectedRelativePath = entry.RelativePath / sourceRelativePath.filename();
                                         sceneState.SelectProjectAsset(m_SelectedRelativePath);
@@ -1368,7 +1449,7 @@ namespace EditorApp
                                 if (assetPayload != nullptr && assetPayload->RelativePath[0] != '\0')
                                 {
                                     const std::filesystem::path sourceRelativePath(assetPayload->RelativePath.data());
-                                    if (MoveEntry(assetsDirectory, sourceRelativePath, entry.RelativePath, sceneState) && m_SelectedRelativePath == sourceRelativePath)
+                                    if (MoveEntry(assetsDirectory, sourceRelativePath, entry.RelativePath, services, sceneState) && m_SelectedRelativePath == sourceRelativePath)
                                     {
                                         m_SelectedRelativePath = entry.RelativePath / sourceRelativePath.filename();
                                         sceneState.SelectProjectAsset(m_SelectedRelativePath);

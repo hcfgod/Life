@@ -31,10 +31,10 @@ namespace Life::Assets
 
     struct TextureSpecification
     {
-        TextureFilter MinFilter = TextureFilter::Linear;
-        TextureFilter MagFilter = TextureFilter::Linear;
-        TextureWrap WrapU = TextureWrap::Repeat;
-        TextureWrap WrapV = TextureWrap::Repeat;
+        TextureFilter MinFilter = TextureFilter::Nearest;
+        TextureFilter MagFilter = TextureFilter::Nearest;
+        TextureWrap WrapU = TextureWrap::ClampToEdge;
+        TextureWrap WrapV = TextureWrap::ClampToEdge;
         bool GenerateMipmaps = true;
         bool FlipVerticallyOnLoad = false;
     };

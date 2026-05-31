@@ -59,11 +59,14 @@ namespace Life::Detail
         if (m_Renderer2D.m_Impl->QueuedQuadCount >= Renderer2DMaxQuads)
             m_Renderer2D.Flush();
 
-        if (m_Renderer2D.m_Impl->Batches.empty() || m_Renderer2D.m_Impl->Batches.back().Texture != resolvedTexture)
+        if (m_Renderer2D.m_Impl->Batches.empty() ||
+            m_Renderer2D.m_Impl->Batches.back().Texture != resolvedTexture ||
+            m_Renderer2D.m_Impl->Batches.back().Opaque != quad.Opaque)
         {
             Renderer2DQuadBatchRange batch;
             batch.Texture = resolvedTexture;
             batch.InstanceOffset = static_cast<uint32_t>(m_Renderer2D.m_Impl->Instances.size());
+            batch.Opaque = quad.Opaque;
             m_Renderer2D.m_Impl->Batches.push_back(batch);
         }
 

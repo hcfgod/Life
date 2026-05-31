@@ -23,7 +23,7 @@ namespace Life
         SceneService(const SceneService&) = delete;
         SceneService& operator=(const SceneService&) = delete;
 
-        void BindAssetManager(Assets::AssetManager& assetManager) noexcept;
+        void BindAssetManager(Assets::AssetManager& assetManager);
         void UnbindAssetManager() noexcept;
 
         Scene& CreateScene(std::string name = "Untitled");

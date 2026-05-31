@@ -112,6 +112,10 @@ namespace Life
         std::vector<entt::entity> m_RootEntities;
     };
 
+    glm::mat4 ComposeTransform(const TransformComponent& transform);
+    bool DecomposeTransform(const glm::mat4& matrix, TransformComponent& transform);
+    bool SetEntityWorldTransform(Scene& scene, Entity entity, const glm::mat4& worldTransform);
+
 }
 
 #include "Scene/Entity.inl"

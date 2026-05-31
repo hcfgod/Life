@@ -71,6 +71,10 @@ namespace Life
         {
             SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE;
 
+#ifdef SDL_WINDOW_HIGH_PIXEL_DENSITY
+            flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+#endif
+
 #ifdef LIFE_GRAPHICS_VULKAN
             flags |= SDL_WINDOW_VULKAN;
 #endif

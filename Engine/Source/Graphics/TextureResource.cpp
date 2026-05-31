@@ -6,8 +6,15 @@
 
 #include <nvrhi/nvrhi.h>
 
+#include <atomic>
+
 namespace Life
 {
+    namespace
+    {
+        std::atomic<uint64_t> s_NextTextureRuntimeId{ 1u };
+    }
+
     struct TextureResource::Impl
     {
         nvrhi::TextureHandle Handle;
@@ -18,7 +25,9 @@ namespace Life
     TextureResource::TextureResource(TextureResource&& other) noexcept
         : m_Impl(std::move(other.m_Impl))
         , m_Description(std::move(other.m_Description))
+        , m_RuntimeId(other.m_RuntimeId)
     {
+        other.m_RuntimeId = 0;
     }
 
     TextureResource& TextureResource::operator=(TextureResource&& other) noexcept
@@ -27,6 +36,8 @@ namespace Life
         {
             m_Impl = std::move(other.m_Impl);
             m_Description = std::move(other.m_Description);
+            m_RuntimeId = other.m_RuntimeId;
+            other.m_RuntimeId = 0;
         }
         return *this;
     }
@@ -52,6 +63,7 @@ namespace Life
         textureDesc.width = desc.Width;
         textureDesc.height = desc.Height;
         textureDesc.mipLevels = desc.MipLevels;
+        textureDesc.sampleCount = desc.SampleCount;
         textureDesc.format = Internal::ToNvrhiFormat(desc.Format);
         textureDesc.debugName = desc.DebugName.c_str();
         textureDesc.dimension = nvrhi::TextureDimension::Texture2D;
@@ -89,6 +101,7 @@ namespace Life
         texture->m_Impl = CreateScope<Impl>();
         texture->m_Impl->Handle = handle;
         texture->m_Description = desc;
+        texture->m_RuntimeId = s_NextTextureRuntimeId.fetch_add(1u, std::memory_order_relaxed);
         return texture;
     }
 }

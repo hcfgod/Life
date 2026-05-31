@@ -17,7 +17,8 @@ project "Editor"
 
     includedirs
     {
-        "Include"
+        "Include",
+        IncludeDir["ImGuizmo"]
     }
 
     links
@@ -25,24 +26,14 @@ project "Editor"
         "Engine",
         "StbImage",
         "ImGui",
+        "ImGuizmo",
         "VkBootstrap"
     }
-
-    if VulkanSDKPath ~= nil then
-        filter "system:windows"
-            postbuildcommands
-            {
-                '{MKDIR} "%{cfg.targetdir}/Assets/Shaders"',
-                '"' .. path.join(VulkanSDKPath, "Bin/glslangValidator.exe") .. '" -V "' .. path.join(RootDir, "Assets/Shaders/Renderer2D.vert") .. '" -o "%{cfg.targetdir}/Assets/Shaders/Renderer2D.vert.spv"',
-                '"' .. path.join(VulkanSDKPath, "Bin/glslangValidator.exe") .. '" -V "' .. path.join(RootDir, "Assets/Shaders/Renderer2D.frag") .. '" -o "%{cfg.targetdir}/Assets/Shaders/Renderer2D.frag.spv"'
-            }
-
-        filter {}
-    end
 
     ConfigureApplicationEntrypoints()
     ConfigureGraphicsDefines()
     ConfigureSanitizers()
+    ConfigureRenderer2DShaderPostBuild()
     ConfigureRuntimeSearchPaths()
     ConfigureSDL3Linking()
     ConfigureNVRHILinking()

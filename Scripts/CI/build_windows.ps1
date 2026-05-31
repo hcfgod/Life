@@ -13,6 +13,8 @@ param(
     [string]$LogPath = ''
 )
 
+$ErrorActionPreference = 'Stop'
+
 function Resolve-NormalizedPlatform([string]$RequestedPlatform) {
     if (-not [string]::IsNullOrWhiteSpace($RequestedPlatform)) {
         $normalized = $RequestedPlatform.Trim().ToLowerInvariant()
@@ -34,7 +36,25 @@ function Resolve-NormalizedPlatform([string]$RequestedPlatform) {
     }
 }
 
+function Find-MSBuildPath() {
+    $msbuildCommand = Get-Command 'msbuild.exe' -ErrorAction SilentlyContinue
+    if ($null -ne $msbuildCommand) {
+        return $msbuildCommand.Source
+    }
+
+    $vsWherePath = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if (Test-Path -LiteralPath $vsWherePath) {
+        $msbuildPath = & $vsWherePath -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+        if (-not [string]::IsNullOrWhiteSpace($msbuildPath) -and (Test-Path -LiteralPath $msbuildPath)) {
+            return $msbuildPath
+        }
+    }
+
+    throw "Unable to locate MSBuild.exe. Install Visual Studio Build Tools with MSBuild, or run from a Developer PowerShell environment."
+}
+
 $Platform = Resolve-NormalizedPlatform $Platform
+$MSBuildPath = Find-MSBuildPath
 
 if ($LogPath -ne '') {
     $logDirectory = Split-Path -Path $LogPath -Parent
@@ -57,7 +77,7 @@ if ($LogPath -ne '') {
     $arguments += "/flp:logfile=$LogPath;verbosity=diagnostic"
 }
 
-& msbuild.exe @arguments
+& $MSBuildPath @arguments
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

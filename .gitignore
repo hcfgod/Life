@@ -135,5 +135,8 @@ coverage/
 *.mdmp
 
 # Crash reports
+Crashes/
+Test/Crashes/
 crash-reports/
-*.crash 
+*.crash
+*.crash.txt

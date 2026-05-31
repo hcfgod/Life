@@ -10,6 +10,7 @@
 
 #include <glm/glm.hpp>
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -29,6 +30,7 @@ namespace Life::Detail
         const TextureResource* Texture = nullptr;
         uint32_t InstanceOffset = 0;
         uint32_t InstanceCount = 0;
+        bool Opaque = false;
     };
 
     struct Renderer2DQuadStaticVertex
@@ -47,6 +49,11 @@ namespace Life::Detail
     };
 }
 
+namespace nvrhi
+{
+    class IFramebuffer;
+}
+
 namespace Life
 {
     struct Renderer2D::Impl
@@ -54,7 +61,8 @@ namespace Life
         Scope<GraphicsBuffer> QuadVertexBuffer;
         std::vector<Scope<GraphicsBuffer>> InstanceBuffers;
         std::vector<Scope<GraphicsBuffer>> SceneConstantBuffers;
-        Scope<GraphicsPipeline> Pipeline;
+        Scope<GraphicsPipeline> OpaquePipeline;
+        Scope<GraphicsPipeline> TransparentPipeline;
         Shader* VertexShader = nullptr;
         Shader* PixelShader = nullptr;
         VertexLayout Layout;
@@ -65,6 +73,10 @@ namespace Life
         Scope<TextureResource> ErrorTexture;
         GraphicsBuffer* ActiveInstanceBuffer = nullptr;
         GraphicsBuffer* ActiveSceneConstantBuffer = nullptr;
+        nvrhi::IFramebuffer* OpaquePipelineFramebuffer = nullptr;
+        nvrhi::IFramebuffer* TransparentPipelineFramebuffer = nullptr;
+        bool OpaquePipelineUsesDepth = false;
+        bool TransparentPipelineUsesDepth = false;
         uint32_t ActiveBufferVersion = Detail::Renderer2DBufferVersionCount - 1u;
         uint32_t QueuedQuadCount = 0;
         bool ResourcesReady = false;

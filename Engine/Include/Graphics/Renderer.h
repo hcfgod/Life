@@ -58,6 +58,7 @@ namespace Life
         bool IsInScene() const noexcept { return m_InScene; }
 
         void Clear(float r, float g, float b, float a = 1.0f);
+        void ClearDepth(float depth = 1.0f);
         void SetViewport(float x, float y, float width, float height);
         void SetScissor(int32_t x, int32_t y, uint32_t width, uint32_t height);
 
@@ -78,10 +79,11 @@ namespace Life
                            GraphicsBuffer& indexBuffer,
                            const IndexedDrawParameters& drawParameters = {});
 
-        bool PushRenderTarget(TextureResource& colorTarget);
+        bool PushRenderTarget(TextureResource& colorTarget, TextureResource* depthTarget = nullptr);
         void PopRenderTarget() noexcept;
-        void SetRenderTarget(TextureResource* colorTarget);
+        void SetRenderTarget(TextureResource* colorTarget, TextureResource* depthTarget = nullptr);
         TextureResource* GetRenderTarget() const noexcept;
+        TextureResource* GetDepthRenderTarget() const noexcept;
         FramebufferExtent GetFramebufferExtent() const;
 
         Scope<GraphicsPipeline> CreatePipeline(const GraphicsPipelineDescription& desc);

@@ -79,6 +79,12 @@ Current CI validation remains focused on Windows x64, Linux x64, macOS x64, and 
    ./Scripts/CI/run_windows_tests.ps1 -Configuration Debug
    ```
 
+   To include the live SDL/Vulkan/ImGui smoke test on a Vulkan-capable machine:
+
+   ```powershell
+   ./Scripts/CI/run_windows_tests.ps1 -Configuration Debug -LiveBackendSmoke
+   ```
+
 To target Windows ARM64 explicitly:
 
 ```powershell

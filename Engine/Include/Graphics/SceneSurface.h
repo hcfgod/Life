@@ -38,11 +38,16 @@ namespace Life
     private:
         bool BeginSurfaceRender();
         void EndSurfaceRender() noexcept;
+        TextureResource* GetActiveColorTarget() noexcept;
+        const TextureResource* GetActiveColorTarget() const noexcept;
+        void ResolveMultisampleColorTarget() noexcept;
 
         Renderer& m_Renderer;
         Renderer2D& m_Renderer2D;
         ImGuiSystem& m_ImGuiSystem;
         Scope<TextureResource> m_ColorTarget;
+        Scope<TextureResource> m_MultisampleColorTarget;
+        Scope<TextureResource> m_DepthTarget;
         uint32_t m_Width = 0;
         uint32_t m_Height = 0;
         bool m_RenderActive = false;

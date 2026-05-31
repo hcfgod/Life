@@ -1,6 +1,12 @@
 {
     "deps": [],
     "guid": "1f2cc27a-2249-4554-8ec4-102476853ded",
+    "importerSettings": {
+        "magFilter": 0,
+        "minFilter": 0,
+        "wrapU": 1,
+        "wrapV": 1
+    },
     "key": "Assets/Textures/Renderer2DChecker.ppm",
     "type": "Texture2D"
 }

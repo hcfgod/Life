@@ -11,6 +11,7 @@
 #include "Editor/Panels/StatsPanel.h"
 #include "Editor/ProjectHub/EditorProjectHub.h"
 #include "Editor/Shell/EditorShell.h"
+#include "Editor/Undo/EditorUndoStack.h"
 #include "Editor/Viewport/SceneViewportPanel.h"
 #include "Engine.h"
 
@@ -40,6 +41,7 @@ namespace EditorApp
         void RenderSceneDialogs();
         std::string BuildDefaultScenePath(const std::string& sceneName) const;
         void SetSceneStatus(std::string message, bool isError);
+        void HandleWorkspaceShortcuts();
         bool BeginSceneExecution(EditorSceneExecutionMode executionMode);
         void StopSceneExecution();
         void UpdateSceneExecution(float timestep);
@@ -56,6 +58,7 @@ namespace EditorApp
         HierarchyPanel m_HierarchyPanel;
         InspectorPanel m_InspectorPanel;
         EditorSceneState m_SceneState;
+        EditorUndoStack m_UndoStack;
         ConsolePanel m_ConsolePanel;
         FpsOverlayPanel m_FpsOverlayPanel;
         StatsPanel m_StatsPanel;

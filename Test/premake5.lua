@@ -30,6 +30,7 @@ project "Test"
 
     ConfigureGraphicsDefines()
     ConfigureSanitizers()
+    ConfigureRenderer2DShaderPostBuild()
     ConfigureRuntimeSearchPaths()
     ConfigureSDL3Linking()
     ConfigureNVRHILinking()

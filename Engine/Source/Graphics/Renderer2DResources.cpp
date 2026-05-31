@@ -28,6 +28,10 @@ namespace Life::Detail
             desc.Height = 1;
             desc.MipLevels = 1;
             desc.Format = TextureFormat::RGBA8_UNORM;
+            desc.Sampler.MinFilter = TextureFilterMode::Nearest;
+            desc.Sampler.MagFilter = TextureFilterMode::Nearest;
+            desc.Sampler.WrapU = TextureWrapMode::ClampToEdge;
+            desc.Sampler.WrapV = TextureWrapMode::ClampToEdge;
             return TextureResource::Create2D(device, desc, pixel.data());
         }
     }
@@ -39,6 +43,9 @@ namespace Life::Detail
 
     bool Renderer2DResources::ValidateResourceState() const noexcept
     {
+        nvrhi::IFramebuffer* currentFramebuffer = m_Renderer2D.m_Renderer.GetCurrentFramebuffer();
+        const bool useDepth = m_Renderer2D.m_Renderer.GetDepthRenderTarget() != nullptr;
+
         return m_Renderer2D.m_Impl->QuadVertexBuffer != nullptr &&
                m_Renderer2D.m_Impl->QuadVertexBuffer->IsValid() &&
                m_Renderer2D.m_Impl->InstanceBuffers.size() == Renderer2DBufferVersionCount &&
@@ -51,8 +58,15 @@ namespace Life::Detail
                m_Renderer2D.m_Impl->ActiveInstanceBuffer->IsValid() &&
                m_Renderer2D.m_Impl->ActiveSceneConstantBuffer != nullptr &&
                m_Renderer2D.m_Impl->ActiveSceneConstantBuffer->IsValid() &&
-               m_Renderer2D.m_Impl->Pipeline != nullptr &&
-               m_Renderer2D.m_Impl->Pipeline->IsValid() &&
+               m_Renderer2D.m_Impl->OpaquePipeline != nullptr &&
+               m_Renderer2D.m_Impl->OpaquePipeline->IsValid() &&
+               m_Renderer2D.m_Impl->TransparentPipeline != nullptr &&
+               m_Renderer2D.m_Impl->TransparentPipeline->IsValid() &&
+               currentFramebuffer != nullptr &&
+               m_Renderer2D.m_Impl->OpaquePipelineFramebuffer == currentFramebuffer &&
+               m_Renderer2D.m_Impl->TransparentPipelineFramebuffer == currentFramebuffer &&
+               m_Renderer2D.m_Impl->OpaquePipelineUsesDepth == useDepth &&
+               m_Renderer2D.m_Impl->TransparentPipelineUsesDepth == useDepth &&
                m_Renderer2D.m_Impl->VertexShader != nullptr &&
                m_Renderer2D.m_Impl->PixelShader != nullptr &&
                m_Renderer2D.m_Impl->WhiteTexture != nullptr &&
@@ -156,11 +170,12 @@ namespace Life::Detail
             if (!m_Renderer2D.m_Impl->ReportedInitializationFailure)
             {
                 LOG_CORE_ERROR(
-                    "Renderer2D failed to initialize required resources (QuadVertexBuffer={}, InstanceBuffers={}, SceneConstants={}, Pipeline={}, VertexShader={}, PixelShader={}, WhiteTexture={}, ErrorTexture={}).",
+                    "Renderer2D failed to initialize required resources (QuadVertexBuffer={}, InstanceBuffers={}, SceneConstants={}, OpaquePipeline={}, TransparentPipeline={}, VertexShader={}, PixelShader={}, WhiteTexture={}, ErrorTexture={}).",
                     m_Renderer2D.m_Impl->QuadVertexBuffer != nullptr,
                     m_Renderer2D.m_Impl->InstanceBuffers.size() == Renderer2DBufferVersionCount,
                     m_Renderer2D.m_Impl->SceneConstantBuffers.size() == Renderer2DBufferVersionCount,
-                    m_Renderer2D.m_Impl->Pipeline != nullptr,
+                    m_Renderer2D.m_Impl->OpaquePipeline != nullptr,
+                    m_Renderer2D.m_Impl->TransparentPipeline != nullptr,
                     m_Renderer2D.m_Impl->VertexShader != nullptr,
                     m_Renderer2D.m_Impl->PixelShader != nullptr,
                     m_Renderer2D.m_Impl->WhiteTexture != nullptr,
@@ -184,11 +199,16 @@ namespace Life::Detail
         m_Renderer2D.m_Impl->QuadVertexBuffer.reset();
         m_Renderer2D.m_Impl->InstanceBuffers.clear();
         m_Renderer2D.m_Impl->SceneConstantBuffers.clear();
-        m_Renderer2D.m_Impl->Pipeline.reset();
+        m_Renderer2D.m_Impl->OpaquePipeline.reset();
+        m_Renderer2D.m_Impl->TransparentPipeline.reset();
         m_Renderer2D.m_Impl->WhiteTexture.reset();
         m_Renderer2D.m_Impl->ErrorTexture.reset();
         m_Renderer2D.m_Impl->ActiveInstanceBuffer = nullptr;
         m_Renderer2D.m_Impl->ActiveSceneConstantBuffer = nullptr;
+        m_Renderer2D.m_Impl->OpaquePipelineFramebuffer = nullptr;
+        m_Renderer2D.m_Impl->TransparentPipelineFramebuffer = nullptr;
+        m_Renderer2D.m_Impl->OpaquePipelineUsesDepth = false;
+        m_Renderer2D.m_Impl->TransparentPipelineUsesDepth = false;
         m_Renderer2D.m_Impl->ActiveBufferVersion = Renderer2DBufferVersionCount - 1u;
         m_Renderer2D.m_Impl->VertexShader = nullptr;
         m_Renderer2D.m_Impl->PixelShader = nullptr;

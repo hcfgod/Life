@@ -110,6 +110,7 @@ newoption
  IncludeDir["json"] = path.join(RootDir, "Vendor/json/include")
  IncludeDir["doctest"] = path.join(RootDir, "Vendor/doctest")
  IncludeDir["imgui"] = path.join(RootDir, "Vendor/imgui")
+ IncludeDir["ImGuizmo"] = path.join(RootDir, "Vendor/ImGuizmo")
  IncludeDir["stb_image"] = path.join(RootDir, "Vendor/stb_image")
  IncludeDir["entt"] = path.join(RootDir, "Vendor/entt/src")
  IncludeDir["VulkanHeaders"] = path.join(RootDir, "Vendor/nvrhi/thirdparty/Vulkan-Headers/include")
@@ -352,6 +353,20 @@ function ConfigureRuntimeSearchPaths()
     filter {}
 end
 
+function ConfigureRenderer2DShaderPostBuild()
+    if VulkanSDKPath ~= nil then
+        filter "system:windows"
+            postbuildcommands
+            {
+                '{MKDIR} "%{cfg.targetdir}/Assets/Shaders"',
+                '"' .. path.join(VulkanSDKPath, "Bin/glslangValidator.exe") .. '" -V "' .. path.join(RootDir, "Assets/Shaders/Renderer2D.vert") .. '" -o "%{cfg.targetdir}/Assets/Shaders/Renderer2D.vert.spv"',
+                '"' .. path.join(VulkanSDKPath, "Bin/glslangValidator.exe") .. '" -V "' .. path.join(RootDir, "Assets/Shaders/Renderer2D.frag") .. '" -o "%{cfg.targetdir}/Assets/Shaders/Renderer2D.frag.spv"'
+            }
+
+        filter {}
+    end
+end
+
 function ConfigureSDL3Linking()
     filter { "system:windows", "configurations:Debug" }
         libdirs { LibraryDir["SDL3_Windows_Debug"] }
@@ -502,6 +517,7 @@ end
 
 group "Dependencies"
 include "Vendor/imgui"
+include "Vendor/ImGuizmo"
 include "Vendor/stb_image"
 include "Vendor/vk-bootstrap"
 group ""

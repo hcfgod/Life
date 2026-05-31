@@ -10,6 +10,18 @@
 
 namespace Life
 {
+    namespace
+    {
+        float ResolveCameraDepth(const SceneRenderer2D::Scene2D& scene, const SceneRenderer2D::QuadCommand& quad)
+        {
+            if (scene.Camera == nullptr)
+                return quad.Position.z;
+
+            const glm::vec4 viewPosition = scene.Camera->GetViewMatrix() * glm::vec4(quad.Position, 1.0f);
+            return viewPosition.z;
+        }
+    }
+
     SceneRenderer2D::SceneRenderer2D(Renderer2D& renderer2D)
         : m_Renderer2D(renderer2D)
     {
@@ -102,7 +114,7 @@ namespace Life
                     orderedIndices.end(),
                     [&scene](size_t leftIndex, size_t rightIndex)
                     {
-                        return scene.Quads[leftIndex].Position.z < scene.Quads[rightIndex].Position.z;
+                        return ResolveCameraDepth(scene, scene.Quads[leftIndex]) < ResolveCameraDepth(scene, scene.Quads[rightIndex]);
                     });
                 break;
 
@@ -112,7 +124,7 @@ namespace Life
                     orderedIndices.end(),
                     [&scene](size_t leftIndex, size_t rightIndex)
                     {
-                        return scene.Quads[leftIndex].Position.z > scene.Quads[rightIndex].Position.z;
+                        return ResolveCameraDepth(scene, scene.Quads[leftIndex]) > ResolveCameraDepth(scene, scene.Quads[rightIndex]);
                     });
                 break;
         }

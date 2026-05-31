@@ -39,7 +39,7 @@ namespace Life
             return specification;
         }
 
-        bool DecomposeTransform(const glm::mat4& transform, glm::vec3& position, glm::quat& orientation)
+        bool DecomposePositionOrientation(const glm::mat4& transform, glm::vec3& position, glm::quat& orientation)
         {
             glm::vec3 scale;
             glm::vec3 skew;
@@ -50,6 +50,56 @@ namespace Life
             orientation = glm::normalize(orientation);
             return true;
         }
+    }
+
+    glm::mat4 ComposeTransform(const TransformComponent& transform)
+    {
+        const glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.LocalPosition);
+        glm::mat4 rotation = glm::mat4(1.0f);
+        rotation = glm::rotate(rotation, transform.LocalRotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+        rotation = glm::rotate(rotation, transform.LocalRotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
+        rotation = glm::rotate(rotation, transform.LocalRotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+        const glm::mat4 scale = glm::scale(glm::mat4(1.0f), transform.LocalScale);
+        return translation * rotation * scale;
+    }
+
+    bool DecomposeTransform(const glm::mat4& matrix, TransformComponent& transform)
+    {
+        glm::vec3 scale;
+        glm::quat orientation;
+        glm::vec3 position;
+        glm::vec3 skew;
+        glm::vec4 perspective;
+        if (!glm::decompose(matrix, scale, orientation, position, skew, perspective))
+            return false;
+
+        orientation = glm::normalize(orientation);
+        const glm::vec3 eulerRadians = glm::eulerAngles(orientation);
+        transform.LocalPosition = position;
+        transform.LocalRotation = eulerRadians;
+        transform.LocalScale = scale;
+        return true;
+    }
+
+    bool SetEntityWorldTransform(Scene& scene, Entity entity, const glm::mat4& worldTransform)
+    {
+        if (!scene.IsValid(entity))
+            return false;
+
+        glm::mat4 localTransform = worldTransform;
+        const Entity parent = scene.GetParent(entity);
+        if (parent.IsValid())
+        {
+            const glm::mat4 parentWorldTransform = scene.GetWorldTransformMatrix(parent);
+            localTransform = glm::inverse(parentWorldTransform) * worldTransform;
+        }
+
+        TransformComponent transform;
+        if (!DecomposeTransform(localTransform, transform))
+            return false;
+
+        entity.GetComponent<TransformComponent>() = transform;
+        return true;
     }
 
     Scene::Scene(std::string name)
@@ -514,7 +564,7 @@ namespace Life
         glm::vec3 position{ 0.0f, 0.0f, 0.0f };
         glm::quat orientation{ 1.0f, 0.0f, 0.0f, 0.0f };
         const glm::mat4 worldTransform = GetWorldTransformMatrix(entity);
-        if (!DecomposeTransform(worldTransform, position, orientation))
+        if (!DecomposePositionOrientation(worldTransform, position, orientation))
             position = glm::vec3(worldTransform[3]);
 
         camera.SetTransform(position, orientation);
@@ -651,13 +701,7 @@ namespace Life
 
     glm::mat4 Scene::ComposeTransform(const TransformComponent& transform)
     {
-        const glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.LocalPosition);
-        glm::mat4 rotation = glm::mat4(1.0f);
-        rotation = glm::rotate(rotation, transform.LocalRotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
-        rotation = glm::rotate(rotation, transform.LocalRotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
-        rotation = glm::rotate(rotation, transform.LocalRotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
-        const glm::mat4 scale = glm::scale(glm::mat4(1.0f), transform.LocalScale);
-        return translation * rotation * scale;
+        return Life::ComposeTransform(transform);
     }
 
     std::string Scene::GenerateEntityId()

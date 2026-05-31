@@ -20,6 +20,8 @@ namespace Life::Detail
 #if LIFE_HAS_IMGUI_VULKAN
     namespace
     {
+        constexpr VkClearColorValue kEditorBackBufferClearColor = { { 0.07f, 0.085f, 0.11f, 1.0f } };
+
         void CheckVkResult(VkResult result)
         {
             if (result == VK_SUCCESS)
@@ -36,10 +38,29 @@ namespace Life::Detail
             VkDescriptorSet DescriptorSet = VK_NULL_HANDLE;
         };
 
+        struct TextureBindingKey
+        {
+            uint64_t TextureRuntimeId = 0;
+            ImGuiTextureSampling Sampling = ImGuiTextureSampling::Linear;
+
+            bool operator==(const TextureBindingKey&) const noexcept = default;
+        };
+
+        struct TextureBindingKeyHasher
+        {
+            size_t operator()(const TextureBindingKey& key) const noexcept
+            {
+                const size_t textureHash = std::hash<uint64_t>{}(key.TextureRuntimeId);
+                const size_t samplingHash = std::hash<uint8_t>{}(static_cast<uint8_t>(key.Sampling));
+                return textureHash ^ (samplingHash << 1);
+            }
+        };
+
         VkDescriptorPool DescriptorPool = VK_NULL_HANDLE;
         VkFormat ColorAttachmentFormat = VK_FORMAT_UNDEFINED;
-        VkSampler TextureSampler = VK_NULL_HANDLE;
-        std::unordered_map<nvrhi::ITexture*, TextureBinding> TextureBindings;
+        VkSampler LinearTextureSampler = VK_NULL_HANDLE;
+        VkSampler NearestTextureSampler = VK_NULL_HANDLE;
+        std::unordered_map<TextureBindingKey, TextureBinding, TextureBindingKeyHasher> TextureBindings;
     };
 
     ImGuiVulkanRendererBackend::ImGuiVulkanRendererBackend(VulkanGraphicsDevice& graphicsDevice)
@@ -119,26 +140,45 @@ namespace Life::Detail
             return false;
         }
 
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 1.0f;
-        samplerInfo.maxAnisotropy = 1.0f;
-
-        const VkResult samplerResult = vkCreateSampler(
-            m_GraphicsDevice.GetDevice(),
-            &samplerInfo,
-            nullptr,
-            &m_Impl->TextureSampler);
-        if (samplerResult != VK_SUCCESS)
+        auto createSampler = [this](VkFilter filter, VkSamplerMipmapMode mipmapMode, VkSampler& samplerHandle) -> bool
         {
+            VkSamplerCreateInfo samplerInfo{};
+            samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+            samplerInfo.magFilter = filter;
+            samplerInfo.minFilter = filter;
+            samplerInfo.mipmapMode = mipmapMode;
+            samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.minLod = 0.0f;
+            samplerInfo.maxLod = 1.0f;
+            samplerInfo.maxAnisotropy = 1.0f;
+
+            const VkResult samplerResult = vkCreateSampler(
+                m_GraphicsDevice.GetDevice(),
+                &samplerInfo,
+                nullptr,
+                &samplerHandle);
+            if (samplerResult == VK_SUCCESS)
+                return true;
+
             LOG_CORE_ERROR("Failed to create ImGui Vulkan texture sampler: {}", static_cast<int>(samplerResult));
+            return false;
+        };
+
+        if (!createSampler(VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, m_Impl->LinearTextureSampler) ||
+            !createSampler(VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_NEAREST, m_Impl->NearestTextureSampler))
+        {
+            if (m_Impl->LinearTextureSampler != VK_NULL_HANDLE)
+            {
+                vkDestroySampler(m_GraphicsDevice.GetDevice(), m_Impl->LinearTextureSampler, nullptr);
+                m_Impl->LinearTextureSampler = VK_NULL_HANDLE;
+            }
+            if (m_Impl->NearestTextureSampler != VK_NULL_HANDLE)
+            {
+                vkDestroySampler(m_GraphicsDevice.GetDevice(), m_Impl->NearestTextureSampler, nullptr);
+                m_Impl->NearestTextureSampler = VK_NULL_HANDLE;
+            }
             ImGui_ImplVulkan_Shutdown();
             vkDestroyDescriptorPool(m_GraphicsDevice.GetDevice(), m_Impl->DescriptorPool, nullptr);
             m_Impl->DescriptorPool = VK_NULL_HANDLE;
@@ -162,10 +202,16 @@ namespace Life::Detail
         }
         m_Impl->TextureBindings.clear();
 
-        if (m_Impl->TextureSampler != VK_NULL_HANDLE)
+        if (m_Impl->LinearTextureSampler != VK_NULL_HANDLE)
         {
-            vkDestroySampler(m_GraphicsDevice.GetDevice(), m_Impl->TextureSampler, nullptr);
-            m_Impl->TextureSampler = VK_NULL_HANDLE;
+            vkDestroySampler(m_GraphicsDevice.GetDevice(), m_Impl->LinearTextureSampler, nullptr);
+            m_Impl->LinearTextureSampler = VK_NULL_HANDLE;
+        }
+
+        if (m_Impl->NearestTextureSampler != VK_NULL_HANDLE)
+        {
+            vkDestroySampler(m_GraphicsDevice.GetDevice(), m_Impl->NearestTextureSampler, nullptr);
+            m_Impl->NearestTextureSampler = VK_NULL_HANDLE;
         }
 
         ImGui_ImplVulkan_Shutdown();
@@ -211,8 +257,9 @@ namespace Life::Detail
         colorAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
         colorAttachmentInfo.imageView = backBufferImageView;
         colorAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        colorAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        colorAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         colorAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachmentInfo.clearValue.color = kEditorBackBufferClearColor;
 
         VkRenderingInfo renderingInfo{};
         renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -234,47 +281,58 @@ namespace Life::Detail
         commandList->commitBarriers();
     }
 
-    void* ImGuiVulkanRendererBackend::GetTextureHandle(TextureResource& texture)
+    void* ImGuiVulkanRendererBackend::GetTextureHandle(TextureResource& texture, ImGuiTextureSampling sampling)
     {
-        if (!m_Initialized || m_Impl->TextureSampler == VK_NULL_HANDLE)
+        if (!m_Initialized)
             return nullptr;
 
         nvrhi::ITexture* nativeTexture = texture.GetNativeHandle();
         if (nativeTexture == nullptr)
             return nullptr;
 
-        if (auto existing = m_Impl->TextureBindings.find(nativeTexture); existing != m_Impl->TextureBindings.end())
+        const Impl::TextureBindingKey key{ texture.GetRuntimeId(), sampling };
+        if (auto existing = m_Impl->TextureBindings.find(key); existing != m_Impl->TextureBindings.end())
             return reinterpret_cast<void*>(existing->second.DescriptorSet);
 
         const VkImageView imageView = nativeTexture->getNativeView(nvrhi::ObjectTypes::VK_ImageView);
         if (imageView == VK_NULL_HANDLE)
             return nullptr;
 
+        const VkSampler sampler = sampling == ImGuiTextureSampling::Nearest
+            ? m_Impl->NearestTextureSampler
+            : m_Impl->LinearTextureSampler;
+        if (sampler == VK_NULL_HANDLE)
+            return nullptr;
+
         const VkDescriptorSet descriptorSet = ImGui_ImplVulkan_AddTexture(
-            m_Impl->TextureSampler,
+            sampler,
             imageView,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         if (descriptorSet == VK_NULL_HANDLE)
             return nullptr;
 
-        m_Impl->TextureBindings.emplace(nativeTexture, Impl::TextureBinding{ descriptorSet });
+        m_Impl->TextureBindings.emplace(key, Impl::TextureBinding{ descriptorSet });
         return reinterpret_cast<void*>(descriptorSet);
     }
 
     void ImGuiVulkanRendererBackend::ReleaseTextureHandle(TextureResource& texture) noexcept
     {
-        nvrhi::ITexture* nativeTexture = texture.GetNativeHandle();
-        if (nativeTexture == nullptr)
+        if (texture.GetNativeHandle() == nullptr)
             return;
 
-        const auto it = m_Impl->TextureBindings.find(nativeTexture);
-        if (it == m_Impl->TextureBindings.end())
-            return;
+        for (auto it = m_Impl->TextureBindings.begin(); it != m_Impl->TextureBindings.end();)
+        {
+            if (it->first.TextureRuntimeId != texture.GetRuntimeId())
+            {
+                ++it;
+                continue;
+            }
 
-        if (it->second.DescriptorSet != VK_NULL_HANDLE)
-            ImGui_ImplVulkan_RemoveTexture(it->second.DescriptorSet);
+            if (it->second.DescriptorSet != VK_NULL_HANDLE)
+                ImGui_ImplVulkan_RemoveTexture(it->second.DescriptorSet);
 
-        m_Impl->TextureBindings.erase(it);
+            it = m_Impl->TextureBindings.erase(it);
+        }
     }
 #endif
 }

@@ -14,6 +14,43 @@
 
 namespace Life
 {
+    namespace
+    {
+        Viewport ResolveIntegralViewport(const Viewport& viewport, const FramebufferExtent& framebufferExtent) noexcept
+        {
+            const float maxWidth = static_cast<float>(framebufferExtent.Width);
+            const float maxHeight = static_cast<float>(framebufferExtent.Height);
+            const float left = std::clamp(std::floor(viewport.X), 0.0f, maxWidth);
+            const float top = std::clamp(std::floor(viewport.Y), 0.0f, maxHeight);
+            const float right = std::clamp(std::ceil(viewport.X + viewport.Width), left, maxWidth);
+            const float bottom = std::clamp(std::ceil(viewport.Y + viewport.Height), top, maxHeight);
+
+            Viewport resolvedViewport = viewport;
+            resolvedViewport.X = left;
+            resolvedViewport.Y = top;
+            resolvedViewport.Width = std::max(right - left, 0.0f);
+            resolvedViewport.Height = std::max(bottom - top, 0.0f);
+            return resolvedViewport;
+        }
+
+        bool IsOpaqueQuadSubmission(const TextureResource* texture, const TextureResource* whiteTexture, const glm::vec4& color) noexcept
+        {
+            constexpr float OpaqueAlphaThreshold = 1.0f - (0.5f / 255.0f);
+            return texture == whiteTexture && color.a >= OpaqueAlphaThreshold;
+        }
+
+        std::pair<glm::vec2, glm::vec2> ResolveFullTextureUvBounds(const TextureResource* texture)
+        {
+            if (texture == nullptr)
+                return { glm::vec2(0.0f, 0.0f), glm::vec2(1.0f, 1.0f) };
+
+            const float inverseWidth = 1.0f / std::max(static_cast<float>(texture->GetWidth()), 1.0f);
+            const float inverseHeight = 1.0f / std::max(static_cast<float>(texture->GetHeight()), 1.0f);
+            const glm::vec2 halfTexel(0.5f * inverseWidth, 0.5f * inverseHeight);
+            return { halfTexel, glm::vec2(1.0f, 1.0f) - halfTexel };
+        }
+    }
+
     Renderer2D::Renderer2D(Renderer& renderer)
         : m_Renderer(renderer)
         , m_Impl(CreateScope<Impl>())
@@ -31,7 +68,7 @@ namespace Life
             return;
 
         const FramebufferExtent framebufferExtent = m_Renderer.GetFramebufferExtent();
-        const Viewport viewport = camera.GetPixelViewport(framebufferExtent);
+        const Viewport viewport = ResolveIntegralViewport(camera.GetPixelViewport(framebufferExtent), framebufferExtent);
 
         RenderCommand::SetViewport(m_Renderer, viewport.X, viewport.Y, viewport.Width, viewport.Height);
         RenderCommand::SetScissor(m_Renderer,
@@ -171,15 +208,17 @@ namespace Life
         if (!m_Impl->SceneActive)
             return;
 
+        const auto [uvMin, uvMax] = ResolveFullTextureUvBounds(texture);
         Detail::Renderer2DBatching batching(*this);
         const Detail::Renderer2DBatching::QuadSubmission quad = {
             center,
             xAxis,
             yAxis,
             color,
-            { 0.0f, 0.0f },
-            { 1.0f, 1.0f },
-            texture
+            uvMin,
+            uvMax,
+            texture,
+            IsOpaqueQuadSubmission(texture, m_Impl->WhiteTexture.get(), color)
         };
         batching.PushQuad(quad);
     }
