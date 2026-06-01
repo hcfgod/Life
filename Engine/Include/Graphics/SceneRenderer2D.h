@@ -36,6 +36,8 @@ namespace Life
             glm::vec3 XAxis{ 1.0f, 0.0f, 0.0f };
             glm::vec3 YAxis{ 0.0f, 1.0f, 0.0f };
             glm::vec4 Color{ 1.0f, 1.0f, 1.0f, 1.0f };
+            std::size_t SortingLayerIndex = 0;
+            int32_t SortingOrder = 0;
             float RotationRadians = 0.0f;
             bool UseExplicitAxes = false;
             const TextureResource* Texture = nullptr;

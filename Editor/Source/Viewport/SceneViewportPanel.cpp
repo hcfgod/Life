@@ -14,9 +14,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
+#include <filesystem>
 #include <limits>
 #include <memory>
+#include <utility>
 
 #include <glm/gtc/type_ptr.hpp>
 
@@ -146,6 +149,17 @@ namespace
             ImGui::PopStyleColor();
     }
 
+    const char* ResolveGridModeLabel(EditorApp::EditorViewportGridMode mode) noexcept
+    {
+        switch (mode)
+        {
+            case EditorApp::EditorViewportGridMode::WorldPlane: return "World";
+            case EditorApp::EditorViewportGridMode::Screen: return "Screen";
+            case EditorApp::EditorViewportGridMode::Auto:
+            default: return "Auto";
+        }
+    }
+
     void DrawViewportToolbar(EditorApp::EditorSceneState& sceneState)
     {
         DrawToolButton("Select", EditorApp::EditorViewportTool::Select, sceneState);
@@ -180,23 +194,175 @@ namespace
             ImGui::DragFloat("##ScaleSnap", &sceneState.ScaleSnap, 0.01f, 0.001f, 10.0f, "S %.2f");
         }
         ImGui::SameLine();
+        ImGui::Checkbox("Grid", &sceneState.ShowGrid);
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Grid Snap", &sceneState.SnapToGrid) && sceneState.SnapToGrid)
+            sceneState.SnapEnabled = true;
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(76.0f);
+        ImGui::DragFloat("##GridSize", &sceneState.GridSize, 0.05f, 0.05f, 100.0f, "G %.2f");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(82.0f);
+        if (ImGui::BeginCombo("##GridMode", ResolveGridModeLabel(sceneState.GridMode)))
+        {
+            if (ImGui::Selectable("Auto", sceneState.GridMode == EditorApp::EditorViewportGridMode::Auto))
+                sceneState.GridMode = EditorApp::EditorViewportGridMode::Auto;
+            if (ImGui::Selectable("World", sceneState.GridMode == EditorApp::EditorViewportGridMode::WorldPlane))
+                sceneState.GridMode = EditorApp::EditorViewportGridMode::WorldPlane;
+            if (ImGui::Selectable("Screen", sceneState.GridMode == EditorApp::EditorViewportGridMode::Screen))
+                sceneState.GridMode = EditorApp::EditorViewportGridMode::Screen;
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
         ImGui::TextDisabled("%s", ResolveViewportToolLabel(sceneState.ViewportTool));
     }
 
-    bool ProjectWorldToScreen(const Life::Camera& camera,
-                              const glm::vec3& worldPosition,
-                              const ImVec2& viewportTopLeft,
-                              const ImVec2& viewportSize,
-                              ImVec2& screenPosition)
+    std::string ToLowerAscii(std::string value)
     {
-        const glm::vec4 clip = camera.GetViewProjectionMatrix() * glm::vec4(worldPosition, 1.0f);
-        if (std::abs(clip.w) <= std::numeric_limits<float>::epsilon())
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character)
+        {
+            return static_cast<char>(std::tolower(character));
+        });
+        return value;
+    }
+
+    bool IsTextureAssetPath(const std::filesystem::path& relativePath)
+    {
+        const std::string extension = ToLowerAscii(relativePath.extension().string());
+        return extension == ".png" ||
+            extension == ".jpg" ||
+            extension == ".jpeg" ||
+            extension == ".bmp" ||
+            extension == ".tga" ||
+            extension == ".hdr" ||
+            extension == ".psd" ||
+            extension == ".gif" ||
+            extension == ".ppm" ||
+            extension == ".pnm";
+    }
+
+    std::string MakeAssetKey(const std::filesystem::path& relativePath)
+    {
+        return relativePath.empty() ? std::string{} : "Assets/" + relativePath.generic_string();
+    }
+
+    struct ViewportProjection
+    {
+        glm::mat4 ViewProjection{ 1.0f };
+        glm::mat4 InverseViewProjection{ 1.0f };
+        ImVec2 TopLeft{ 0.0f, 0.0f };
+        ImVec2 Size{ 0.0f, 0.0f };
+        bool Valid = false;
+    };
+
+    ViewportProjection BuildViewportProjection(const Life::Camera& camera, ImVec2 topLeft, ImVec2 size)
+    {
+        ViewportProjection projection;
+        projection.ViewProjection = camera.GetViewProjectionMatrix();
+        projection.InverseViewProjection = glm::inverse(projection.ViewProjection);
+        projection.TopLeft = topLeft;
+        projection.Size = size;
+        projection.Valid = size.x > 0.0f && size.y > 0.0f;
+        return projection;
+    }
+
+    bool IsClipPointInside(const glm::vec4& clip) noexcept
+    {
+        constexpr float epsilon = 0.00001f;
+        if (!std::isfinite(clip.x) || !std::isfinite(clip.y) || !std::isfinite(clip.z) || !std::isfinite(clip.w))
+            return false;
+
+        return clip.w > epsilon &&
+            clip.x >= -clip.w && clip.x <= clip.w &&
+            clip.y >= -clip.w && clip.y <= clip.w &&
+            clip.z >= 0.0f && clip.z <= clip.w;
+    }
+
+    bool ProjectClipToScreen(const ViewportProjection& projection, const glm::vec4& clip, ImVec2& screenPosition)
+    {
+        constexpr float epsilon = 0.00001f;
+        if (!projection.Valid || clip.w <= epsilon)
             return false;
 
         const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-        screenPosition.x = viewportTopLeft.x + ((ndc.x + 1.0f) * 0.5f * viewportSize.x);
-        screenPosition.y = viewportTopLeft.y + ((ndc.y + 1.0f) * 0.5f * viewportSize.y);
+        screenPosition.x = projection.TopLeft.x + ((ndc.x + 1.0f) * 0.5f * projection.Size.x);
+        screenPosition.y = projection.TopLeft.y + ((1.0f - ndc.y) * 0.5f * projection.Size.y);
         return std::isfinite(screenPosition.x) && std::isfinite(screenPosition.y);
+    }
+
+    bool TryProjectWorldPointToViewport(const ViewportProjection& projection, const glm::vec3& worldPosition, ImVec2& screenPosition)
+    {
+        const glm::vec4 clip = projection.ViewProjection * glm::vec4(worldPosition, 1.0f);
+        return IsClipPointInside(clip) && ProjectClipToScreen(projection, clip, screenPosition);
+    }
+
+    bool ClipSegmentPlane(float planeAtStart, float planeAtEnd, float& tStart, float& tEnd)
+    {
+        if (planeAtStart >= 0.0f && planeAtEnd >= 0.0f)
+            return true;
+        if (planeAtStart < 0.0f && planeAtEnd < 0.0f)
+            return false;
+
+        const float t = planeAtStart / (planeAtStart - planeAtEnd);
+        if (planeAtStart < 0.0f)
+            tStart = std::max(tStart, t);
+        else
+            tEnd = std::min(tEnd, t);
+
+        return tStart <= tEnd;
+    }
+
+    bool ClipClipSpaceSegment(glm::vec4& start, glm::vec4& end)
+    {
+        float tStart = 0.0f;
+        float tEnd = 1.0f;
+        const glm::vec4 delta = end - start;
+
+        auto clipPlane = [&](auto plane)
+        {
+            return ClipSegmentPlane(plane(start), plane(end), tStart, tEnd);
+        };
+
+        const bool visible =
+            clipPlane([](const glm::vec4& value) { return value.x + value.w; }) &&
+            clipPlane([](const glm::vec4& value) { return value.w - value.x; }) &&
+            clipPlane([](const glm::vec4& value) { return value.y + value.w; }) &&
+            clipPlane([](const glm::vec4& value) { return value.w - value.y; }) &&
+            clipPlane([](const glm::vec4& value) { return value.z; }) &&
+            clipPlane([](const glm::vec4& value) { return value.w - value.z; });
+        if (!visible)
+            return false;
+
+        end = start + delta * tEnd;
+        start = start + delta * tStart;
+        return true;
+    }
+
+    bool ClipWorldSegmentToViewport(const ViewportProjection& projection, const glm::vec3& start, const glm::vec3& end, ImVec2& screenStart, ImVec2& screenEnd)
+    {
+        if (!projection.Valid)
+            return false;
+
+        glm::vec4 clipStart = projection.ViewProjection * glm::vec4(start, 1.0f);
+        glm::vec4 clipEnd = projection.ViewProjection * glm::vec4(end, 1.0f);
+        if (!ClipClipSpaceSegment(clipStart, clipEnd))
+            return false;
+
+        return ProjectClipToScreen(projection, clipStart, screenStart) &&
+            ProjectClipToScreen(projection, clipEnd, screenEnd);
+    }
+
+    void DrawClippedWorldLine(ImDrawList& drawList,
+                              const ViewportProjection& projection,
+                              const glm::vec3& start,
+                              const glm::vec3& end,
+                              ImU32 color,
+                              float thickness)
+    {
+        ImVec2 screenStart;
+        ImVec2 screenEnd;
+        if (ClipWorldSegmentToViewport(projection, start, end, screenStart, screenEnd))
+            drawList.AddLine(screenStart, screenEnd, color, thickness);
     }
 
     bool ContainsPoint(const ImVec2& minimum, const ImVec2& maximum, const ImVec2& point) noexcept
@@ -214,8 +380,7 @@ namespace
 
     Life::Entity PickSpriteEntity(const Life::Scene& scene,
                                   const Life::Camera& camera,
-                                  const ImVec2& viewportTopLeft,
-                                  const ImVec2& viewportSize,
+                                  const ViewportProjection& projection,
                                   const ImVec2& mousePosition)
     {
         Life::Entity bestEntity;
@@ -247,7 +412,7 @@ namespace
             for (const glm::vec3& corner : corners)
             {
                 ImVec2 projected;
-                if (!ProjectWorldToScreen(camera, corner, viewportTopLeft, viewportSize, projected))
+                if (!TryProjectWorldPointToViewport(projection, corner, projected))
                     continue;
 
                 minPoint.x = std::min(minPoint.x, projected.x);
@@ -269,6 +434,376 @@ namespace
         }
 
         return bestEntity;
+    }
+
+    bool ScreenToWorldOnZPlane(const ViewportProjection& projection,
+                               const ImVec2& screenPosition,
+                               float planeZ,
+                               glm::vec3& worldPosition)
+    {
+        if (!projection.Valid)
+            return false;
+
+        const float ndcX = ((screenPosition.x - projection.TopLeft.x) / projection.Size.x) * 2.0f - 1.0f;
+        const float ndcY = 1.0f - ((screenPosition.y - projection.TopLeft.y) / projection.Size.y) * 2.0f;
+        const glm::vec4 nearClip = projection.InverseViewProjection * glm::vec4(ndcX, ndcY, 0.0f, 1.0f);
+        const glm::vec4 farClip = projection.InverseViewProjection * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+        if (std::abs(nearClip.w) <= std::numeric_limits<float>::epsilon() ||
+            std::abs(farClip.w) <= std::numeric_limits<float>::epsilon())
+            return false;
+
+        const glm::vec3 nearWorld = glm::vec3(nearClip) / nearClip.w;
+        const glm::vec3 farWorld = glm::vec3(farClip) / farClip.w;
+        const glm::vec3 direction = farWorld - nearWorld;
+        if (std::abs(direction.z) <= std::numeric_limits<float>::epsilon())
+            return false;
+
+        const float t = (planeZ - nearWorld.z) / direction.z;
+        if (t < 0.0f || t > 1.0f)
+            return false;
+
+        worldPosition = nearWorld + direction * t;
+        return std::isfinite(worldPosition.x) && std::isfinite(worldPosition.y) && std::isfinite(worldPosition.z);
+    }
+
+    bool TryUnprojectViewportNdc(const ViewportProjection& projection,
+                                 const glm::vec3& ndc,
+                                 glm::vec3& worldPosition)
+    {
+        if (!projection.Valid)
+            return false;
+
+        const glm::vec4 world = projection.InverseViewProjection * glm::vec4(ndc, 1.0f);
+        if (std::abs(world.w) <= std::numeric_limits<float>::epsilon())
+            return false;
+
+        worldPosition = glm::vec3(world) / world.w;
+        return std::isfinite(worldPosition.x) && std::isfinite(worldPosition.y) && std::isfinite(worldPosition.z);
+    }
+
+    bool TryIntersectSegmentWithZPlane(const glm::vec3& start,
+                                       const glm::vec3& end,
+                                       float planeZ,
+                                       glm::vec3& intersection)
+    {
+        const float startDistance = start.z - planeZ;
+        const float endDistance = end.z - planeZ;
+        if ((startDistance > 0.0f && endDistance > 0.0f) ||
+            (startDistance < 0.0f && endDistance < 0.0f))
+            return false;
+
+        const float denominator = start.z - end.z;
+        if (std::abs(denominator) <= std::numeric_limits<float>::epsilon())
+            return false;
+
+        const float t = (start.z - planeZ) / denominator;
+        if (t < 0.0f || t > 1.0f)
+            return false;
+
+        intersection = start + (end - start) * t;
+        return std::isfinite(intersection.x) && std::isfinite(intersection.y) && std::isfinite(intersection.z);
+    }
+
+    bool TryIntersectCameraRayWithZPlane(const Life::Camera& camera,
+                                         float planeZ,
+                                         glm::vec3& intersection)
+    {
+        const glm::vec3 direction = glm::normalize(camera.GetOrientation() * glm::vec3(0.0f, 0.0f, -1.0f));
+        if (std::abs(direction.z) <= std::numeric_limits<float>::epsilon())
+            return false;
+
+        const float t = (planeZ - camera.GetPosition().z) / direction.z;
+        if (t < 0.0f)
+            return false;
+
+        intersection = camera.GetPosition() + direction * t;
+        return std::isfinite(intersection.x) && std::isfinite(intersection.y) && std::isfinite(intersection.z);
+    }
+
+    std::array<glm::vec3, 4> ResolveSpriteWorldCorners(const Life::Scene& scene, const Life::Entity& entity, const Life::SpriteComponent& sprite)
+    {
+        const glm::mat4 worldTransform = scene.GetWorldTransformMatrix(entity);
+        const glm::vec3 center = glm::vec3(worldTransform[3]);
+        const glm::vec3 xAxis = glm::vec3(worldTransform * glm::vec4(sprite.Size.x, 0.0f, 0.0f, 0.0f));
+        const glm::vec3 yAxis = glm::vec3(worldTransform * glm::vec4(0.0f, sprite.Size.y, 0.0f, 0.0f));
+        return {{
+            center - (xAxis * 0.5f) - (yAxis * 0.5f),
+            center + (xAxis * 0.5f) - (yAxis * 0.5f),
+            center + (xAxis * 0.5f) + (yAxis * 0.5f),
+            center - (xAxis * 0.5f) + (yAxis * 0.5f)
+        }};
+    }
+
+    bool IsScreenGridCamera(const Life::Camera& camera) noexcept
+    {
+        if (camera.GetProjectionType() != Life::ProjectionType::Orthographic)
+            return false;
+
+        const glm::vec3 forward = glm::normalize(camera.GetOrientation() * glm::vec3(0.0f, 0.0f, -1.0f));
+        const float zAlignment = std::abs(glm::dot(forward, glm::vec3(0.0f, 0.0f, -1.0f)));
+        return zAlignment > 0.92f;
+    }
+
+    bool ShouldDrawScreenGrid(const EditorApp::EditorSceneState& sceneState, const Life::Camera& camera) noexcept
+    {
+        switch (sceneState.GridMode)
+        {
+            case EditorApp::EditorViewportGridMode::Screen:
+                return true;
+            case EditorApp::EditorViewportGridMode::WorldPlane:
+                return false;
+            case EditorApp::EditorViewportGridMode::Auto:
+            default:
+                return IsScreenGridCamera(camera);
+        }
+    }
+
+    void DrawSelectedSpriteScreenBounds(const Life::Scene& scene,
+                                        const Life::Entity& entity,
+                                        const ViewportProjection& projection,
+                                        ImU32 color)
+    {
+        const Life::SpriteComponent* sprite = entity.TryGetComponent<Life::SpriteComponent>();
+        if (sprite == nullptr)
+            return;
+
+        const auto corners = ResolveSpriteWorldCorners(scene, entity, *sprite);
+        ImVec2 minimum(std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
+        ImVec2 maximum(-std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity());
+        bool anyProjected = false;
+        for (const glm::vec3& corner : corners)
+        {
+            ImVec2 screen;
+            if (!TryProjectWorldPointToViewport(projection, corner, screen))
+                continue;
+
+            minimum.x = std::min(minimum.x, screen.x);
+            minimum.y = std::min(minimum.y, screen.y);
+            maximum.x = std::max(maximum.x, screen.x);
+            maximum.y = std::max(maximum.y, screen.y);
+            anyProjected = true;
+        }
+
+        if (!anyProjected)
+            return;
+
+        ImGui::GetWindowDrawList()->AddRect(minimum, maximum, color, 0.0f, 0, 2.0f);
+    }
+
+    void DrawSelectedSpriteOutline(const Life::Scene& scene,
+                                   const Life::Entity& entity,
+                                   const ViewportProjection& projection,
+                                   bool drawScreenBounds)
+    {
+        const Life::SpriteComponent* sprite = entity.TryGetComponent<Life::SpriteComponent>();
+        if (sprite == nullptr)
+            return;
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const ImU32 color = ImGui::GetColorU32(ImVec4(0.20f, 0.62f, 1.0f, 1.0f));
+        if (drawScreenBounds)
+        {
+            DrawSelectedSpriteScreenBounds(scene, entity, projection, color);
+            return;
+        }
+
+        const auto corners = ResolveSpriteWorldCorners(scene, entity, *sprite);
+        for (std::size_t index = 0; index < corners.size(); ++index)
+            DrawClippedWorldLine(*drawList, projection, corners[index], corners[(index + 1u) % corners.size()], color, 2.0f);
+    }
+
+    bool ComputeGridPlaneViewBounds(const ViewportProjection& projection,
+                                    const Life::Camera& camera,
+                                    float gridSize,
+                                    float& minX,
+                                    float& maxX,
+                                    float& minY,
+                                    float& maxY)
+    {
+        constexpr float planeZ = 0.0f;
+        constexpr float fallbackHalfExtent = 64.0f;
+        constexpr float maxWorldMagnitude = 100000.0f;
+
+        std::array<glm::vec3, 8> frustumCorners{};
+        const std::array<glm::vec3, 8> ndcCorners{{
+            { -1.0f, -1.0f, 0.0f },
+            { 1.0f, -1.0f, 0.0f },
+            { 1.0f, 1.0f, 0.0f },
+            { -1.0f, 1.0f, 0.0f },
+            { -1.0f, -1.0f, 1.0f },
+            { 1.0f, -1.0f, 1.0f },
+            { 1.0f, 1.0f, 1.0f },
+            { -1.0f, 1.0f, 1.0f }
+        }};
+
+        for (std::size_t index = 0; index < ndcCorners.size(); ++index)
+        {
+            if (!TryUnprojectViewportNdc(projection, ndcCorners[index], frustumCorners[index]))
+                return false;
+        }
+
+        minX = std::numeric_limits<float>::infinity();
+        maxX = -std::numeric_limits<float>::infinity();
+        minY = std::numeric_limits<float>::infinity();
+        maxY = -std::numeric_limits<float>::infinity();
+
+        glm::vec2 center{ camera.GetPosition().x, camera.GetPosition().y };
+        int pointCount = 0;
+        auto includePoint = [&](const glm::vec3& point)
+        {
+            if (std::abs(point.x) > maxWorldMagnitude || std::abs(point.y) > maxWorldMagnitude)
+                return;
+
+            center += glm::vec2(point.x, point.y);
+            minX = std::min(minX, point.x);
+            maxX = std::max(maxX, point.x);
+            minY = std::min(minY, point.y);
+            maxY = std::max(maxY, point.y);
+            ++pointCount;
+        };
+
+        for (const glm::vec3& corner : frustumCorners)
+        {
+            if (std::abs(corner.z - planeZ) <= gridSize * 0.001f)
+                includePoint(corner);
+        }
+
+        const std::array<std::pair<std::size_t, std::size_t>, 12> edges{{
+            { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+            { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
+            { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
+        }};
+        for (const auto& [startIndex, endIndex] : edges)
+        {
+            glm::vec3 intersection;
+            if (TryIntersectSegmentWithZPlane(frustumCorners[startIndex], frustumCorners[endIndex], planeZ, intersection))
+                includePoint(intersection);
+        }
+
+        glm::vec3 lookPoint;
+        if (TryIntersectCameraRayWithZPlane(camera, planeZ, lookPoint))
+            includePoint(lookPoint);
+
+        if (pointCount > 0)
+        {
+            center /= static_cast<float>(pointCount + 1);
+            const float padding = gridSize * 8.0f;
+            minX -= padding;
+            maxX += padding;
+            minY -= padding;
+            maxY += padding;
+        }
+        else
+        {
+            const glm::vec3 forward = glm::normalize(camera.GetOrientation() * glm::vec3(0.0f, 0.0f, -1.0f));
+            center += glm::vec2(forward.x, forward.y) * fallbackHalfExtent * gridSize;
+            minX = center.x - fallbackHalfExtent * gridSize;
+            maxX = center.x + fallbackHalfExtent * gridSize;
+            minY = center.y - fallbackHalfExtent * gridSize;
+            maxY = center.y + fallbackHalfExtent * gridSize;
+        }
+
+        auto repairAxis = [gridSize](float& minimum, float& maximum, float axisCenter)
+        {
+            if (!std::isfinite(minimum) || !std::isfinite(maximum) || minimum >= maximum)
+            {
+                const float fallbackSpan = gridSize * 128.0f;
+                minimum = axisCenter - fallbackSpan * 0.5f;
+                maximum = axisCenter + fallbackSpan * 0.5f;
+            }
+        };
+
+        repairAxis(minX, maxX, center.x);
+        repairAxis(minY, maxY, center.y);
+        return true;
+    }
+
+    void DrawWorldGridOverlay(const EditorApp::EditorSceneState& sceneState,
+                              const Life::Camera& camera,
+                              const ViewportProjection& projection)
+    {
+        const float gridSize = std::max(sceneState.GridSize, 0.05f);
+        float minX = 0.0f;
+        float maxX = 0.0f;
+        float minY = 0.0f;
+        float maxY = 0.0f;
+        if (!ComputeGridPlaneViewBounds(projection, camera, gridSize, minX, maxX, minY, maxY))
+            return;
+
+        constexpr int maxGridLinesPerAxis = 801;
+        const float spanX = std::max(maxX - minX, gridSize);
+        const float spanY = std::max(maxY - minY, gridSize);
+        const float largestSpan = std::max(spanX, spanY);
+        const float spacingMultiplier = std::max(1.0f, std::ceil(largestSpan / (gridSize * static_cast<float>(maxGridLinesPerAxis - 1))));
+        const float visibleGridSize = gridSize * spacingMultiplier;
+
+        minX = std::floor(minX / visibleGridSize) * visibleGridSize;
+        maxX = std::ceil(maxX / visibleGridSize) * visibleGridSize;
+        minY = std::floor(minY / visibleGridSize) * visibleGridSize;
+        maxY = std::ceil(maxY / visibleGridSize) * visibleGridSize;
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const ImU32 minorColor = ImGui::GetColorU32(ImVec4(0.55f, 0.62f, 0.70f, 0.18f));
+        const ImU32 axisColor = ImGui::GetColorU32(ImVec4(0.55f, 0.72f, 0.95f, 0.45f));
+        for (float x = minX; x <= maxX + visibleGridSize * 0.5f; x += visibleGridSize)
+        {
+            const bool isAxis = std::abs(x) <= visibleGridSize * 0.001f;
+            DrawClippedWorldLine(*drawList, projection, { x, minY, 0.0f }, { x, maxY, 0.0f }, isAxis ? axisColor : minorColor, isAxis ? 1.5f : 1.0f);
+        }
+        for (float y = minY; y <= maxY + visibleGridSize * 0.5f; y += visibleGridSize)
+        {
+            const bool isAxis = std::abs(y) <= visibleGridSize * 0.001f;
+            DrawClippedWorldLine(*drawList, projection, { minX, y, 0.0f }, { maxX, y, 0.0f }, isAxis ? axisColor : minorColor, isAxis ? 1.5f : 1.0f);
+        }
+    }
+
+    void DrawScreenGridOverlay(const EditorApp::EditorSceneState& sceneState,
+                               const ViewportProjection& projection)
+    {
+        if (!projection.Valid)
+            return;
+
+        const float gridSize = std::max(sceneState.GridSize, 0.05f);
+        const float gridPixels = std::clamp(48.0f * gridSize, 12.0f, 128.0f);
+        const float left = projection.TopLeft.x;
+        const float top = projection.TopLeft.y;
+        const float right = projection.TopLeft.x + projection.Size.x;
+        const float bottom = projection.TopLeft.y + projection.Size.y;
+        const float firstX = std::ceil(left / gridPixels) * gridPixels;
+        const float firstY = std::ceil(top / gridPixels) * gridPixels;
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const ImU32 minorColor = ImGui::GetColorU32(ImVec4(0.55f, 0.62f, 0.70f, 0.16f));
+        for (float x = firstX; x <= right; x += gridPixels)
+            drawList->AddLine(ImVec2(x, top), ImVec2(x, bottom), minorColor, 1.0f);
+        for (float y = firstY; y <= bottom; y += gridPixels)
+            drawList->AddLine(ImVec2(left, y), ImVec2(right, y), minorColor, 1.0f);
+    }
+
+    void DrawGridOverlay(const EditorApp::EditorSceneState& sceneState,
+                         const Life::Camera& camera,
+                         const ViewportProjection& projection)
+    {
+        if (!sceneState.ShowGrid)
+            return;
+
+        if (ShouldDrawScreenGrid(sceneState, camera))
+            DrawScreenGridOverlay(sceneState, projection);
+        else
+            DrawWorldGridOverlay(sceneState, camera, projection);
+    }
+
+    bool ApplyTextureToSprite(Life::Entity entity, const EditorApp::EditorServices& services, std::string textureAssetKey)
+    {
+        Life::SpriteComponent* sprite = entity.TryGetComponent<Life::SpriteComponent>();
+        if (sprite == nullptr || sprite->TextureAssetKey == textureAssetKey)
+            return false;
+
+        sprite->TextureAssetKey = std::move(textureAssetKey);
+        sprite->TextureAsset = services.AssetManager && !sprite->TextureAssetKey.empty()
+            ? services.AssetManager->get().GetOrLoad<Life::Assets::TextureAsset>(sprite->TextureAssetKey)
+            : nullptr;
+        return true;
     }
 
 #if __has_include(<ImGuizmo.h>)
@@ -300,7 +835,10 @@ namespace
             case EditorApp::EditorViewportTool::Translate:
             case EditorApp::EditorViewportTool::Select:
             default:
-                return { sceneState.TranslationSnap, sceneState.TranslationSnap, sceneState.TranslationSnap };
+            {
+                const float snap = sceneState.SnapToGrid ? sceneState.GridSize : sceneState.TranslationSnap;
+                return { snap, snap, snap };
+            }
         }
     }
 #endif
@@ -664,7 +1202,98 @@ namespace EditorApp
         {
             const ImVec2 viewportTopLeft(viewportScreenX, viewportScreenY);
             const ImVec2 viewportSize(displayWidth, displayHeight);
+            const ViewportProjection viewportProjection = BuildViewportProjection(*activeCamera, viewportTopLeft, viewportSize);
             const ImVec2 mousePosition = ImGui::GetIO().MousePos;
+            Life::Entity selectedEntity = sceneState.GetSelectedEntity(*effectiveScene);
+            const bool screenGridMode = ShouldDrawScreenGrid(sceneState, *activeCamera);
+
+            DrawGridOverlay(sceneState, *activeCamera, viewportProjection);
+            if (selectedEntity.IsValid())
+                DrawSelectedSpriteOutline(*effectiveScene, selectedEntity, viewportProjection, screenGridMode);
+
+            if (viewportHovered && viewportFocused && ImGui::IsKeyPressed(ImGuiKey_F, false) && selectedEntity.IsValid())
+            {
+                glm::vec3 center = glm::vec3(effectiveScene->GetWorldTransformMatrix(selectedEntity)[3]);
+                float radius = 1.0f;
+                if (const Life::SpriteComponent* sprite = selectedEntity.TryGetComponent<Life::SpriteComponent>())
+                {
+                    const auto corners = ResolveSpriteWorldCorners(*effectiveScene, selectedEntity, *sprite);
+                    radius = 0.0f;
+                    for (const glm::vec3& corner : corners)
+                        radius = std::max(radius, glm::length(corner - center));
+                }
+                cameraTool.FrameBounds(*activeCamera, center, radius);
+            }
+
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kProjectAssetDragPayloadType))
+                {
+                    const ProjectAssetDragPayload* assetPayload = static_cast<const ProjectAssetDragPayload*>(payload->Data);
+                    if (assetPayload != nullptr &&
+                        assetPayload->RelativePath[0] != '\0')
+                    {
+                        const std::filesystem::path relativePath(assetPayload->RelativePath.data());
+                        if (assetPayload->Kind == ProjectAssetPayloadKind::Scene)
+                        {
+                            sceneState.ResetRuntimeState();
+                            const std::string sceneAssetKey = MakeAssetKey(relativePath);
+                            const auto loadResult = services.SceneService->get().LoadScene(sceneAssetKey);
+                            if (loadResult.IsFailure())
+                            {
+                                sceneState.SetStatusMessage(loadResult.GetError().GetErrorMessage(), true);
+                            }
+                            else
+                            {
+                                sceneState.ClearSelection();
+                                sceneState.SetStatusMessage(
+                                    "Opened scene '" + services.SceneService->get().GetActiveScene().GetName() + "'.",
+                                    false);
+                            }
+                        }
+                        else if (assetPayload->Kind == ProjectAssetPayloadKind::File && IsTextureAssetPath(relativePath))
+                        {
+                            const std::string assetKey = MakeAssetKey(relativePath);
+                            Life::Entity target = PickSpriteEntity(*effectiveScene, *activeCamera, viewportProjection, mousePosition);
+                            if (target.IsValid())
+                            {
+                                const EditorEntitySnapshot before = CaptureEntitySnapshot(target);
+                                if (ApplyTextureToSprite(target, services, assetKey))
+                                {
+                                    undoStack.CommitExecuted(std::make_unique<RestoreEntitySnapshotCommand>(
+                                        before,
+                                        CaptureEntitySnapshot(target)));
+                                    sceneState.SelectEntity(target);
+                                    services.SceneService->get().MarkActiveSceneDirty();
+                                }
+                            }
+                            else
+                            {
+                                glm::vec3 worldPosition{ 0.0f };
+                                if (!ScreenToWorldOnZPlane(viewportProjection, mousePosition, 0.0f, worldPosition))
+                                    worldPosition = glm::vec3(0.0f);
+                                if (sceneState.SnapToGrid)
+                                {
+                                    const float gridSize = std::max(sceneState.GridSize, 0.05f);
+                                    worldPosition.x = std::round(worldPosition.x / gridSize) * gridSize;
+                                    worldPosition.y = std::round(worldPosition.y / gridSize) * gridSize;
+                                }
+
+                                Life::Entity spriteEntity = effectiveScene->CreateEntity(relativePath.stem().string().empty() ? std::string("Sprite") : relativePath.stem().string());
+                                spriteEntity.GetComponent<Life::TransformComponent>().LocalPosition = worldPosition;
+                                Life::SpriteComponent& sprite = spriteEntity.AddComponent<Life::SpriteComponent>();
+                                sprite.TextureAssetKey = assetKey;
+                                if (services.AssetManager)
+                                    sprite.TextureAsset = services.AssetManager->get().GetOrLoad<Life::Assets::TextureAsset>(assetKey);
+                                sceneState.SelectEntity(spriteEntity);
+                                undoStack.CommitExecuted(std::make_unique<CreateEntityCommand>(CaptureEntitySnapshot(spriteEntity)));
+                                services.SceneService->get().MarkActiveSceneDirty();
+                            }
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
 
 #if __has_include(<ImGuizmo.h>)
             ImGuizmo::BeginFrame();
@@ -672,7 +1301,6 @@ namespace EditorApp
             ImGuizmo::SetRect(viewportTopLeft.x, viewportTopLeft.y, viewportSize.x, viewportSize.y);
             ImGuizmo::SetOrthographic(activeCamera->GetProjectionType() == Life::ProjectionType::Orthographic);
 
-            Life::Entity selectedEntity = sceneState.GetSelectedEntity(*effectiveScene);
             const bool canShowGizmo = selectedEntity.IsValid() &&
                 sceneState.ViewportTool != EditorViewportTool::Select &&
                 selectedEntity.HasComponent<Life::TransformComponent>();
@@ -744,7 +1372,7 @@ namespace EditorApp
                 !gizmoOwnsMouse &&
                 ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
-                Life::Entity pickedEntity = PickSpriteEntity(*effectiveScene, *activeCamera, viewportTopLeft, viewportSize, mousePosition);
+                Life::Entity pickedEntity = PickSpriteEntity(*effectiveScene, *activeCamera, viewportProjection, mousePosition);
                 if (pickedEntity.IsValid())
                     sceneState.SelectEntity(pickedEntity);
                 else

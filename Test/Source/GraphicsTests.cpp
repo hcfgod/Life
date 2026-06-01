@@ -316,6 +316,36 @@ TEST_CASE("SceneRenderer2D builds stable submission order from quad Z")
     CHECK(orderedQuads[2]->Position.z == doctest::Approx(-1.5f));
 }
 
+TEST_CASE("SceneRenderer2D sorts by sprite layer and order before camera depth")
+{
+    Life::SceneRenderer2D::Scene2D scene;
+
+    Life::SceneRenderer2D::QuadCommand defaultHighOrder;
+    defaultHighOrder.Position = { 0.0f, 0.0f, 10.0f };
+    defaultHighOrder.SortingLayerIndex = 0;
+    defaultHighOrder.SortingOrder = 10;
+
+    Life::SceneRenderer2D::QuadCommand foregroundLowOrder;
+    foregroundLowOrder.Position = { 1.0f, 0.0f, -10.0f };
+    foregroundLowOrder.SortingLayerIndex = 1;
+    foregroundLowOrder.SortingOrder = -2;
+
+    Life::SceneRenderer2D::QuadCommand foregroundHighOrder;
+    foregroundHighOrder.Position = { 2.0f, 0.0f, -20.0f };
+    foregroundHighOrder.SortingLayerIndex = 1;
+    foregroundHighOrder.SortingOrder = 4;
+
+    scene.Quads.push_back(foregroundHighOrder);
+    scene.Quads.push_back(defaultHighOrder);
+    scene.Quads.push_back(foregroundLowOrder);
+
+    const auto orderedQuads = Life::SceneRenderer2D::BuildSubmissionOrder(scene);
+    REQUIRE(orderedQuads.size() == 3);
+    CHECK(orderedQuads[0]->Position.x == doctest::Approx(0.0f));
+    CHECK(orderedQuads[1]->Position.x == doctest::Approx(1.0f));
+    CHECK(orderedQuads[2]->Position.x == doctest::Approx(2.0f));
+}
+
 TEST_CASE("SceneSurface stays safe without live frame resources")
 {
     Life::WindowSpecification windowSpecification;

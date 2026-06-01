@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstring>
 #include <filesystem>
+#include <memory>
 
 #if __has_include(<imgui.h>)
 #include <imgui.h>
@@ -412,10 +413,10 @@ namespace EditorApp
         {
             if (m_Services.SceneService &&
                 m_Services.SceneService->get().HasActiveScene() &&
-                m_UndoStack.Undo(m_Services.SceneService->get().GetActiveScene()))
+                m_UndoStack.Undo(m_Services.SceneService->get().GetActiveScene(), m_SceneState))
             {
                 m_Services.SceneService->get().MarkActiveSceneDirty();
-                SetSceneStatus("Undo transform.", false);
+                SetSceneStatus("Undo.", false);
             }
             return;
         }
@@ -424,10 +425,42 @@ namespace EditorApp
         {
             if (m_Services.SceneService &&
                 m_Services.SceneService->get().HasActiveScene() &&
-                m_UndoStack.Redo(m_Services.SceneService->get().GetActiveScene()))
+                m_UndoStack.Redo(m_Services.SceneService->get().GetActiveScene(), m_SceneState))
             {
                 m_Services.SceneService->get().MarkActiveSceneDirty();
-                SetSceneStatus("Redo transform.", false);
+                SetSceneStatus("Redo.", false);
+            }
+            return;
+        }
+
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D, false))
+        {
+            if (m_Services.SceneService && m_Services.SceneService->get().HasActiveScene())
+            {
+                Life::Scene& scene = m_Services.SceneService->get().GetActiveScene();
+                Life::Entity selected = m_SceneState.GetSelectedEntity(scene);
+                if (selected.IsValid() &&
+                    m_UndoStack.Execute(std::make_unique<DuplicateEntityCommand>(CreateDuplicateEntitySnapshot(selected)), scene, m_SceneState))
+                {
+                    m_Services.SceneService->get().MarkActiveSceneDirty();
+                    SetSceneStatus("Duplicated entity.", false);
+                }
+            }
+            return;
+        }
+
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+        {
+            if (m_Services.SceneService && m_Services.SceneService->get().HasActiveScene())
+            {
+                Life::Scene& scene = m_Services.SceneService->get().GetActiveScene();
+                Life::Entity selected = m_SceneState.GetSelectedEntity(scene);
+                if (selected.IsValid() &&
+                    m_UndoStack.Execute(std::make_unique<DeleteEntityCommand>(CaptureEntitySnapshot(selected)), scene, m_SceneState))
+                {
+                    m_Services.SceneService->get().MarkActiveSceneDirty();
+                    SetSceneStatus("Deleted entity.", false);
+                }
             }
             return;
         }
@@ -635,8 +668,8 @@ namespace EditorApp
         m_ProjectAssetsPanel.ApplyState(m_PanelState.ProjectAssets);
         m_ProjectAssetsPanel.Render(m_PanelVisibility.ShowProjectAssets, m_Services, m_SceneState);
         m_PanelState.ProjectAssets = m_ProjectAssetsPanel.CaptureState();
-        m_HierarchyPanel.Render(m_PanelVisibility.ShowHierarchy, m_Services, m_SceneState);
-        m_InspectorPanel.Render(m_PanelVisibility.ShowInspector, m_Services, m_SceneState);
+        m_HierarchyPanel.Render(m_PanelVisibility.ShowHierarchy, m_Services, m_SceneState, m_UndoStack);
+        m_InspectorPanel.Render(m_PanelVisibility.ShowInspector, m_Services, m_SceneState, m_UndoStack);
         m_ConsolePanel.Render(m_PanelVisibility.ShowConsole);
         m_StatsPanel.Render(m_PanelVisibility.ShowStats, m_Services, m_SceneViewportPanel.GetState());
         m_SceneViewportPanel.Render(m_PanelVisibility.ShowScene, m_Services, m_SceneState, m_CameraTool, m_UndoStack);

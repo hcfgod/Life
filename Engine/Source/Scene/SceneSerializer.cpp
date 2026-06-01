@@ -15,6 +15,7 @@ namespace Life
     {
         constexpr const char* kVersionField = "version";
         constexpr const char* kNameField = "name";
+        constexpr const char* kSpriteSortingLayersField = "spriteSortingLayers";
         constexpr const char* kEntitiesField = "entities";
         constexpr const char* kIdField = "id";
         constexpr const char* kTagField = "tag";
@@ -46,6 +47,8 @@ namespace Life
         constexpr const char* kViewportMaxDepthField = "maxDepth";
         constexpr const char* kSizeField = "size";
         constexpr const char* kColorField = "color";
+        constexpr const char* kSortingLayerField = "sortingLayer";
+        constexpr const char* kSortingOrderField = "sortingOrder";
         constexpr const char* kTextureAssetKeyField = "textureAssetKey";
 
         std::filesystem::path NormalizeAbsolutePath(const std::filesystem::path& path)
@@ -243,6 +246,8 @@ namespace Life
                 record[kSpriteField] = {
                     { kSizeField, ToJson(sprite->Size) },
                     { kColorField, ToJson(sprite->Color) },
+                    { kSortingLayerField, sprite->SortingLayer },
+                    { kSortingOrderField, sprite->SortingOrder },
                     { kTextureAssetKeyField, sprite->TextureAssetKey }
                 };
             }
@@ -298,6 +303,16 @@ namespace Life
             auto scene = CreateScope<Scene>(sceneName);
             scene->SetSourcePath(normalizedPath);
             scene->SetState(Scene::State::Loading);
+            if (root.contains(kSpriteSortingLayersField) && root[kSpriteSortingLayersField].is_array())
+            {
+                std::vector<std::string> layers;
+                for (const nlohmann::json& layerJson : root[kSpriteSortingLayersField])
+                {
+                    if (layerJson.is_string())
+                        layers.push_back(layerJson.get<std::string>());
+                }
+                scene->SetSpriteSortingLayers(std::move(layers));
+            }
 
             std::unordered_map<std::string, Entity> entitiesById;
             std::vector<std::pair<Entity, std::string>> pendingParents;
@@ -371,6 +386,12 @@ namespace Life
                             sprite.Size = ReadVec2(spriteJson[kSizeField], sprite.Size);
                         if (spriteJson.contains(kColorField))
                             sprite.Color = ReadVec4(spriteJson[kColorField], sprite.Color);
+                        if (spriteJson.contains(kSortingLayerField) && spriteJson[kSortingLayerField].is_string())
+                            sprite.SortingLayer = spriteJson[kSortingLayerField].get<std::string>();
+                        if (spriteJson.contains(kSortingOrderField) && spriteJson[kSortingOrderField].is_number_integer())
+                            sprite.SortingOrder = spriteJson[kSortingOrderField].get<int32_t>();
+                        if (scene->ResolveSpriteSortingLayerIndex(sprite.SortingLayer) == 0 && sprite.SortingLayer != "Default")
+                            sprite.SortingLayer = "Default";
                         if (spriteJson.contains(kTextureAssetKeyField) && spriteJson[kTextureAssetKeyField].is_string())
                             sprite.TextureAssetKey = spriteJson[kTextureAssetKeyField].get<std::string>();
                         if (!sprite.TextureAssetKey.empty() && assetManager != nullptr)
@@ -424,6 +445,7 @@ namespace Life
             nlohmann::json root;
             root[kVersionField] = SceneFileCurrentVersion;
             root[kNameField] = scene.GetName();
+            root[kSpriteSortingLayersField] = scene.GetSpriteSortingLayers();
             root[kEntitiesField] = nlohmann::json::array();
 
             for (const Entity rootEntity : scene.GetRootEntities())

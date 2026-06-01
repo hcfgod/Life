@@ -97,6 +97,27 @@ namespace EditorApp
             camera.SetPosition(camera.GetPosition() + delta);
     }
 
+    void EditorCameraTool::FrameBounds(Life::Camera& camera, const glm::vec3& center, float radius)
+    {
+        const float safeRadius = std::max(radius, 0.5f);
+        const glm::vec3 forward = glm::normalize(camera.GetOrientation() * glm::vec3(0.0f, 0.0f, -1.0f));
+        if (camera.GetProjectionType() == Life::ProjectionType::Orthographic)
+        {
+            Life::OrthographicProjectionParameters parameters;
+            parameters.Size = safeRadius * 1.35f;
+            parameters.NearClip = camera.GetNearClip();
+            parameters.FarClip = camera.GetFarClip();
+            camera.SetOrthographic(parameters);
+            camera.SetPosition(center - forward * 10.0f);
+        }
+        else
+        {
+            const float halfFovRadians = glm::radians(camera.GetFieldOfView()) * 0.5f;
+            const float distance = safeRadius / std::max(std::tan(halfFovRadians), 0.01f);
+            camera.SetPosition(center - forward * (distance * 1.35f));
+        }
+    }
+
     Life::OptionalRef<Life::Camera> EditorCameraTool::TryGetCamera(Life::CameraManager& cameraManager)
     {
         if (Life::Camera* camera = cameraManager.GetCamera(m_CameraName))

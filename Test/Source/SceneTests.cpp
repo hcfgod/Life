@@ -193,7 +193,10 @@ TEST_CASE("SceneSerializer round-trips hierarchy order, ids, transforms, sprite 
     Life::SpriteComponent sprite;
     sprite.Size = { 2.5f, 3.5f };
     sprite.Color = { 0.25f, 0.5f, 0.75f, 1.0f };
+    sprite.SortingLayer = "Foreground";
+    sprite.SortingOrder = 7;
     sprite.TextureAssetKey = "Assets/Textures/TestChecker.ppm";
+    CHECK(scene.AddSpriteSortingLayer("Foreground"));
     childB.AddComponent<Life::SpriteComponent>(sprite);
 
     cameraEntity.GetComponent<Life::TransformComponent>().LocalPosition = { 7.0f, 8.0f, 9.0f };
@@ -258,7 +261,12 @@ TEST_CASE("SceneSerializer round-trips hierarchy order, ids, transforms, sprite 
     CHECK(loadedSprite.Color.y == doctest::Approx(0.5f));
     CHECK(loadedSprite.Color.z == doctest::Approx(0.75f));
     CHECK(loadedSprite.Color.w == doctest::Approx(1.0f));
+    CHECK(loadedSprite.SortingLayer == "Foreground");
+    CHECK(loadedSprite.SortingOrder == 7);
     CHECK(loadedSprite.TextureAssetKey == "Assets/Textures/TestChecker.ppm");
+    REQUIRE(loadedScene->GetSpriteSortingLayers().size() == 2);
+    CHECK(loadedScene->GetSpriteSortingLayers()[0] == "Default");
+    CHECK(loadedScene->GetSpriteSortingLayers()[1] == "Foreground");
 
     REQUIRE(loadedCameraEntity.HasComponent<Life::CameraComponent>());
     const Life::CameraComponent& loadedCamera = loadedCameraEntity.GetComponent<Life::CameraComponent>();

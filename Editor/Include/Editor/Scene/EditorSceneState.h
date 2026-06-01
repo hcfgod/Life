@@ -23,6 +23,13 @@ namespace EditorApp
         World
     };
 
+    enum class EditorViewportGridMode
+    {
+        Auto = 0,
+        WorldPlane,
+        Screen
+    };
+
     struct EditorSceneState
     {
         void SelectEntity(const Life::Entity& entity)
@@ -141,6 +148,10 @@ namespace EditorApp
         float TranslationSnap = 0.25f;
         float RotationSnapDegrees = 15.0f;
         float ScaleSnap = 0.1f;
+        bool ShowGrid = true;
+        bool SnapToGrid = false;
+        EditorViewportGridMode GridMode = EditorViewportGridMode::Auto;
+        float GridSize = 1.0f;
         Life::Scope<Life::Scene> RuntimeScene;
     };
 }

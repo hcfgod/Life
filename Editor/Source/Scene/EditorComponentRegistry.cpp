@@ -463,6 +463,47 @@ namespace EditorApp
                 if (!sprite.TextureAssetKey.empty() && services.AssetManager && !sprite.TextureAsset)
                     sprite.TextureAsset = services.AssetManager->get().GetOrLoad<Life::Assets::TextureAsset>(sprite.TextureAssetKey);
 
+                ImGui::Spacing();
+                changed |= DrawLeftLabelRow("SortingLayerRow", "Layer", [&]()
+                    {
+                        bool layerChanged = false;
+                        Life::Scene& scene = entity.GetScene();
+                        const auto& layers = scene.GetSpriteSortingLayers();
+                        if (ImGui::BeginCombo("##Value", sprite.SortingLayer.c_str()))
+                        {
+                            for (const std::string& layer : layers)
+                            {
+                                const bool selected = sprite.SortingLayer == layer;
+                                if (ImGui::Selectable(layer.c_str(), selected) && !selected)
+                                {
+                                    sprite.SortingLayer = layer;
+                                    layerChanged = true;
+                                }
+                                if (selected)
+                                    ImGui::SetItemDefaultFocus();
+                            }
+                            ImGui::EndCombo();
+                        }
+                        return layerChanged;
+                    });
+                changed |= DrawLeftLabelRow("SortingOrderRow", "Order", [&]()
+                    {
+                        return ImGui::DragInt("##Value", &sprite.SortingOrder, 1.0f);
+                    });
+
+                static std::string newSortingLayerName = "Foreground";
+                if (DrawStackedTextField("New Sorting Layer", "##NewSortingLayer", newSortingLayerName))
+                {
+                }
+                if (ImGui::Button("Add Sorting Layer", ImVec2(-1.0f, 0.0f)))
+                {
+                    if (entity.GetScene().AddSpriteSortingLayer(newSortingLayerName))
+                    {
+                        sprite.SortingLayer = newSortingLayerName;
+                        changed = true;
+                    }
+                }
+
                 return changed;
 #else
                 (void)entity;

@@ -70,6 +70,13 @@ namespace Life
         std::vector<Entity> GetRootEntities() const;
         std::vector<Entity> GetEntities() const;
         bool IsDescendantOf(Entity entity, Entity ancestor) const;
+        const std::vector<std::string>& GetSpriteSortingLayers() const noexcept;
+        bool AddSpriteSortingLayer(std::string name);
+        bool RenameSpriteSortingLayer(std::string_view oldName, std::string name);
+        bool RemoveSpriteSortingLayer(std::string_view name);
+        bool MoveSpriteSortingLayer(std::string_view name, std::size_t index);
+        std::size_t ResolveSpriteSortingLayerIndex(std::string_view name) const noexcept;
+        void SetSpriteSortingLayers(std::vector<std::string> layers);
 
         glm::mat4 GetLocalTransformMatrix(Entity entity) const;
         glm::mat4 GetWorldTransformMatrix(Entity entity) const;
@@ -104,12 +111,14 @@ namespace Life
         void NormalizeCameraPrimaryState();
         static glm::mat4 ComposeTransform(const TransformComponent& transform);
         static std::string GenerateEntityId();
+        static std::string SanitizeSortingLayerName(std::string_view name);
 
         std::string m_Name;
         std::filesystem::path m_SourcePath;
         State m_State = State::Unloaded;
         entt::registry m_Registry;
         std::vector<entt::entity> m_RootEntities;
+        std::vector<std::string> m_SpriteSortingLayers{ "Default" };
     };
 
     glm::mat4 ComposeTransform(const TransformComponent& transform);

@@ -86,6 +86,8 @@ namespace Life
             quad.XAxis = glm::vec3(worldTransform * glm::vec4(sprite.Size.x, 0.0f, 0.0f, 0.0f));
             quad.YAxis = glm::vec3(worldTransform * glm::vec4(0.0f, sprite.Size.y, 0.0f, 0.0f));
             quad.Color = sprite.Color;
+            quad.SortingLayerIndex = scene.ResolveSpriteSortingLayerIndex(sprite.SortingLayer);
+            quad.SortingOrder = sprite.SortingOrder;
             quad.RotationRadians = transform.LocalRotation.z;
             quad.UseExplicitAxes = true;
             quad.TextureAsset = sprite.TextureAsset.get();
@@ -103,31 +105,29 @@ namespace Life
         for (size_t index = 0; index < orderedIndices.size(); ++index)
             orderedIndices[index] = index;
 
-        switch (scene.SortMode)
-        {
-            case QuadSortMode::SubmissionOrder:
-                break;
+        std::stable_sort(
+            orderedIndices.begin(),
+            orderedIndices.end(),
+            [&scene](size_t leftIndex, size_t rightIndex)
+            {
+                const QuadCommand& left = scene.Quads[leftIndex];
+                const QuadCommand& right = scene.Quads[rightIndex];
+                if (left.SortingLayerIndex != right.SortingLayerIndex)
+                    return left.SortingLayerIndex < right.SortingLayerIndex;
+                if (left.SortingOrder != right.SortingOrder)
+                    return left.SortingOrder < right.SortingOrder;
 
-            case QuadSortMode::BackToFront:
-                std::stable_sort(
-                    orderedIndices.begin(),
-                    orderedIndices.end(),
-                    [&scene](size_t leftIndex, size_t rightIndex)
-                    {
-                        return ResolveCameraDepth(scene, scene.Quads[leftIndex]) < ResolveCameraDepth(scene, scene.Quads[rightIndex]);
-                    });
-                break;
-
-            case QuadSortMode::FrontToBack:
-                std::stable_sort(
-                    orderedIndices.begin(),
-                    orderedIndices.end(),
-                    [&scene](size_t leftIndex, size_t rightIndex)
-                    {
-                        return ResolveCameraDepth(scene, scene.Quads[leftIndex]) > ResolveCameraDepth(scene, scene.Quads[rightIndex]);
-                    });
-                break;
-        }
+                switch (scene.SortMode)
+                {
+                    case QuadSortMode::BackToFront:
+                        return ResolveCameraDepth(scene, left) < ResolveCameraDepth(scene, right);
+                    case QuadSortMode::FrontToBack:
+                        return ResolveCameraDepth(scene, left) > ResolveCameraDepth(scene, right);
+                    case QuadSortMode::SubmissionOrder:
+                    default:
+                        return leftIndex < rightIndex;
+                }
+            });
 
         for (const size_t index : orderedIndices)
             orderedQuads.push_back(&scene.Quads[index]);

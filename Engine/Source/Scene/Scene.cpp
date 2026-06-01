@@ -411,6 +411,118 @@ namespace Life
         return false;
     }
 
+    const std::vector<std::string>& Scene::GetSpriteSortingLayers() const noexcept
+    {
+        return m_SpriteSortingLayers;
+    }
+
+    bool Scene::AddSpriteSortingLayer(std::string name)
+    {
+        name = SanitizeSortingLayerName(name);
+        if (name.empty())
+            return false;
+
+        if (std::find(m_SpriteSortingLayers.begin(), m_SpriteSortingLayers.end(), name) != m_SpriteSortingLayers.end())
+            return false;
+
+        m_SpriteSortingLayers.push_back(std::move(name));
+        return true;
+    }
+
+    bool Scene::RenameSpriteSortingLayer(std::string_view oldName, std::string name)
+    {
+        if (oldName == "Default")
+            return false;
+
+        name = SanitizeSortingLayerName(name);
+        if (name.empty() || name == "Default")
+            return false;
+
+        auto it = std::find(m_SpriteSortingLayers.begin(), m_SpriteSortingLayers.end(), std::string(oldName));
+        if (it == m_SpriteSortingLayers.end())
+            return false;
+        if (std::find(m_SpriteSortingLayers.begin(), m_SpriteSortingLayers.end(), name) != m_SpriteSortingLayers.end())
+            return false;
+
+        const std::string previousName = *it;
+        *it = name;
+        for (Entity entity : GetEntities())
+        {
+            if (SpriteComponent* sprite = entity.TryGetComponent<SpriteComponent>(); sprite != nullptr && sprite->SortingLayer == previousName)
+                sprite->SortingLayer = name;
+        }
+        return true;
+    }
+
+    bool Scene::RemoveSpriteSortingLayer(std::string_view name)
+    {
+        if (name == "Default")
+            return false;
+
+        auto it = std::find(m_SpriteSortingLayers.begin(), m_SpriteSortingLayers.end(), std::string(name));
+        if (it == m_SpriteSortingLayers.end())
+            return false;
+
+        m_SpriteSortingLayers.erase(it);
+        for (Entity entity : GetEntities())
+        {
+            if (SpriteComponent* sprite = entity.TryGetComponent<SpriteComponent>(); sprite != nullptr && sprite->SortingLayer == name)
+                sprite->SortingLayer = "Default";
+        }
+        return true;
+    }
+
+    bool Scene::MoveSpriteSortingLayer(std::string_view name, std::size_t index)
+    {
+        if (name == "Default")
+            return false;
+
+        auto it = std::find(m_SpriteSortingLayers.begin(), m_SpriteSortingLayers.end(), std::string(name));
+        if (it == m_SpriteSortingLayers.end())
+            return false;
+
+        std::string layer = std::move(*it);
+        m_SpriteSortingLayers.erase(it);
+        index = std::clamp(index, std::size_t{ 1 }, m_SpriteSortingLayers.size());
+        m_SpriteSortingLayers.insert(m_SpriteSortingLayers.begin() + static_cast<std::ptrdiff_t>(index), std::move(layer));
+        return true;
+    }
+
+    std::size_t Scene::ResolveSpriteSortingLayerIndex(std::string_view name) const noexcept
+    {
+        for (std::size_t index = 0; index < m_SpriteSortingLayers.size(); ++index)
+        {
+            if (m_SpriteSortingLayers[index] == name)
+                return index;
+        }
+
+        return 0;
+    }
+
+    void Scene::SetSpriteSortingLayers(std::vector<std::string> layers)
+    {
+        std::vector<std::string> sanitizedLayers;
+        sanitizedLayers.push_back("Default");
+        for (std::string& layer : layers)
+        {
+            layer = SanitizeSortingLayerName(layer);
+            if (layer.empty() || layer == "Default")
+                continue;
+            if (std::find(sanitizedLayers.begin(), sanitizedLayers.end(), layer) == sanitizedLayers.end())
+                sanitizedLayers.push_back(std::move(layer));
+        }
+
+        m_SpriteSortingLayers = std::move(sanitizedLayers);
+        for (Entity entity : GetEntities())
+        {
+            if (SpriteComponent* sprite = entity.TryGetComponent<SpriteComponent>(); sprite != nullptr)
+            {
+                if (std::find(m_SpriteSortingLayers.begin(), m_SpriteSortingLayers.end(), sprite->SortingLayer) == m_SpriteSortingLayers.end())
+                    sprite->SortingLayer = "Default";
+            }
+        }
+    }
+
     glm::mat4 Scene::GetLocalTransformMatrix(Entity entity) const
     {
         if (!IsValid(entity))
@@ -707,6 +819,15 @@ namespace Life
     std::string Scene::GenerateEntityId()
     {
         return Assets::GenerateGuid();
+    }
+
+    std::string Scene::SanitizeSortingLayerName(std::string_view name)
+    {
+        const auto first = name.find_first_not_of(" \t\r\n");
+        if (first == std::string_view::npos)
+            return {};
+        const auto last = name.find_last_not_of(" \t\r\n");
+        return std::string(name.substr(first, last - first + 1));
     }
 
     Entity::Entity(entt::entity handle, Scene* scene) noexcept

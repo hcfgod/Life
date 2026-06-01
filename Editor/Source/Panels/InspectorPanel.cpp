@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstring>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -338,11 +339,17 @@ namespace EditorApp
                                            Life::SceneService& sceneService,
                                            Life::Entity selectedEntity,
                                            const EditorServices& services,
-                                           EditorSceneState& sceneState)
+                                           EditorSceneState& sceneState,
+                                           EditorUndoStack& undoStack)
         {
             #if __has_include(<imgui.h>)
+                        static bool hasPendingSnapshot = false;
+                        static std::string pendingSnapshotEntityId;
+                        static EditorEntitySnapshot pendingSnapshotBefore;
+
                         bool changed = false;
                         const bool hasAddableComponents = HasAddableComponents(selectedEntity);
+                        const EditorEntitySnapshot beforeSnapshot = CaptureEntitySnapshot(selectedEntity);
 
                         DrawPanelHeader("Inspector", "Selected entity details");
 
@@ -392,10 +399,14 @@ namespace EditorApp
                         if (ImGui::Button("Delete Entity", ImVec2(-1.0f, 0.0f)))
                         {
                             const std::string deletedId = selectedEntity.GetId();
-                            sceneState.ClearSelection();
-                            changed |= scene.DestroyEntity(selectedEntity);
-                            if (changed)
+                            if (undoStack.Execute(std::make_unique<DeleteEntityCommand>(CaptureEntitySnapshot(selectedEntity)), scene, sceneState))
+                            {
                                 sceneState.SetStatusMessage("Deleted entity '" + deletedId + "'.", false);
+                                if (sceneState.ExecutionMode == EditorSceneExecutionMode::Edit)
+                                    sceneService.MarkActiveSceneDirty();
+                            }
+                            ImGui::PopStyleColor(3);
+                            return;
                         }
                         ImGui::PopStyleColor(3);
 
@@ -476,7 +487,34 @@ namespace EditorApp
                             ImGui::TextDisabled("No additional components available.");
                         }
 
-                        if (changed && sceneState.ExecutionMode == EditorSceneExecutionMode::Edit)
+                        const bool editActive = ImGui::IsAnyItemActive();
+                        if (changed && editActive)
+                        {
+                            if (!hasPendingSnapshot || pendingSnapshotEntityId != beforeSnapshot.Id)
+                            {
+                                hasPendingSnapshot = true;
+                                pendingSnapshotEntityId = beforeSnapshot.Id;
+                                pendingSnapshotBefore = beforeSnapshot;
+                            }
+                        }
+
+                        if ((changed || hasPendingSnapshot) && !editActive)
+                        {
+                            Life::Entity currentEntity = scene.FindEntityById(beforeSnapshot.Id);
+                            if (currentEntity.IsValid())
+                            {
+                                EditorEntitySnapshot afterSnapshot = CaptureEntitySnapshot(currentEntity);
+                                EditorEntitySnapshot commandBefore = hasPendingSnapshot && pendingSnapshotEntityId == beforeSnapshot.Id
+                                    ? pendingSnapshotBefore
+                                    : beforeSnapshot;
+                                undoStack.CommitExecuted(std::make_unique<RestoreEntitySnapshotCommand>(std::move(commandBefore), std::move(afterSnapshot)));
+                            }
+                            hasPendingSnapshot = false;
+                            pendingSnapshotEntityId.clear();
+                            pendingSnapshotBefore = {};
+                        }
+
+                        if ((changed || hasPendingSnapshot) && sceneState.ExecutionMode == EditorSceneExecutionMode::Edit)
                             sceneService.MarkActiveSceneDirty();
             #else
                         (void)scene;
@@ -488,7 +526,7 @@ namespace EditorApp
         }
     }
 
-    void InspectorPanel::Render(bool& isOpen, const EditorServices& services, EditorSceneState& sceneState) const
+    void InspectorPanel::Render(bool& isOpen, const EditorServices& services, EditorSceneState& sceneState, EditorUndoStack& undoStack) const
     {
         #if __has_include(<imgui.h>)
                 if (!isOpen)
@@ -510,7 +548,7 @@ namespace EditorApp
 
                     if (selectedEntity.IsValid() && sceneService != nullptr && effectiveScene != nullptr)
                     {
-                        RenderSelectedEntityInspector(*effectiveScene, *sceneService, selectedEntity, services, sceneState);
+                        RenderSelectedEntityInspector(*effectiveScene, *sceneService, selectedEntity, services, sceneState, undoStack);
                     }
                     else
                     {
@@ -533,6 +571,7 @@ namespace EditorApp
                 (void)isOpen;
                 (void)services;
                 (void)sceneState;
+                (void)undoStack;
         #endif
     }
 }

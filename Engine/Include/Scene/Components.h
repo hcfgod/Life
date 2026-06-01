@@ -60,6 +60,8 @@ namespace Life
     {
         glm::vec2 Size{ 1.0f, 1.0f };
         glm::vec4 Color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        std::string SortingLayer = "Default";
+        int32_t SortingOrder = 0;
         std::string TextureAssetKey;
         Ref<Assets::TextureAsset> TextureAsset;
     };

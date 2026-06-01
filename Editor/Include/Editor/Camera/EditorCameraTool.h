@@ -20,6 +20,7 @@ namespace EditorApp
         void Release(Life::CameraManager& cameraManager) noexcept;
         void UpdateAspectRatio(float aspectRatio);
         void UpdateFlyCamera(Life::Camera& camera, const FlyCameraInput& input, float timestep);
+        void FrameBounds(Life::Camera& camera, const glm::vec3& center, float radius);
         Life::OptionalRef<Life::Camera> TryGetCamera(Life::CameraManager& cameraManager);
         Life::OptionalRef<const Life::Camera> TryGetCamera(const Life::CameraManager& cameraManager) const;
         const std::string& GetCameraName() const noexcept;

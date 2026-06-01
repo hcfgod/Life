@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstring>
+#include <memory>
 #include <string>
 
 namespace EditorApp
@@ -15,6 +16,9 @@ namespace EditorApp
     namespace
     {
         constexpr const char* kEntityPayloadType = "EditorSceneEntity";
+
+        std::string g_RenamingEntityId;
+        std::string g_RenameBuffer;
 
         enum class DropMode
         {
@@ -50,6 +54,26 @@ namespace EditorApp
         bool CanApplyDrop(const Life::Entity& dragged, const Life::Entity& target)
         {
             return dragged.IsValid() && target.IsValid() && dragged != target && !target.IsDescendantOf(dragged);
+        }
+
+        bool InputTextString(const char* label, std::string& value, ImGuiInputTextFlags flags = 0)
+        {
+            std::array<char, 1024> buffer{};
+            const std::size_t copyLength = std::min(value.size(), buffer.size() - 1);
+            std::memcpy(buffer.data(), value.data(), copyLength);
+            buffer[copyLength] = '\0';
+
+            if (!ImGui::InputText(label, buffer.data(), buffer.size(), flags))
+                return false;
+
+            value = buffer.data();
+            return true;
+        }
+
+        std::string GetParentId(const Life::Entity& entity)
+        {
+            const Life::Entity parent = entity.GetParent();
+            return parent.IsValid() ? parent.GetId() : std::string{};
         }
 
         void DrawDropPreview(const ImVec2& rectMin, const ImVec2& rectMax, DropMode mode, bool valid)
@@ -105,15 +129,23 @@ namespace EditorApp
             return scene.FindEntityById(payloadText);
         }
 
-        bool ApplyDrop(Life::Scene& scene, Life::Entity dragged, const Life::Entity& target, DropMode mode)
+        bool ApplyDrop(Life::Scene& scene, Life::Entity dragged, const Life::Entity& target, DropMode mode, EditorUndoStack& undoStack)
         {
             if (!CanApplyDrop(dragged, target))
                 return false;
 
+            const std::string entityId = dragged.GetId();
+            const std::string beforeParentId = GetParentId(dragged);
+            const std::size_t beforeSiblingIndex = scene.GetSiblingIndex(dragged);
+            const Life::TransformComponent beforeTransform = dragged.GetComponent<Life::TransformComponent>();
+            const glm::mat4 worldTransform = scene.GetWorldTransformMatrix(dragged);
+            bool changed = false;
+
             switch (mode)
             {
                 case DropMode::Child:
-                    return dragged.SetParent(target);
+                    changed = dragged.SetParent(target);
+                    break;
 
                 case DropMode::Before:
                 {
@@ -128,7 +160,8 @@ namespace EditorApp
                         dragged.RemoveParent();
                     }
 
-                    return scene.SetSiblingIndex(dragged, scene.GetSiblingIndex(target));
+                    changed = scene.SetSiblingIndex(dragged, scene.GetSiblingIndex(target));
+                    break;
                 }
 
                 case DropMode::After:
@@ -144,14 +177,30 @@ namespace EditorApp
                         dragged.RemoveParent();
                     }
 
-                    return scene.SetSiblingIndex(dragged, scene.GetSiblingIndex(target) + 1u);
+                    changed = scene.SetSiblingIndex(dragged, scene.GetSiblingIndex(target) + 1u);
+                    break;
                 }
             }
 
-            return false;
+            if (!changed)
+                return false;
+
+            (void)Life::SetEntityWorldTransform(scene, dragged, worldTransform);
+            const std::string afterParentId = GetParentId(dragged);
+            const std::size_t afterSiblingIndex = scene.GetSiblingIndex(dragged);
+            const Life::TransformComponent afterTransform = dragged.GetComponent<Life::TransformComponent>();
+            undoStack.CommitExecuted(std::make_unique<SetEntityParentCommand>(
+                entityId,
+                beforeParentId,
+                beforeSiblingIndex,
+                beforeTransform,
+                afterParentId,
+                afterSiblingIndex,
+                afterTransform));
+            return true;
         }
 
-        bool AcceptEntityDrop(Life::Scene& scene, const Life::Entity& target)
+        bool AcceptEntityDrop(Life::Scene& scene, const Life::Entity& target, EditorUndoStack& undoStack)
         {
             if (!ImGui::BeginDragDropTarget())
                 return false;
@@ -168,14 +217,14 @@ namespace EditorApp
                 DrawDropPreview(rectMin, rectMax, mode, valid);
 
                 if (payload->Delivery && valid)
-                    changed = ApplyDrop(scene, dragged, target, mode);
+                    changed = ApplyDrop(scene, dragged, target, mode, undoStack);
             }
 
             ImGui::EndDragDropTarget();
             return changed;
         }
 
-        bool RenderRootDropTarget(Life::Scene& scene)
+        bool RenderRootDropTarget(Life::Scene& scene, EditorUndoStack& undoStack)
         {
             ImGui::Spacing();
             ImGui::Separator();
@@ -194,7 +243,21 @@ namespace EditorApp
 
                     if (payload->Delivery && valid)
                     {
+                        const std::string entityId = dragged.GetId();
+                        const std::string beforeParentId = GetParentId(dragged);
+                        const std::size_t beforeSiblingIndex = scene.GetSiblingIndex(dragged);
+                        const Life::TransformComponent beforeTransform = dragged.GetComponent<Life::TransformComponent>();
+                        const glm::mat4 worldTransform = scene.GetWorldTransformMatrix(dragged);
                         dragged.RemoveParent();
+                        (void)Life::SetEntityWorldTransform(scene, dragged, worldTransform);
+                        undoStack.CommitExecuted(std::make_unique<SetEntityParentCommand>(
+                            entityId,
+                            beforeParentId,
+                            beforeSiblingIndex,
+                            beforeTransform,
+                            std::string{},
+                            scene.GetSiblingIndex(dragged),
+                            dragged.GetComponent<Life::TransformComponent>()));
                         changed = true;
                     }
                 }
@@ -205,7 +268,7 @@ namespace EditorApp
             return changed;
         }
 
-        bool RenderEntityNode(Life::Scene& scene, const Life::Entity& entity, EditorSceneState& sceneState, Life::Entity& pendingDelete)
+        bool RenderEntityNode(Life::Scene& scene, const Life::Entity& entity, EditorSceneState& sceneState, EditorUndoStack& undoStack)
         {
             bool changed = false;
             const bool isSelected = sceneState.SelectedEntityId == entity.GetId();
@@ -217,14 +280,41 @@ namespace EditorApp
             if (isSelected)
                 nodeFlags |= ImGuiTreeNodeFlags_Selected;
 
-            const bool nodeOpen = ImGui::TreeNodeEx(entity.GetId().c_str(), nodeFlags, "%s", entity.GetTag().c_str());
+            const bool isRenaming = g_RenamingEntityId == entity.GetId();
+            const bool nodeOpen = ImGui::TreeNodeEx(entity.GetId().c_str(), nodeFlags, "%s", isRenaming ? "" : entity.GetTag().c_str());
             if (ImGui::IsItemClicked())
                 sceneState.SelectEntity(entity);
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                g_RenamingEntityId = entity.GetId();
+                g_RenameBuffer = entity.GetTag();
+            }
+
+            if (isRenaming)
+            {
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(-1.0f);
+                ImGui::SetKeyboardFocusHere();
+                const bool submitted = InputTextString("##RenameEntityInline", g_RenameBuffer, ImGuiInputTextFlags_EnterReturnsTrue);
+                const bool finished = submitted || (ImGui::IsItemDeactivatedAfterEdit() && !ImGui::IsItemActive());
+                if (finished)
+                {
+                    if (!g_RenameBuffer.empty() && g_RenameBuffer != entity.GetTag())
+                    {
+                        changed |= undoStack.Execute(
+                            std::make_unique<RenameEntityCommand>(entity.GetId(), entity.GetTag(), g_RenameBuffer),
+                            scene,
+                            sceneState);
+                    }
+                    g_RenamingEntityId.clear();
+                    g_RenameBuffer.clear();
+                }
+            }
 
             if (BeginEntityDragSource(entity))
                 ImGui::EndDragDropSource();
 
-            changed |= AcceptEntityDrop(scene, entity);
+            changed |= AcceptEntityDrop(scene, entity, undoStack);
 
             if (ImGui::BeginPopupContextItem())
             {
@@ -232,11 +322,30 @@ namespace EditorApp
                 {
                     const Life::Entity child = scene.CreateChildEntity(entity, "Entity");
                     sceneState.SelectEntity(child);
+                    undoStack.CommitExecuted(std::make_unique<CreateEntityCommand>(CaptureEntitySnapshot(child)));
                     changed = true;
                 }
 
+                if (ImGui::MenuItem("Create Sprite Child"))
+                {
+                    Life::Entity child = scene.CreateChildEntity(entity, "Sprite");
+                    child.AddComponent<Life::SpriteComponent>();
+                    sceneState.SelectEntity(child);
+                    undoStack.CommitExecuted(std::make_unique<CreateEntityCommand>(CaptureEntitySnapshot(child)));
+                    changed = true;
+                }
+
+                if (ImGui::MenuItem("Duplicate"))
+                    changed |= undoStack.Execute(std::make_unique<DuplicateEntityCommand>(CreateDuplicateEntitySnapshot(entity)), scene, sceneState);
+
+                if (ImGui::MenuItem("Rename"))
+                {
+                    g_RenamingEntityId = entity.GetId();
+                    g_RenameBuffer = entity.GetTag();
+                }
+
                 if (ImGui::MenuItem("Delete Entity"))
-                    pendingDelete = entity;
+                    changed |= undoStack.Execute(std::make_unique<DeleteEntityCommand>(CaptureEntitySnapshot(entity)), scene, sceneState);
 
                 ImGui::EndPopup();
             }
@@ -244,7 +353,7 @@ namespace EditorApp
             if (nodeOpen)
             {
                 for (const Life::Entity child : children)
-                    changed |= RenderEntityNode(scene, child, sceneState, pendingDelete);
+                    changed |= RenderEntityNode(scene, child, sceneState, undoStack);
                 ImGui::TreePop();
             }
 
@@ -253,7 +362,7 @@ namespace EditorApp
 #endif
     }
 
-    void HierarchyPanel::Render(bool& isOpen, const EditorServices& services, EditorSceneState& sceneState) const
+    void HierarchyPanel::Render(bool& isOpen, const EditorServices& services, EditorSceneState& sceneState, EditorUndoStack& undoStack) const
     {
 #if __has_include(<imgui.h>)
         if (!isOpen)
@@ -289,8 +398,6 @@ namespace EditorApp
 
                 Life::Scene& scene = *effectiveScene;
                 bool changed = false;
-                Life::Entity pendingDelete;
-
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.33f, 0.54f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.41f, 0.64f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.29f, 0.48f, 1.0f));
@@ -298,6 +405,7 @@ namespace EditorApp
                 {
                     const Life::Entity entity = scene.CreateEntity("Entity");
                     sceneState.SelectEntity(entity);
+                    undoStack.CommitExecuted(std::make_unique<CreateEntityCommand>(CaptureEntitySnapshot(entity)));
                     changed = true;
                 }
                 ImGui::PopStyleColor(3);
@@ -308,6 +416,15 @@ namespace EditorApp
                     {
                         const Life::Entity entity = scene.CreateEntity("Entity");
                         sceneState.SelectEntity(entity);
+                        undoStack.CommitExecuted(std::make_unique<CreateEntityCommand>(CaptureEntitySnapshot(entity)));
+                        changed = true;
+                    }
+                    if (ImGui::MenuItem("Create Sprite"))
+                    {
+                        Life::Entity entity = scene.CreateEntity("Sprite");
+                        entity.AddComponent<Life::SpriteComponent>();
+                        sceneState.SelectEntity(entity);
+                        undoStack.CommitExecuted(std::make_unique<CreateEntityCommand>(CaptureEntitySnapshot(entity)));
                         changed = true;
                     }
                     ImGui::EndPopup();
@@ -319,17 +436,9 @@ namespace EditorApp
                 if (roots.empty())
                     ImGui::TextDisabled("No entities in the active scene.");
                 for (const Life::Entity root : roots)
-                    changed |= RenderEntityNode(scene, root, sceneState, pendingDelete);
+                    changed |= RenderEntityNode(scene, root, sceneState, undoStack);
 
-                changed |= RenderRootDropTarget(scene);
-
-                if (pendingDelete.IsValid())
-                {
-                    if (sceneState.SelectedEntityId == pendingDelete.GetId())
-                        sceneState.ClearSelection();
-                    changed |= scene.DestroyEntity(pendingDelete);
-                }
-
+                changed |= RenderRootDropTarget(scene, undoStack);
                 if (changed)
                 {
                     if (sceneState.ExecutionMode == EditorSceneExecutionMode::Edit)
