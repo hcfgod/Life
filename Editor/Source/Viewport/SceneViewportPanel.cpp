@@ -126,6 +126,32 @@ namespace
         }
     }
 
+    const Life::CameraComponent* ResolveEditorCameraClearSource(const Life::Scene* scene,
+                                                                const EditorApp::EditorSceneState& sceneState)
+    {
+        if (scene == nullptr)
+            return nullptr;
+
+        const Life::Entity selectedEntity = sceneState.GetSelectedEntity(*scene);
+        if (const Life::CameraComponent* selectedCamera = selectedEntity.TryGetComponent<Life::CameraComponent>())
+            return selectedCamera;
+
+        const Life::Entity renderCameraEntity = scene->ResolveRenderCameraEntity();
+        return renderCameraEntity.TryGetComponent<Life::CameraComponent>();
+    }
+
+    void ApplyEditorCameraClearSettings(Life::Camera& editorCamera,
+                                        const Life::Scene* scene,
+                                        const EditorApp::EditorSceneState& sceneState)
+    {
+        const Life::CameraComponent* clearSource = ResolveEditorCameraClearSource(scene, sceneState);
+        if (clearSource == nullptr)
+            return;
+
+        editorCamera.SetClearMode(clearSource->ClearMode);
+        editorCamera.SetClearColor(clearSource->ClearColor);
+    }
+
 #if __has_include(<imgui.h>)
     const char* ResolveViewportToolLabel(EditorApp::EditorViewportTool tool) noexcept
     {
@@ -1292,6 +1318,7 @@ namespace EditorApp
             Life::Camera& camera = editorCamera->get();
             camera.SetAspectRatio(actualAspectRatio);
             cameraTool.ApplySceneViewMode(camera, sceneState.SceneViewMode, actualAspectRatio);
+            ApplyEditorCameraClearSettings(camera, effectiveScene, sceneState);
             UpdateCameraNavigation(
                 cameraTool,
                 camera,

@@ -60,7 +60,12 @@ namespace Life
 
         struct RenderOptions
         {
-            bool EnableDepthTesting = false;
+            constexpr RenderOptions(bool enableDepthTesting = false) noexcept
+                : EnableDepthTesting(enableDepthTesting)
+            {
+            }
+
+            bool EnableDepthTesting;
         };
 
         explicit SceneRenderer2D(Renderer2D& renderer2D);
