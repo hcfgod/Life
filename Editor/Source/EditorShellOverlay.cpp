@@ -118,6 +118,9 @@ namespace EditorApp
                 if (projectService.HasActiveProject() && !sceneService.HasActiveScene())
                 {
                     const Life::Assets::Project& project = projectService.GetActiveProject();
+                    m_SceneState.SceneViewMode = project.Descriptor.Dimension == Life::Assets::ProjectDimension::ThreeD
+                        ? EditorSceneViewMode::ThreeD
+                        : EditorSceneViewMode::TwoD;
                     if (!project.Descriptor.Startup.Scene.empty())
                     {
                         sceneService.OpenScene(project.Descriptor.Startup.Scene);

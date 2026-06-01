@@ -238,7 +238,20 @@ namespace RuntimeApp
                 if (Life::Camera* activeCamera = cameraManager.GetPrimaryCamera())
                 {
                     if (m_SceneService && m_SceneService->get().HasActiveScene())
-                        m_SceneRenderer2D->get().Render(m_SceneService->get().GetActiveScene(), *activeCamera);
+                    {
+                        Life::SceneRenderer2D::RenderOptions renderOptions;
+                        if (m_ProjectService && m_ProjectService->get().HasActiveProject())
+                        {
+                            renderOptions.EnableDepthTesting =
+                                m_ProjectService->get().GetActiveProject().Descriptor.Dimension == Life::Assets::ProjectDimension::ThreeD;
+                        }
+
+                        m_SceneRenderer2D->get().Render(
+                            m_SceneService->get().GetActiveScene(),
+                            *activeCamera,
+                            Life::SceneRenderer2D::QuadSortMode::BackToFront,
+                            renderOptions);
+                    }
                 }
             }
         }
@@ -273,6 +286,7 @@ namespace RuntimeApp
         m_InputSystem = Life::MakeOptionalRef(GetApplication().GetService<Life::InputSystem>());
         m_CameraManager = Life::MakeOptionalRef(GetApplication().GetService<Life::CameraManager>());
         m_SceneService = Life::MakeOptionalRef(GetApplication().GetService<Life::SceneService>());
+        m_ProjectService = Life::MakeOptionalRef(GetApplication().GetService<Life::Assets::ProjectService>());
 
         if (GetApplication().HasService<Life::SceneRenderer2D>())
             m_SceneRenderer2D = Life::MakeOptionalRef(GetApplication().GetService<Life::SceneRenderer2D>());
@@ -283,6 +297,7 @@ namespace RuntimeApp
     void GameLayer::ResetServices() noexcept
     {
         m_SceneRenderer2D.reset();
+        m_ProjectService.reset();
         m_SceneService.reset();
         m_CameraManager.reset();
         m_InputSystem.reset();

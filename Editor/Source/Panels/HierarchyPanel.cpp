@@ -330,6 +330,7 @@ namespace EditorApp
                 {
                     Life::Entity child = scene.CreateChildEntity(entity, "Sprite");
                     child.AddComponent<Life::SpriteComponent>();
+                    child.AddComponent<Life::SpriteRendererComponent>();
                     sceneState.SelectEntity(child);
                     undoStack.CommitExecuted(std::make_unique<CreateEntityCommand>(CaptureEntitySnapshot(child)));
                     changed = true;
@@ -423,6 +424,7 @@ namespace EditorApp
                     {
                         Life::Entity entity = scene.CreateEntity("Sprite");
                         entity.AddComponent<Life::SpriteComponent>();
+                        entity.AddComponent<Life::SpriteRendererComponent>();
                         sceneState.SelectEntity(entity);
                         undoStack.CommitExecuted(std::make_unique<CreateEntityCommand>(CaptureEntitySnapshot(entity)));
                         changed = true;

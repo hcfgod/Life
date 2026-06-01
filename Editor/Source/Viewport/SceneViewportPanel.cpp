@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <limits>
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include <glm/gtc/type_ptr.hpp>
@@ -149,6 +150,17 @@ namespace
             ImGui::PopStyleColor();
     }
 
+    void DrawViewModeButton(const char* label, EditorApp::EditorSceneViewMode value, EditorApp::EditorSceneState& sceneState)
+    {
+        const bool selected = sceneState.SceneViewMode == value;
+        if (selected)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.42f, 0.70f, 1.0f));
+        if (ImGui::Button(label, ImVec2(44.0f, 0.0f)))
+            sceneState.SceneViewMode = value;
+        if (selected)
+            ImGui::PopStyleColor();
+    }
+
     const char* ResolveGridModeLabel(EditorApp::EditorViewportGridMode mode) noexcept
     {
         switch (mode)
@@ -162,6 +174,12 @@ namespace
 
     void DrawViewportToolbar(EditorApp::EditorSceneState& sceneState)
     {
+        DrawViewModeButton("2D", EditorApp::EditorSceneViewMode::TwoD, sceneState);
+        ImGui::SameLine();
+        DrawViewModeButton("3D", EditorApp::EditorSceneViewMode::ThreeD, sceneState);
+        ImGui::SameLine();
+        ImGui::TextDisabled("|");
+        ImGui::SameLine();
         DrawToolButton("Select", EditorApp::EditorViewportTool::Select, sceneState);
         ImGui::SameLine();
         DrawToolButton("Move", EditorApp::EditorViewportTool::Translate, sceneState);
@@ -370,6 +388,17 @@ namespace
         return point.x >= minimum.x && point.x <= maximum.x && point.y >= minimum.y && point.y <= maximum.y;
     }
 
+    Life::SceneRenderer2D::RenderOptions ResolveSceneRenderOptions(const EditorApp::EditorServices& services)
+    {
+        Life::SceneRenderer2D::RenderOptions options;
+        if (services.ProjectService && services.ProjectService->get().HasActiveProject())
+        {
+            options.EnableDepthTesting =
+                services.ProjectService->get().GetActiveProject().Descriptor.Dimension == Life::Assets::ProjectDimension::ThreeD;
+        }
+        return options;
+    }
+
     bool TransformChanged(const Life::TransformComponent& left, const Life::TransformComponent& right) noexcept
     {
         constexpr float epsilon = 0.0001f;
@@ -383,11 +412,41 @@ namespace
                                   const ViewportProjection& projection,
                                   const ImVec2& mousePosition)
     {
+        struct PickRank
+        {
+            std::size_t SortingLayerIndex = 0;
+            int32_t SortingOrder = 0;
+            float CameraDepth = -std::numeric_limits<float>::infinity();
+            std::size_t SubmissionIndex = 0;
+        };
+
+        const auto resolveSortingLayerPriority = [&scene](std::string_view sortingLayer) noexcept
+        {
+            const std::size_t resolvedIndex = scene.ResolveSpriteSortingLayerIndex(sortingLayer);
+            if (resolvedIndex != 0u || sortingLayer == "Default")
+                return resolvedIndex;
+
+            return scene.GetSpriteSortingLayers().size();
+        };
+
+        const auto isBetterPick = [](const PickRank& candidate, const PickRank& current) noexcept
+        {
+            if (candidate.SortingLayerIndex != current.SortingLayerIndex)
+                return candidate.SortingLayerIndex > current.SortingLayerIndex;
+            if (candidate.SortingOrder != current.SortingOrder)
+                return candidate.SortingOrder > current.SortingOrder;
+            if (candidate.CameraDepth != current.CameraDepth)
+                return candidate.CameraDepth > current.CameraDepth;
+            return candidate.SubmissionIndex > current.SubmissionIndex;
+        };
+
         Life::Entity bestEntity;
-        float bestDepth = -std::numeric_limits<float>::infinity();
+        PickRank bestRank;
+        std::size_t submissionIndex = 0;
 
         for (const Life::Entity entity : scene.GetEntities())
         {
+            const std::size_t currentSubmissionIndex = submissionIndex++;
             if (!entity.IsEnabled())
                 continue;
 
@@ -425,11 +484,19 @@ namespace
             if (!anyProjected || !ContainsPoint(minPoint, maxPoint, mousePosition))
                 continue;
 
-            const float depth = (camera.GetViewMatrix() * glm::vec4(center, 1.0f)).z;
-            if (!bestEntity.IsValid() || depth > bestDepth)
+            PickRank rank;
+            rank.CameraDepth = (camera.GetViewMatrix() * glm::vec4(center, 1.0f)).z;
+            rank.SubmissionIndex = currentSubmissionIndex;
+            if (const Life::SpriteRendererComponent* spriteRenderer = entity.TryGetComponent<Life::SpriteRendererComponent>())
             {
+                rank.SortingLayerIndex = resolveSortingLayerPriority(spriteRenderer->SortingLayer);
+                rank.SortingOrder = spriteRenderer->SortingOrder;
+            }
+
+            if (!bestEntity.IsValid() || isBetterPick(rank, bestRank))
+            {
+                bestRank = rank;
                 bestEntity = entity;
-                bestDepth = depth;
             }
         }
 
@@ -534,18 +601,9 @@ namespace
         }};
     }
 
-    bool IsScreenGridCamera(const Life::Camera& camera) noexcept
-    {
-        if (camera.GetProjectionType() != Life::ProjectionType::Orthographic)
-            return false;
-
-        const glm::vec3 forward = glm::normalize(camera.GetOrientation() * glm::vec3(0.0f, 0.0f, -1.0f));
-        const float zAlignment = std::abs(glm::dot(forward, glm::vec3(0.0f, 0.0f, -1.0f)));
-        return zAlignment > 0.92f;
-    }
-
     bool ShouldDrawScreenGrid(const EditorApp::EditorSceneState& sceneState, const Life::Camera& camera) noexcept
     {
+        (void)camera;
         switch (sceneState.GridMode)
         {
             case EditorApp::EditorViewportGridMode::Screen:
@@ -554,7 +612,7 @@ namespace
                 return false;
             case EditorApp::EditorViewportGridMode::Auto:
             default:
-                return IsScreenGridCamera(camera);
+                return sceneState.SceneViewMode == EditorApp::EditorSceneViewMode::TwoD;
         }
     }
 
@@ -863,6 +921,7 @@ namespace EditorApp
     void SceneViewportPanel::Detach() noexcept
     {
         SetCameraNavigationActive(false);
+        m_2DPanning = false;
         m_SceneSurface.reset();
         m_State = {};
         m_LastTimestep = 0.0f;
@@ -1029,9 +1088,88 @@ namespace EditorApp
         return m_State;
     }
 
-    void SceneViewportPanel::UpdateCameraNavigation(EditorCameraTool& cameraTool, Life::Camera& camera, bool viewportHovered, bool viewportFocused)
+    void SceneViewportPanel::UpdateCameraNavigation(EditorCameraTool& cameraTool,
+                                                    Life::Camera& camera,
+                                                    EditorSceneState& sceneState,
+                                                    bool viewportHovered,
+                                                    bool viewportFocused,
+                                                    float viewportScreenX,
+                                                    float viewportScreenY,
+                                                    float displayWidth,
+                                                    float displayHeight)
     {
 #if __has_include(<imgui.h>)
+        if (sceneState.SceneViewMode == EditorSceneViewMode::TwoD)
+        {
+            SetCameraNavigationActive(false);
+
+            const ImGuiIO& io = ImGui::GetIO();
+            const bool hasViewportInput = viewportFocused && (viewportHovered || m_2DPanning);
+            if (!hasViewportInput)
+            {
+                m_2DPanning = false;
+                return;
+            }
+
+            const ImVec2 viewportTopLeft(viewportScreenX, viewportScreenY);
+            const ImVec2 viewportSize(displayWidth, displayHeight);
+            const ImVec2 mousePosition = io.MousePos;
+            auto zoomAtMouse = [&](float zoomFactor)
+            {
+                if (!std::isfinite(zoomFactor) || zoomFactor <= 0.0f || std::abs(zoomFactor - 1.0f) <= 0.0001f)
+                    return;
+
+                const ViewportProjection beforeProjection = BuildViewportProjection(camera, viewportTopLeft, viewportSize);
+                glm::vec3 beforeWorld{ 0.0f };
+                const bool hasAnchor = ScreenToWorldOnZPlane(beforeProjection, mousePosition, 0.0f, beforeWorld);
+
+                cameraTool.Set2DOrthographicSize(camera, camera.GetOrthographicSize() * zoomFactor);
+
+                if (!hasAnchor)
+                    return;
+
+                const ViewportProjection afterProjection = BuildViewportProjection(camera, viewportTopLeft, viewportSize);
+                glm::vec3 afterWorld{ 0.0f };
+                if (ScreenToWorldOnZPlane(afterProjection, mousePosition, 0.0f, afterWorld))
+                    cameraTool.Pan2D(camera, glm::vec2(beforeWorld.x - afterWorld.x, beforeWorld.y - afterWorld.y));
+            };
+
+            if (viewportHovered && std::abs(io.MouseWheel) > 0.0001f)
+                zoomAtMouse(std::pow(0.85f, io.MouseWheel));
+
+            const bool middleDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
+            const bool ctrlDown = io.KeyCtrl;
+            if (middleDown && ctrlDown)
+            {
+                m_2DPanning = false;
+                if (std::abs(io.MouseDelta.y) > 0.0001f)
+                    zoomAtMouse(std::pow(1.01f, io.MouseDelta.y));
+                return;
+            }
+
+            if (viewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+            {
+                const ViewportProjection projection = BuildViewportProjection(camera, viewportTopLeft, viewportSize);
+                m_2DPanning = ScreenToWorldOnZPlane(projection, mousePosition, 0.0f, m_2DPanAnchorWorld);
+            }
+
+            if (!middleDown)
+            {
+                m_2DPanning = false;
+                return;
+            }
+
+            if (m_2DPanning)
+            {
+                const ViewportProjection projection = BuildViewportProjection(camera, viewportTopLeft, viewportSize);
+                glm::vec3 currentWorld{ 0.0f };
+                if (ScreenToWorldOnZPlane(projection, mousePosition, 0.0f, currentWorld))
+                    cameraTool.Pan2D(camera, glm::vec2(m_2DPanAnchorWorld.x - currentWorld.x, m_2DPanAnchorWorld.y - currentWorld.y));
+            }
+            return;
+        }
+
+        m_2DPanning = false;
         const bool activateNavigation = viewportFocused && ImGui::IsMouseDown(ImGuiMouseButton_Right) && (viewportHovered || m_CameraNavigationActive);
         SetCameraNavigationActive(activateNavigation);
         if (!m_CameraNavigationActive)
@@ -1047,8 +1185,13 @@ namespace EditorApp
 #else
         (void)cameraTool;
         (void)camera;
+        (void)sceneState;
         (void)viewportHovered;
         (void)viewportFocused;
+        (void)viewportScreenX;
+        (void)viewportScreenY;
+        (void)displayWidth;
+        (void)displayHeight;
 #endif
     }
 
@@ -1091,6 +1234,7 @@ namespace EditorApp
     {
         m_State.LastRenderSucceeded = false;
         m_State.ExecutionMode = sceneState.ExecutionMode;
+        m_State.SceneViewMode = sceneState.SceneViewMode;
         m_State.UsingEditorCamera = sceneState.ExecutionMode == EditorSceneExecutionMode::Edit;
         m_State.UsingSceneCamera = sceneState.ExecutionMode != EditorSceneExecutionMode::Edit;
         m_State.SurfaceReady = m_SceneSurface && m_SceneSurface->IsReady();
@@ -1147,7 +1291,17 @@ namespace EditorApp
 
             Life::Camera& camera = editorCamera->get();
             camera.SetAspectRatio(actualAspectRatio);
-            UpdateCameraNavigation(cameraTool, camera, viewportHovered, viewportFocused);
+            cameraTool.ApplySceneViewMode(camera, sceneState.SceneViewMode, actualAspectRatio);
+            UpdateCameraNavigation(
+                cameraTool,
+                camera,
+                sceneState,
+                viewportHovered,
+                viewportFocused,
+                viewportScreenX,
+                viewportScreenY,
+                displayWidth,
+                displayHeight);
             activeCamera = &camera;
         }
 
@@ -1173,15 +1327,21 @@ namespace EditorApp
                 }
             }
 
+            const Life::SceneRenderer2D::RenderOptions renderOptions = ResolveSceneRenderOptions(services);
             renderSucceeded = services.SceneRenderer2D->get().RenderToSurface(
                 *m_SceneSurface,
                 *effectiveScene,
-                *activeCamera);
+                *activeCamera,
+                Life::SceneRenderer2D::QuadSortMode::BackToFront,
+                renderOptions);
         }
         else
         {
             const Life::SceneRenderer2D::Scene2D emptyScene{ .Camera = activeCamera };
-            renderSucceeded = services.SceneRenderer2D->get().RenderToSurface(*m_SceneSurface, emptyScene);
+            renderSucceeded = services.SceneRenderer2D->get().RenderToSurface(
+                *m_SceneSurface,
+                emptyScene,
+                ResolveSceneRenderOptions(services));
         }
 
         if (!renderSucceeded)
@@ -1222,7 +1382,7 @@ namespace EditorApp
                     for (const glm::vec3& corner : corners)
                         radius = std::max(radius, glm::length(corner - center));
                 }
-                cameraTool.FrameBounds(*activeCamera, center, radius);
+                cameraTool.FrameBounds(*activeCamera, sceneState.SceneViewMode, center, radius);
             }
 
             if (ImGui::BeginDragDropTarget())
@@ -1282,6 +1442,7 @@ namespace EditorApp
                                 Life::Entity spriteEntity = effectiveScene->CreateEntity(relativePath.stem().string().empty() ? std::string("Sprite") : relativePath.stem().string());
                                 spriteEntity.GetComponent<Life::TransformComponent>().LocalPosition = worldPosition;
                                 Life::SpriteComponent& sprite = spriteEntity.AddComponent<Life::SpriteComponent>();
+                                spriteEntity.AddComponent<Life::SpriteRendererComponent>();
                                 sprite.TextureAssetKey = assetKey;
                                 if (services.AssetManager)
                                     sprite.TextureAsset = services.AssetManager->get().GetOrLoad<Life::Assets::TextureAsset>(assetKey);

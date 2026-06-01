@@ -230,6 +230,12 @@ TEST_CASE("Renderer and Renderer2D stay safe no-op services without live frame r
     Life::Renderer renderer(graphicsDevice);
     Life::Renderer2D renderer2D(renderer);
 
+    CHECK(renderer2D.IsDepthTestingEnabled());
+    renderer2D.SetDepthTestingEnabled(false);
+    CHECK_FALSE(renderer2D.IsDepthTestingEnabled());
+    renderer2D.SetDepthTestingEnabled(true);
+    CHECK(renderer2D.IsDepthTestingEnabled());
+
     CHECK(renderer.GetCurrentFramebuffer() == nullptr);
     CHECK(renderer.CreatePipeline({}) == nullptr);
 
@@ -272,7 +278,16 @@ TEST_CASE("SceneRenderer2D stays a safe no-op boundary without live frame resour
     quad.Color = { 1.0f, 0.0f, 0.0f, 1.0f };
     scene.Quads.push_back(quad);
 
+    renderer2D.SetDepthTestingEnabled(true);
     CHECK_FALSE(sceneRenderer.Render(scene));
+    CHECK(renderer2D.IsDepthTestingEnabled());
+
+    renderer2D.SetDepthTestingEnabled(false);
+    Life::SceneRenderer2D::RenderOptions depthEnabledOptions;
+    depthEnabledOptions.EnableDepthTesting = true;
+    CHECK_FALSE(sceneRenderer.Render(scene, depthEnabledOptions));
+    CHECK_FALSE(renderer2D.IsDepthTestingEnabled());
+
     CHECK(sceneRenderer.GetStats().DrawCalls == 0);
     CHECK(sceneRenderer.GetStats().QuadCount == 0);
 }

@@ -11,6 +11,7 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -335,6 +336,155 @@ namespace EditorApp
             return false;
         }
 
+        struct InspectorComponentClipboard
+        {
+            std::string ComponentId;
+            std::string DisplayName;
+            std::optional<Life::TransformComponent> Transform;
+            std::optional<Life::CameraComponent> Camera;
+            std::optional<Life::SpriteComponent> Sprite;
+            std::optional<Life::SpriteRendererComponent> SpriteRenderer;
+        };
+
+        InspectorComponentClipboard& GetComponentClipboard()
+        {
+            static InspectorComponentClipboard clipboard;
+            return clipboard;
+        }
+
+        bool CopyComponentValues(const EditorComponentDescriptor& descriptor, const Life::Entity& entity)
+        {
+            InspectorComponentClipboard clipboard;
+            clipboard.ComponentId = descriptor.Id;
+            clipboard.DisplayName = descriptor.DisplayName;
+
+            if (descriptor.Id == "transform")
+                clipboard.Transform = entity.GetComponent<Life::TransformComponent>();
+            else if (descriptor.Id == "camera")
+                clipboard.Camera = entity.GetComponent<Life::CameraComponent>();
+            else if (descriptor.Id == "sprite")
+                clipboard.Sprite = entity.GetComponent<Life::SpriteComponent>();
+            else if (descriptor.Id == "spriteRenderer")
+                clipboard.SpriteRenderer = entity.GetComponent<Life::SpriteRendererComponent>();
+            else
+                return false;
+
+            GetComponentClipboard() = std::move(clipboard);
+            return true;
+        }
+
+        bool CanPasteComponentValues(const EditorComponentDescriptor& descriptor)
+        {
+            const InspectorComponentClipboard& clipboard = GetComponentClipboard();
+            return !clipboard.ComponentId.empty() && clipboard.ComponentId == descriptor.Id;
+        }
+
+        bool PasteComponentValues(const EditorComponentDescriptor& descriptor, Life::Entity& entity)
+        {
+            const InspectorComponentClipboard& clipboard = GetComponentClipboard();
+            if (clipboard.ComponentId != descriptor.Id)
+                return false;
+
+            if (descriptor.Id == "transform" && clipboard.Transform.has_value())
+            {
+                entity.GetComponent<Life::TransformComponent>() = *clipboard.Transform;
+                return true;
+            }
+
+            if (descriptor.Id == "camera" && clipboard.Camera.has_value())
+            {
+                Life::CameraComponent& camera = entity.GetComponent<Life::CameraComponent>();
+                camera = *clipboard.Camera;
+                if (camera.Primary)
+                {
+                    for (Life::Entity other : entity.GetScene().GetEntities())
+                    {
+                        if (other == entity)
+                            continue;
+
+                        if (Life::CameraComponent* otherCamera = other.TryGetComponent<Life::CameraComponent>())
+                            otherCamera->Primary = false;
+                    }
+                }
+                entity.GetScene().EnsureAtLeastOneCamera();
+                return true;
+            }
+
+            if (descriptor.Id == "sprite" && clipboard.Sprite.has_value())
+            {
+                entity.GetComponent<Life::SpriteComponent>() = *clipboard.Sprite;
+                return true;
+            }
+
+            if (descriptor.Id == "spriteRenderer" && clipboard.SpriteRenderer.has_value())
+            {
+                Life::SpriteRendererComponent& spriteRenderer = entity.GetComponent<Life::SpriteRendererComponent>();
+                spriteRenderer = *clipboard.SpriteRenderer;
+                if (spriteRenderer.SortingLayer != "Default" &&
+                    entity.GetScene().ResolveSpriteSortingLayerIndex(spriteRenderer.SortingLayer) == 0u)
+                {
+                    entity.GetScene().AddSpriteSortingLayer(spriteRenderer.SortingLayer);
+                }
+                return true;
+            }
+
+            return false;
+        }
+
+        bool DrawComponentActionsMenu(const EditorComponentDescriptor& descriptor,
+                                      Life::Entity& entity,
+                                      bool& removeRequested)
+        {
+            bool changed = false;
+            removeRequested = false;
+
+            constexpr float kActionButtonRightPadding = 8.0f;
+            constexpr float kActionButtonWidth = 38.0f;
+            const float headerHeight = ImGui::GetFrameHeight();
+            const float buttonHeight = std::max(1.0f, headerHeight - 6.0f);
+
+            ImGui::SameLine();
+            ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - kActionButtonWidth - kActionButtonRightPadding);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (headerHeight - buttonHeight) * 0.5f);
+            if (ImGui::Button("##ComponentActionsButton", ImVec2(kActionButtonWidth, buttonHeight)))
+                ImGui::OpenPopup("ComponentActions");
+
+            const ImVec2 buttonMin = ImGui::GetItemRectMin();
+            const ImVec2 buttonMax = ImGui::GetItemRectMax();
+            const ImU32 dotColor = ImGui::GetColorU32(ImGuiCol_Text);
+            const float centerY = (buttonMin.y + buttonMax.y) * 0.5f;
+            const float centerX = (buttonMin.x + buttonMax.x) * 0.5f;
+            const float dotSpacing = 5.0f;
+            for (int dot = -1; dot <= 1; ++dot)
+                ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(centerX + dotSpacing * static_cast<float>(dot), centerY), 1.25f, dotColor);
+
+            if (ImGui::BeginPopup("ComponentActions"))
+            {
+                if (ImGui::Selectable("Copy Component"))
+                    CopyComponentValues(descriptor, entity);
+
+                const bool canPaste = CanPasteComponentValues(descriptor);
+                ImGui::BeginDisabled(!canPaste);
+                if (ImGui::Selectable("Paste Component Values") && canPaste)
+                    changed |= PasteComponentValues(descriptor, entity);
+                ImGui::EndDisabled();
+
+                if (descriptor.Removable)
+                {
+                    ImGui::Separator();
+                    if (ImGui::Selectable("Remove Component"))
+                    {
+                        removeRequested = true;
+                        changed |= descriptor.RemoveComponent(entity);
+                    }
+                }
+
+                ImGui::EndPopup();
+            }
+
+            return changed;
+        }
+
         void RenderSelectedEntityInspector(Life::Scene& scene,
                                            Life::SceneService& sceneService,
                                            Life::Entity selectedEntity,
@@ -428,35 +578,37 @@ namespace EditorApp
 
                                 ImGui::PushID(descriptor.Id.c_str());
                                 const std::string headerLabel = descriptor.DisplayName + "##" + descriptor.Id;
-                                const bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
-                                if (!open)
+                                const bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+                                bool removeRequested = false;
+                                changed |= DrawComponentActionsMenu(descriptor, selectedEntity, removeRequested);
+                                if (removeRequested)
                                 {
                                     ImGui::PopID();
                                     continue;
                                 }
 
-                                if (descriptor.Removable)
+                                if (open && descriptor.DrawInspector)
                                 {
-                                    if (ImGui::Button("Remove"))
-                                    {
-                                        changed |= descriptor.RemoveComponent(selectedEntity);
-                                        ImGui::PopID();
-                                        continue;
-                                    }
-
+                                    constexpr float kComponentBodyPadding = 8.0f;
+                                    ImGui::Indent(kComponentBodyPadding);
                                     ImGui::Spacing();
+                                    changed |= descriptor.DrawInspector(selectedEntity, services);
+                                    ImGui::Unindent(kComponentBodyPadding);
                                 }
 
-                                if (descriptor.DrawInspector)
-                                    changed |= descriptor.DrawInspector(selectedEntity, services);
-
-                                ImGui::Separator();
+                                if (open)
+                                {
+                                    ImGui::Spacing();
+                                    ImGui::Separator();
+                                }
                                 ImGui::PopID();
                             }
                         }
                         ImGui::EndChild();
 
                         ImGui::SeparatorText("Add Component");
+                        constexpr float kInspectorFooterPadding = 8.0f;
+                        ImGui::Indent(kInspectorFooterPadding);
                         if (hasAddableComponents)
                         {
                             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.33f, 0.54f, 1.0f));
@@ -486,6 +638,7 @@ namespace EditorApp
                         {
                             ImGui::TextDisabled("No additional components available.");
                         }
+                        ImGui::Unindent(kInspectorFooterPadding);
 
                         const bool editActive = ImGui::IsAnyItemActive();
                         if (changed && editActive)

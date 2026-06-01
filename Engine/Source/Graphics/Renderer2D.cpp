@@ -107,6 +107,7 @@ namespace Life
         }
 
         batching.ResetQueuedDraws();
+        m_Impl->SubmittedQuadCount = 0;
         m_Impl->SceneActive = true;
     }
 
@@ -126,6 +127,16 @@ namespace Life
 
         Detail::Renderer2DSubmission submission(*this);
         submission.SubmitQueuedDraws();
+    }
+
+    void Renderer2D::SetDepthTestingEnabled(bool enabled) noexcept
+    {
+        m_Impl->DepthTestingEnabled = enabled;
+    }
+
+    bool Renderer2D::IsDepthTestingEnabled() const noexcept
+    {
+        return m_Impl->DepthTestingEnabled;
     }
 
     void Renderer2D::DrawQuad(const glm::vec2& position, const glm::vec2& size, const glm::vec4& color)

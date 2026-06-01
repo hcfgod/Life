@@ -48,6 +48,7 @@ namespace EditorApp
         std::vector<RecentProjectEntry> m_RecentProjects;
         std::string m_CreateProjectName;
         std::string m_CreateProjectRoot;
+        Life::Assets::ProjectDimension m_CreateProjectDimension = Life::Assets::ProjectDimension::TwoD;
         std::string m_OpenProjectPath;
         std::string m_StatusMessage;
         bool m_StatusIsError = false;

@@ -42,6 +42,21 @@ namespace EditorApp
             value = buffer.data();
             return true;
         }
+
+        void DrawProjectDimensionButton(const char* label,
+                                        Life::Assets::ProjectDimension value,
+                                        Life::Assets::ProjectDimension& selected)
+        {
+            const bool isSelected = selected == value;
+            if (isSelected)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+
+            if (ImGui::Button(label, ImVec2(52.0f, 0.0f)))
+                selected = value;
+
+            if (isSelected)
+                ImGui::PopStyleColor();
+        }
 #endif
     }
 
@@ -213,6 +228,7 @@ namespace EditorApp
         Life::Assets::ProjectCreateOptions options;
         options.Name = m_CreateProjectName;
         options.RootDirectory = std::filesystem::path(m_CreateProjectRoot) / m_CreateProjectName;
+        options.Dimension = m_CreateProjectDimension;
 
         const auto createResult = projectService.CreateProject(options, true);
         if (createResult.IsFailure())
@@ -304,11 +320,15 @@ namespace EditorApp
     void EditorProjectHub::RenderCreateProjectCard(Life::Assets::ProjectService& projectService, bool& didEnterWorkspace)
     {
 #if __has_include(<imgui.h>)
-        ImGui::BeginChild("CreateProjectCard", ImVec2(0.0f, 240.0f), true);
+        ImGui::BeginChild("CreateProjectCard", ImVec2(0.0f, 270.0f), true);
         ImGui::TextUnformatted("Create Project");
         ImGui::Separator();
         InputTextString("Project Name", m_CreateProjectName);
         InputTextString("Projects Root", m_CreateProjectRoot);
+        ImGui::TextUnformatted("Project Type");
+        DrawProjectDimensionButton("2D", Life::Assets::ProjectDimension::TwoD, m_CreateProjectDimension);
+        ImGui::SameLine();
+        DrawProjectDimensionButton("3D", Life::Assets::ProjectDimension::ThreeD, m_CreateProjectDimension);
 
         const bool canCreate = !m_CreateProjectName.empty() && !m_CreateProjectRoot.empty();
         if (!canCreate)

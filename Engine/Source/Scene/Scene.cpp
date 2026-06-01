@@ -448,8 +448,11 @@ namespace Life
         *it = name;
         for (Entity entity : GetEntities())
         {
-            if (SpriteComponent* sprite = entity.TryGetComponent<SpriteComponent>(); sprite != nullptr && sprite->SortingLayer == previousName)
-                sprite->SortingLayer = name;
+            if (SpriteRendererComponent* spriteRenderer = entity.TryGetComponent<SpriteRendererComponent>();
+                spriteRenderer != nullptr && spriteRenderer->SortingLayer == previousName)
+            {
+                spriteRenderer->SortingLayer = name;
+            }
         }
         return true;
     }
@@ -466,8 +469,11 @@ namespace Life
         m_SpriteSortingLayers.erase(it);
         for (Entity entity : GetEntities())
         {
-            if (SpriteComponent* sprite = entity.TryGetComponent<SpriteComponent>(); sprite != nullptr && sprite->SortingLayer == name)
-                sprite->SortingLayer = "Default";
+            if (SpriteRendererComponent* spriteRenderer = entity.TryGetComponent<SpriteRendererComponent>();
+                spriteRenderer != nullptr && spriteRenderer->SortingLayer == name)
+            {
+                spriteRenderer->SortingLayer = "Default";
+            }
         }
         return true;
     }
@@ -515,10 +521,10 @@ namespace Life
         m_SpriteSortingLayers = std::move(sanitizedLayers);
         for (Entity entity : GetEntities())
         {
-            if (SpriteComponent* sprite = entity.TryGetComponent<SpriteComponent>(); sprite != nullptr)
+            if (SpriteRendererComponent* spriteRenderer = entity.TryGetComponent<SpriteRendererComponent>())
             {
-                if (std::find(m_SpriteSortingLayers.begin(), m_SpriteSortingLayers.end(), sprite->SortingLayer) == m_SpriteSortingLayers.end())
-                    sprite->SortingLayer = "Default";
+                if (std::find(m_SpriteSortingLayers.begin(), m_SpriteSortingLayers.end(), spriteRenderer->SortingLayer) == m_SpriteSortingLayers.end())
+                    spriteRenderer->SortingLayer = "Default";
             }
         }
     }
@@ -698,6 +704,7 @@ namespace Life
         auto clone = CreateScope<Scene>(m_Name);
         clone->SetSourcePath(m_SourcePath);
         clone->SetState(m_State);
+        clone->SetSpriteSortingLayers(m_SpriteSortingLayers);
 
         std::function<void(Entity, Entity)> cloneEntityRecursive;
         cloneEntityRecursive = [&](Entity sourceEntity, Entity destinationParent)
@@ -714,6 +721,8 @@ namespace Life
                 destinationEntity.AddComponent<CameraComponent>(*camera);
             if (const SpriteComponent* sprite = sourceEntity.TryGetComponent<SpriteComponent>())
                 destinationEntity.AddComponent<SpriteComponent>(*sprite);
+            if (const SpriteRendererComponent* spriteRenderer = sourceEntity.TryGetComponent<SpriteRendererComponent>())
+                destinationEntity.AddComponent<SpriteRendererComponent>(*spriteRenderer);
 
             for (const Entity child : sourceEntity.GetChildren())
                 cloneEntityRecursive(child, destinationEntity);

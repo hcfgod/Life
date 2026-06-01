@@ -56,8 +56,11 @@ namespace Life::Detail
         if (resolvedTexture == nullptr)
             return;
 
-        if (m_Renderer2D.m_Impl->QueuedQuadCount >= Renderer2DMaxQuads)
+        if (m_Renderer2D.m_Impl->SubmittedQuadCount + m_Renderer2D.m_Impl->QueuedQuadCount >= Renderer2DMaxQuads)
             m_Renderer2D.Flush();
+
+        if (m_Renderer2D.m_Impl->SubmittedQuadCount + m_Renderer2D.m_Impl->QueuedQuadCount >= Renderer2DMaxQuads)
+            return;
 
         if (m_Renderer2D.m_Impl->Batches.empty() ||
             m_Renderer2D.m_Impl->Batches.back().Texture != resolvedTexture ||

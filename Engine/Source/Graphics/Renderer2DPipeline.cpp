@@ -62,7 +62,7 @@ namespace Life::Detail
         if (currentFramebuffer == nullptr)
             return false;
 
-        const bool useDepth = m_Renderer2D.m_Renderer.GetDepthRenderTarget() != nullptr;
+        const bool useDepth = m_Renderer2D.m_Impl->DepthTestingEnabled && m_Renderer2D.m_Renderer.GetDepthRenderTarget() != nullptr;
 
         const auto ensurePipeline =
             [this, currentFramebuffer, useDepth](

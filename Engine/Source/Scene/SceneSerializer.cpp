@@ -24,6 +24,7 @@ namespace Life
         constexpr const char* kTransformField = "transform";
         constexpr const char* kCameraField = "camera";
         constexpr const char* kSpriteField = "sprite";
+        constexpr const char* kSpriteRendererField = "spriteRenderer";
         constexpr const char* kPositionField = "position";
         constexpr const char* kRotationField = "rotation";
         constexpr const char* kScaleField = "scale";
@@ -246,9 +247,15 @@ namespace Life
                 record[kSpriteField] = {
                     { kSizeField, ToJson(sprite->Size) },
                     { kColorField, ToJson(sprite->Color) },
-                    { kSortingLayerField, sprite->SortingLayer },
-                    { kSortingOrderField, sprite->SortingOrder },
                     { kTextureAssetKeyField, sprite->TextureAssetKey }
+                };
+            }
+
+            if (const SpriteRendererComponent* spriteRenderer = entity.TryGetComponent<SpriteRendererComponent>())
+            {
+                record[kSpriteRendererField] = {
+                    { kSortingLayerField, spriteRenderer->SortingLayer },
+                    { kSortingOrderField, spriteRenderer->SortingOrder }
                 };
             }
 
@@ -381,22 +388,46 @@ namespace Life
                     if (record.contains(kSpriteField) && record[kSpriteField].is_object())
                     {
                         SpriteComponent sprite;
+                        SpriteRendererComponent spriteRenderer;
                         const nlohmann::json& spriteJson = record[kSpriteField];
                         if (spriteJson.contains(kSizeField))
                             sprite.Size = ReadVec2(spriteJson[kSizeField], sprite.Size);
                         if (spriteJson.contains(kColorField))
                             sprite.Color = ReadVec4(spriteJson[kColorField], sprite.Color);
                         if (spriteJson.contains(kSortingLayerField) && spriteJson[kSortingLayerField].is_string())
-                            sprite.SortingLayer = spriteJson[kSortingLayerField].get<std::string>();
+                            spriteRenderer.SortingLayer = spriteJson[kSortingLayerField].get<std::string>();
                         if (spriteJson.contains(kSortingOrderField) && spriteJson[kSortingOrderField].is_number_integer())
-                            sprite.SortingOrder = spriteJson[kSortingOrderField].get<int32_t>();
-                        if (scene->ResolveSpriteSortingLayerIndex(sprite.SortingLayer) == 0 && sprite.SortingLayer != "Default")
-                            sprite.SortingLayer = "Default";
+                            spriteRenderer.SortingOrder = spriteJson[kSortingOrderField].get<int32_t>();
                         if (spriteJson.contains(kTextureAssetKeyField) && spriteJson[kTextureAssetKeyField].is_string())
                             sprite.TextureAssetKey = spriteJson[kTextureAssetKeyField].get<std::string>();
                         if (!sprite.TextureAssetKey.empty() && assetManager != nullptr)
                             sprite.TextureAsset = assetManager->GetOrLoad<Assets::TextureAsset>(sprite.TextureAssetKey);
                         entity.AddComponent<SpriteComponent>(std::move(sprite));
+
+                        if (record.contains(kSpriteRendererField) && record[kSpriteRendererField].is_object())
+                        {
+                            const nlohmann::json& spriteRendererJson = record[kSpriteRendererField];
+                            if (spriteRendererJson.contains(kSortingLayerField) && spriteRendererJson[kSortingLayerField].is_string())
+                                spriteRenderer.SortingLayer = spriteRendererJson[kSortingLayerField].get<std::string>();
+                            if (spriteRendererJson.contains(kSortingOrderField) && spriteRendererJson[kSortingOrderField].is_number_integer())
+                                spriteRenderer.SortingOrder = spriteRendererJson[kSortingOrderField].get<int32_t>();
+                        }
+
+                        if (scene->ResolveSpriteSortingLayerIndex(spriteRenderer.SortingLayer) == 0 && spriteRenderer.SortingLayer != "Default")
+                            spriteRenderer.SortingLayer = "Default";
+                        entity.AddComponent<SpriteRendererComponent>(std::move(spriteRenderer));
+                    }
+                    else if (record.contains(kSpriteRendererField) && record[kSpriteRendererField].is_object())
+                    {
+                        SpriteRendererComponent spriteRenderer;
+                        const nlohmann::json& spriteRendererJson = record[kSpriteRendererField];
+                        if (spriteRendererJson.contains(kSortingLayerField) && spriteRendererJson[kSortingLayerField].is_string())
+                            spriteRenderer.SortingLayer = spriteRendererJson[kSortingLayerField].get<std::string>();
+                        if (spriteRendererJson.contains(kSortingOrderField) && spriteRendererJson[kSortingOrderField].is_number_integer())
+                            spriteRenderer.SortingOrder = spriteRendererJson[kSortingOrderField].get<int32_t>();
+                        if (scene->ResolveSpriteSortingLayerIndex(spriteRenderer.SortingLayer) == 0 && spriteRenderer.SortingLayer != "Default")
+                            spriteRenderer.SortingLayer = "Default";
+                        entity.AddComponent<SpriteRendererComponent>(std::move(spriteRenderer));
                     }
 
                     entitiesById[entity.GetId()] = entity;

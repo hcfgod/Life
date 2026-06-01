@@ -31,6 +31,8 @@ namespace EditorApp
                 entity.AddComponent<Life::CameraComponent>(*snapshot.Camera);
             if (snapshot.Sprite.has_value())
                 entity.AddComponent<Life::SpriteComponent>(*snapshot.Sprite);
+            if (snapshot.SpriteRenderer.has_value())
+                entity.AddComponent<Life::SpriteRendererComponent>(*snapshot.SpriteRenderer);
 
             if (parent.IsValid())
                 (void)entity.SetParent(parent);
@@ -101,6 +103,8 @@ namespace EditorApp
             snapshot.Camera = *camera;
         if (const Life::SpriteComponent* sprite = entity.TryGetComponent<Life::SpriteComponent>())
             snapshot.Sprite = *sprite;
+        if (const Life::SpriteRendererComponent* spriteRenderer = entity.TryGetComponent<Life::SpriteRendererComponent>())
+            snapshot.SpriteRenderer = *spriteRenderer;
 
         for (const Life::Entity child : entity.GetChildren())
             snapshot.Children.push_back(CaptureEntitySnapshot(child));

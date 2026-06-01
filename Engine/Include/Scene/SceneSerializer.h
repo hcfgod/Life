@@ -14,7 +14,7 @@ namespace Life
         class AssetManager;
     }
 
-    inline constexpr uint32_t SceneFileCurrentVersion = 2;
+    inline constexpr uint32_t SceneFileCurrentVersion = 3;
 
     class SceneSerializer final
     {

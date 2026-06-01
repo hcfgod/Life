@@ -7,9 +7,15 @@
 
 namespace Life::Assets
 {
-    inline constexpr uint32_t ProjectDescriptorCurrentVersion = 1;
+    inline constexpr uint32_t ProjectDescriptorCurrentVersion = 2;
     inline constexpr std::string_view ProjectDescriptorFileExtension = ".lifeproject";
     inline constexpr std::string_view ProjectDefaultEngineVersion = "0.1.0";
+
+    enum class ProjectDimension : uint8_t
+    {
+        TwoD = 0,
+        ThreeD
+    };
 
     struct ProjectDescriptorPaths
     {
@@ -27,6 +33,7 @@ namespace Life::Assets
         uint32_t Version = ProjectDescriptorCurrentVersion;
         std::string Name;
         std::string EngineVersion = std::string(ProjectDefaultEngineVersion);
+        ProjectDimension Dimension = ProjectDimension::TwoD;
         ProjectDescriptorPaths Paths;
         ProjectDescriptorStartup Startup;
     };
@@ -50,6 +57,7 @@ namespace Life::Assets
         std::filesystem::path RootDirectory;
         std::string Name;
         std::string EngineVersion = std::string(ProjectDefaultEngineVersion);
+        ProjectDimension Dimension = ProjectDimension::TwoD;
         std::string DescriptorFileName;
         std::string AssetsDirectory = "Assets";
         std::string SettingsDirectory = "Settings";

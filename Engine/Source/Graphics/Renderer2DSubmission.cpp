@@ -44,8 +44,14 @@ namespace Life::Detail
             return;
         }
 
+        const uint32_t uploadInstanceOffset = m_Renderer2D.m_Impl->SubmittedQuadCount;
         const uint32_t instanceDataSize = static_cast<uint32_t>(m_Renderer2D.m_Impl->Instances.size() * sizeof(Renderer2DQuadInstanceData));
-        if (!m_Renderer2D.m_Impl->ActiveInstanceBuffer->SetData(m_Renderer2D.m_Renderer.GetGraphicsDevice(), m_Renderer2D.m_Impl->Instances.data(), instanceDataSize))
+        const uint32_t instanceDataOffset = uploadInstanceOffset * static_cast<uint32_t>(sizeof(Renderer2DQuadInstanceData));
+        if (!m_Renderer2D.m_Impl->ActiveInstanceBuffer->SetData(
+            m_Renderer2D.m_Renderer.GetGraphicsDevice(),
+            m_Renderer2D.m_Impl->Instances.data(),
+            instanceDataSize,
+            instanceDataOffset))
         {
             LOG_CORE_ERROR("Renderer2D failed to upload queued instance data.");
             Renderer2DResources resources(m_Renderer2D);
@@ -64,7 +70,7 @@ namespace Life::Detail
             DrawParameters drawParameters;
             drawParameters.VertexCount = Renderer2DStaticQuadVertexCount;
             drawParameters.InstanceCount = batch.InstanceCount;
-            drawParameters.InstanceOffset = batch.InstanceOffset;
+            drawParameters.InstanceOffset = uploadInstanceOffset + batch.InstanceOffset;
 
             RenderCommand::Draw(m_Renderer2D.m_Renderer,
                                 *pipeline,
@@ -79,6 +85,7 @@ namespace Life::Detail
 
         m_Renderer2D.m_Impl->Stats.DrawCalls += static_cast<uint32_t>(m_Renderer2D.m_Impl->Batches.size());
         m_Renderer2D.m_Impl->Stats.QuadCount += m_Renderer2D.m_Impl->QueuedQuadCount;
+        m_Renderer2D.m_Impl->SubmittedQuadCount += m_Renderer2D.m_Impl->QueuedQuadCount;
 
         Renderer2DBatching batching(m_Renderer2D);
         batching.ResetQueuedDraws();

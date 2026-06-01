@@ -20,6 +20,38 @@ namespace Life
             const glm::vec4 viewPosition = scene.Camera->GetViewMatrix() * glm::vec4(quad.Position, 1.0f);
             return viewPosition.z;
         }
+
+        std::size_t ResolveSortingLayerPriority(const Scene& scene, std::string_view sortingLayer) noexcept
+        {
+            const std::size_t resolvedIndex = scene.ResolveSpriteSortingLayerIndex(sortingLayer);
+            if (resolvedIndex != 0u || sortingLayer == "Default")
+                return resolvedIndex;
+
+            return scene.GetSpriteSortingLayers().size();
+        }
+
+        class ScopedRenderer2DDepthTesting final
+        {
+        public:
+            ScopedRenderer2DDepthTesting(Renderer2D& renderer2D, bool enabled) noexcept
+                : m_Renderer2D(renderer2D)
+                , m_PreviousEnabled(renderer2D.IsDepthTestingEnabled())
+            {
+                m_Renderer2D.SetDepthTestingEnabled(enabled);
+            }
+
+            ~ScopedRenderer2DDepthTesting() noexcept
+            {
+                m_Renderer2D.SetDepthTestingEnabled(m_PreviousEnabled);
+            }
+
+            ScopedRenderer2DDepthTesting(const ScopedRenderer2DDepthTesting&) = delete;
+            ScopedRenderer2DDepthTesting& operator=(const ScopedRenderer2DDepthTesting&) = delete;
+
+        private:
+            Renderer2D& m_Renderer2D;
+            bool m_PreviousEnabled = true;
+        };
     }
 
     SceneRenderer2D::SceneRenderer2D(Renderer2D& renderer2D)
@@ -27,11 +59,12 @@ namespace Life
     {
     }
 
-    bool SceneRenderer2D::Render(const Scene2D& scene)
+    bool SceneRenderer2D::Render(const Scene2D& scene, const RenderOptions& options)
     {
         if (scene.Camera == nullptr)
             return false;
 
+        ScopedRenderer2DDepthTesting depthTesting(m_Renderer2D, options.EnableDepthTesting);
         m_Renderer2D.BeginScene(*scene.Camera);
         if (!m_Renderer2D.IsSceneActive())
             return false;
@@ -41,16 +74,17 @@ namespace Life
         return true;
     }
 
-    bool SceneRenderer2D::Render(const Scene& scene, const Camera& camera, QuadSortMode sortMode)
+    bool SceneRenderer2D::Render(const Scene& scene, const Camera& camera, QuadSortMode sortMode, const RenderOptions& options)
     {
-        return Render(BuildScene2D(scene, camera, sortMode));
+        return Render(BuildScene2D(scene, camera, sortMode), options);
     }
 
-    bool SceneRenderer2D::RenderToSurface(SceneSurface& surface, const Scene2D& scene)
+    bool SceneRenderer2D::RenderToSurface(SceneSurface& surface, const Scene2D& scene, const RenderOptions& options)
     {
         if (scene.Camera == nullptr)
             return false;
 
+        ScopedRenderer2DDepthTesting depthTesting(surface.GetRenderer2D(), options.EnableDepthTesting);
         if (!surface.BeginScene2D(*scene.Camera))
             return false;
 
@@ -59,9 +93,13 @@ namespace Life
         return true;
     }
 
-    bool SceneRenderer2D::RenderToSurface(SceneSurface& surface, const Scene& scene, const Camera& camera, QuadSortMode sortMode)
+    bool SceneRenderer2D::RenderToSurface(SceneSurface& surface,
+                                          const Scene& scene,
+                                          const Camera& camera,
+                                          QuadSortMode sortMode,
+                                          const RenderOptions& options)
     {
-        return RenderToSurface(surface, BuildScene2D(scene, camera, sortMode));
+        return RenderToSurface(surface, BuildScene2D(scene, camera, sortMode), options);
     }
 
     SceneRenderer2D::Scene2D SceneRenderer2D::BuildScene2D(const Scene& scene, const Camera& camera, QuadSortMode sortMode)
@@ -86,8 +124,11 @@ namespace Life
             quad.XAxis = glm::vec3(worldTransform * glm::vec4(sprite.Size.x, 0.0f, 0.0f, 0.0f));
             quad.YAxis = glm::vec3(worldTransform * glm::vec4(0.0f, sprite.Size.y, 0.0f, 0.0f));
             quad.Color = sprite.Color;
-            quad.SortingLayerIndex = scene.ResolveSpriteSortingLayerIndex(sprite.SortingLayer);
-            quad.SortingOrder = sprite.SortingOrder;
+            if (const SpriteRendererComponent* spriteRenderer = entity.TryGetComponent<SpriteRendererComponent>())
+            {
+                quad.SortingLayerIndex = ResolveSortingLayerPriority(scene, spriteRenderer->SortingLayer);
+                quad.SortingOrder = spriteRenderer->SortingOrder;
+            }
             quad.RotationRadians = transform.LocalRotation.z;
             quad.UseExplicitAxes = true;
             quad.TextureAsset = sprite.TextureAsset.get();
@@ -138,8 +179,9 @@ namespace Life
     void SceneRenderer2D::SubmitScene(Renderer2D& renderer2D, const Scene2D& scene)
     {
         const std::vector<const QuadCommand*> orderedQuads = BuildSubmissionOrder(scene);
-        for (const QuadCommand* quad : orderedQuads)
+        for (size_t index = 0; index < orderedQuads.size(); ++index)
         {
+            const QuadCommand* quad = orderedQuads[index];
             if (quad->UseExplicitAxes)
             {
                 if (quad->TextureAsset != nullptr)
@@ -167,6 +209,9 @@ namespace Life
             {
                 renderer2D.DrawRotatedQuad(quad->Position, quad->Size, quad->RotationRadians, quad->Color);
             }
+
+            if (index + 1u < orderedQuads.size())
+                renderer2D.Flush();
         }
     }
 }

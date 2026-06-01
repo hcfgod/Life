@@ -26,6 +26,7 @@ namespace EditorApp
         Life::TransformComponent Transform;
         std::optional<Life::CameraComponent> Camera;
         std::optional<Life::SpriteComponent> Sprite;
+        std::optional<Life::SpriteRendererComponent> SpriteRenderer;
         std::vector<EditorEntitySnapshot> Children;
     };
 

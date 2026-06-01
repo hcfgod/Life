@@ -30,6 +30,12 @@ namespace EditorApp
         Screen
     };
 
+    enum class EditorSceneViewMode
+    {
+        TwoD = 0,
+        ThreeD
+    };
+
     struct EditorSceneState
     {
         void SelectEntity(const Life::Entity& entity)
@@ -142,6 +148,7 @@ namespace EditorApp
         bool Paused = false;
         bool StepSingleFrame = false;
         bool SupportsRuntimeTicks = false;
+        EditorSceneViewMode SceneViewMode = EditorSceneViewMode::TwoD;
         EditorViewportTool ViewportTool = EditorViewportTool::Translate;
         EditorTransformSpace TransformSpace = EditorTransformSpace::Local;
         bool SnapEnabled = false;

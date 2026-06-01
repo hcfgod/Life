@@ -16,6 +16,7 @@ namespace EditorApp
         bool UsingEditorCamera = true;
         bool UsingSceneCamera = false;
         EditorSceneExecutionMode ExecutionMode = EditorSceneExecutionMode::Edit;
+        EditorSceneViewMode SceneViewMode = EditorSceneViewMode::TwoD;
         uint32_t SurfaceWidth = 0;
         uint32_t SurfaceHeight = 0;
         uint32_t RequestedRenderWidth = 0;
@@ -45,7 +46,15 @@ namespace EditorApp
         const SceneViewportState& GetState() const noexcept;
 
     private:
-        void UpdateCameraNavigation(EditorCameraTool& cameraTool, Life::Camera& camera, bool viewportHovered, bool viewportFocused);
+        void UpdateCameraNavigation(EditorCameraTool& cameraTool,
+                                    Life::Camera& camera,
+                                    EditorSceneState& sceneState,
+                                    bool viewportHovered,
+                                    bool viewportFocused,
+                                    float viewportScreenX,
+                                    float viewportScreenY,
+                                    float displayWidth,
+                                    float displayHeight);
         void SetCameraNavigationActive(bool active) noexcept;
         bool RenderSceneSurface(uint32_t renderWidth,
                                 uint32_t renderHeight,
@@ -65,6 +74,8 @@ namespace EditorApp
         SceneViewportState m_State;
         void* m_NativeWindowHandle = nullptr;
         bool m_CameraNavigationActive = false;
+        bool m_2DPanning = false;
+        glm::vec3 m_2DPanAnchorWorld{ 0.0f };
         bool m_GizmoManipulating = false;
         std::string m_GizmoEntityId;
         Life::TransformComponent m_GizmoTransformBefore{};

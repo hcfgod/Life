@@ -46,6 +46,8 @@ namespace Life
         void BeginScene(const glm::mat4& viewProjection);
         void EndScene();
         void Flush();
+        void SetDepthTestingEnabled(bool enabled) noexcept;
+        bool IsDepthTestingEnabled() const noexcept;
 
         void DrawQuad(const glm::vec2& position, const glm::vec2& size, const glm::vec4& color);
         void DrawQuad(const glm::vec3& position, const glm::vec2& size, const glm::vec4& color);

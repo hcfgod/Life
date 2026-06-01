@@ -1,5 +1,7 @@
 #include "TestSupport.h"
 
+#include <nlohmann/json.hpp>
+
 #include <random>
 
 namespace
@@ -48,12 +50,14 @@ TEST_CASE("ProjectSerializer creates and loads project descriptors")
     Life::Assets::ProjectCreateOptions options;
     options.RootDirectory = projectRoot;
     options.Name = "SerializerProject";
+    options.Dimension = Life::Assets::ProjectDimension::ThreeD;
     options.StartupScene = "Assets/Scenes/Bootstrap.scene";
 
     const auto createResult = Life::Assets::ProjectSerializer::CreateOnDisk(options);
     REQUIRE(createResult.IsSuccess());
 
     const Life::Assets::Project& project = createResult.GetValue();
+    CHECK(project.Descriptor.Dimension == Life::Assets::ProjectDimension::ThreeD);
     CHECK(project.Paths.RootDirectory == std::filesystem::absolute(projectRoot).lexically_normal());
     CHECK(project.Paths.DescriptorPath.filename() == "SerializerProject.lifeproject");
     CHECK(project.Paths.AssetsDirectory == project.Paths.RootDirectory / "Assets");
@@ -67,8 +71,58 @@ TEST_CASE("ProjectSerializer creates and loads project descriptors")
 
     const Life::Assets::Project& loadedProject = loadResult.GetValue();
     CHECK(loadedProject.Descriptor.Name == "SerializerProject");
+    CHECK(loadedProject.Descriptor.Version == Life::Assets::ProjectDescriptorCurrentVersion);
+    CHECK(loadedProject.Descriptor.Dimension == Life::Assets::ProjectDimension::ThreeD);
     CHECK(loadedProject.Descriptor.Startup.Scene == "Assets/Scenes/Bootstrap.scene");
     CHECK(loadedProject.Paths.DescriptorPath == project.Paths.DescriptorPath);
+
+    std::ifstream descriptorStream(project.Paths.DescriptorPath);
+    REQUIRE(descriptorStream.is_open());
+    nlohmann::json descriptorJson;
+    descriptorStream >> descriptorJson;
+    CHECK(descriptorJson["version"].get<uint32_t>() == Life::Assets::ProjectDescriptorCurrentVersion);
+    CHECK(descriptorJson["dimension"].get<std::string>() == "3D");
+}
+
+TEST_CASE("ProjectSerializer migrates version one project descriptors to 2D")
+{
+    const std::filesystem::path projectRoot = MakeUniqueTestDirectory("life-project-migration");
+    TemporaryDirectoryScope cleanup(projectRoot);
+    std::filesystem::create_directories(projectRoot);
+
+    const std::filesystem::path descriptorPath = projectRoot / "Legacy.lifeproject";
+    {
+        std::ofstream descriptorStream(descriptorPath, std::ios::out | std::ios::binary | std::ios::trunc);
+        REQUIRE(descriptorStream.is_open());
+        descriptorStream << R"({
+    "version": 1,
+    "name": "Legacy",
+    "engineVersion": "0.1.0",
+    "paths": {
+        "assets": "Assets",
+        "settings": "Settings"
+    },
+    "startup": {
+        "scene": ""
+    }
+})";
+    }
+
+    const auto loadResult = Life::Assets::ProjectSerializer::Load(descriptorPath);
+    REQUIRE(loadResult.IsSuccess());
+    Life::Assets::Project migratedProject = loadResult.GetValue();
+    CHECK(migratedProject.Descriptor.Version == Life::Assets::ProjectDescriptorCurrentVersion);
+    CHECK(migratedProject.Descriptor.Dimension == Life::Assets::ProjectDimension::TwoD);
+
+    const auto saveResult = Life::Assets::ProjectSerializer::Save(migratedProject);
+    REQUIRE(saveResult.IsSuccess());
+
+    std::ifstream descriptorStream(descriptorPath);
+    REQUIRE(descriptorStream.is_open());
+    nlohmann::json descriptorJson;
+    descriptorStream >> descriptorJson;
+    CHECK(descriptorJson["version"].get<uint32_t>() == Life::Assets::ProjectDescriptorCurrentVersion);
+    CHECK(descriptorJson["dimension"].get<std::string>() == "2D");
 }
 
 TEST_CASE("ProjectService creates, saves, opens, and closes active projects")
@@ -94,6 +148,7 @@ TEST_CASE("ProjectService creates, saves, opens, and closes active projects")
     CHECK(projectService.HasActiveProject());
     REQUIRE(projectService.TryGetActiveProject() != nullptr);
     CHECK(projectService.GetActiveProject().Descriptor.Name == "GameplayProject");
+    CHECK(projectService.GetActiveProject().Descriptor.Dimension == Life::Assets::ProjectDimension::TwoD);
     CHECK(Life::Assets::TryGetActiveProjectRootDirectory().has_value());
     CHECK(Life::Assets::TryGetActiveProjectRootDirectory().value() == projectService.GetActiveProject().Paths.RootDirectory);
 

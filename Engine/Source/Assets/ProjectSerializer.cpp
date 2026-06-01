@@ -14,6 +14,7 @@ namespace Life::Assets
     {
         constexpr std::string_view kPathsField = "paths";
         constexpr std::string_view kStartupField = "startup";
+        constexpr std::string_view kDimensionField = "dimension";
 
         std::string Trim(std::string value)
         {
@@ -92,12 +93,43 @@ namespace Life::Assets
             return absolutePath.lexically_normal();
         }
 
+        std::string_view ProjectDimensionToString(ProjectDimension dimension) noexcept
+        {
+            switch (dimension)
+            {
+                case ProjectDimension::ThreeD:
+                    return "3D";
+                case ProjectDimension::TwoD:
+                default:
+                    return "2D";
+            }
+        }
+
+        Result<ProjectDimension> ProjectDimensionFromJson(const nlohmann::json& value)
+        {
+            if (!value.is_string())
+            {
+                return Result<ProjectDimension>(ErrorCode::FileCorrupted,
+                                                "Project descriptor dimension must be a string");
+            }
+
+            const std::string dimension = value.get<std::string>();
+            if (dimension == "2D")
+                return ProjectDimension::TwoD;
+            if (dimension == "3D")
+                return ProjectDimension::ThreeD;
+
+            return Result<ProjectDimension>(ErrorCode::FileCorrupted,
+                                            "Project descriptor dimension must be either 2D or 3D");
+        }
+
         nlohmann::json ToJson(const ProjectDescriptor& descriptor)
         {
             nlohmann::json root;
             root["version"] = descriptor.Version;
             root["name"] = descriptor.Name;
             root["engineVersion"] = descriptor.EngineVersion;
+            root[std::string(kDimensionField)] = std::string(ProjectDimensionToString(descriptor.Dimension));
             root[std::string(kPathsField)] = {
                 { "assets", descriptor.Paths.Assets },
                 { "settings", descriptor.Paths.Settings }
@@ -117,14 +149,28 @@ namespace Life::Assets
             }
 
             ProjectDescriptor descriptor;
+            uint32_t fileVersion = ProjectDescriptorCurrentVersion;
             if (root.contains("version") && root["version"].is_number_unsigned())
-                descriptor.Version = root["version"].get<uint32_t>();
+                fileVersion = root["version"].get<uint32_t>();
+
+            descriptor.Version = fileVersion <= ProjectDescriptorCurrentVersion && fileVersion >= 1u
+                ? ProjectDescriptorCurrentVersion
+                : fileVersion;
 
             if (root.contains("name") && root["name"].is_string())
                 descriptor.Name = root["name"].get<std::string>();
 
             if (root.contains("engineVersion") && root["engineVersion"].is_string())
                 descriptor.EngineVersion = root["engineVersion"].get<std::string>();
+
+            if (root.contains(std::string(kDimensionField)))
+            {
+                auto dimensionResult = ProjectDimensionFromJson(root[std::string(kDimensionField)]);
+                if (dimensionResult.IsFailure())
+                    return Result<ProjectDescriptor>(dimensionResult.GetError());
+
+                descriptor.Dimension = dimensionResult.GetValue();
+            }
 
             if (root.contains(std::string(kPathsField)) && root[std::string(kPathsField)].is_object())
             {
@@ -290,6 +336,8 @@ namespace Life::Assets
         project.Descriptor.EngineVersion = Trim(options.EngineVersion);
         if (project.Descriptor.EngineVersion.empty())
             project.Descriptor.EngineVersion = std::string(ProjectDefaultEngineVersion);
+
+        project.Descriptor.Dimension = options.Dimension;
 
         project.Descriptor.Paths.Assets = Trim(options.AssetsDirectory);
         if (project.Descriptor.Paths.Assets.empty())

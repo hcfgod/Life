@@ -28,6 +28,7 @@ namespace RuntimeApp
 
         nlohmann::json m_StartupConfig;
         Life::OptionalRef<Life::InputSystem> m_InputSystem;
+        Life::OptionalRef<Life::Assets::ProjectService> m_ProjectService;
         Life::OptionalRef<Life::CameraManager> m_CameraManager;
         Life::OptionalRef<Life::SceneService> m_SceneService;
         Life::OptionalRef<Life::SceneRenderer2D> m_SceneRenderer2D;

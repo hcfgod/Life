@@ -44,7 +44,7 @@ namespace Life::Detail
     bool Renderer2DResources::ValidateResourceState() const noexcept
     {
         nvrhi::IFramebuffer* currentFramebuffer = m_Renderer2D.m_Renderer.GetCurrentFramebuffer();
-        const bool useDepth = m_Renderer2D.m_Renderer.GetDepthRenderTarget() != nullptr;
+        const bool useDepth = m_Renderer2D.m_Impl->DepthTestingEnabled && m_Renderer2D.m_Renderer.GetDepthRenderTarget() != nullptr;
 
         return m_Renderer2D.m_Impl->QuadVertexBuffer != nullptr &&
                m_Renderer2D.m_Impl->QuadVertexBuffer->IsValid() &&
@@ -210,6 +210,7 @@ namespace Life::Detail
         m_Renderer2D.m_Impl->OpaquePipelineUsesDepth = false;
         m_Renderer2D.m_Impl->TransparentPipelineUsesDepth = false;
         m_Renderer2D.m_Impl->ActiveBufferVersion = Renderer2DBufferVersionCount - 1u;
+        m_Renderer2D.m_Impl->SubmittedQuadCount = 0;
         m_Renderer2D.m_Impl->VertexShader = nullptr;
         m_Renderer2D.m_Impl->PixelShader = nullptr;
     }

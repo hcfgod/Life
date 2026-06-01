@@ -78,9 +78,11 @@ namespace Life
         bool OpaquePipelineUsesDepth = false;
         bool TransparentPipelineUsesDepth = false;
         uint32_t ActiveBufferVersion = Detail::Renderer2DBufferVersionCount - 1u;
+        uint32_t SubmittedQuadCount = 0;
         uint32_t QueuedQuadCount = 0;
         bool ResourcesReady = false;
         bool ReportedInitializationFailure = false;
         bool SceneActive = false;
+        bool DepthTestingEnabled = true;
     };
 }

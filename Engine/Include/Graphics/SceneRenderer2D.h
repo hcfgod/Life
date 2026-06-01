@@ -58,15 +58,27 @@ namespace Life
             }
         };
 
+        struct RenderOptions
+        {
+            bool EnableDepthTesting = false;
+        };
+
         explicit SceneRenderer2D(Renderer2D& renderer2D);
 
         SceneRenderer2D(const SceneRenderer2D&) = delete;
         SceneRenderer2D& operator=(const SceneRenderer2D&) = delete;
 
-        bool Render(const Scene2D& scene);
-        bool Render(const Scene& scene, const Camera& camera, QuadSortMode sortMode = QuadSortMode::BackToFront);
-        bool RenderToSurface(SceneSurface& surface, const Scene2D& scene);
-        bool RenderToSurface(SceneSurface& surface, const Scene& scene, const Camera& camera, QuadSortMode sortMode = QuadSortMode::BackToFront);
+        bool Render(const Scene2D& scene, const RenderOptions& options = {});
+        bool Render(const Scene& scene,
+                    const Camera& camera,
+                    QuadSortMode sortMode = QuadSortMode::BackToFront,
+                    const RenderOptions& options = {});
+        bool RenderToSurface(SceneSurface& surface, const Scene2D& scene, const RenderOptions& options = {});
+        bool RenderToSurface(SceneSurface& surface,
+                             const Scene& scene,
+                             const Camera& camera,
+                             QuadSortMode sortMode = QuadSortMode::BackToFront,
+                             const RenderOptions& options = {});
         static std::vector<const QuadCommand*> BuildSubmissionOrder(const Scene2D& scene);
 
         Renderer2D& GetRenderer2D() noexcept { return m_Renderer2D; }

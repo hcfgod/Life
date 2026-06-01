@@ -274,6 +274,55 @@ namespace EditorApp
                 return changed;
             }
 
+            bool DrawSortingLayerOrder(Life::Scene& scene, const std::string& selectedLayer)
+            {
+                constexpr const char* kSortingLayerDragPayload = "LIFE_SORTING_LAYER";
+                const std::vector<std::string> layers = scene.GetSpriteSortingLayers();
+                if (layers.empty())
+                    return false;
+
+                bool changed = false;
+                const float visibleRows = static_cast<float>(std::min<std::size_t>(layers.size(), 5u));
+                const float listHeight = visibleRows * ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().WindowPadding.y;
+                if (ImGui::BeginChild("##SortingLayerOrderList", ImVec2(0.0f, listHeight), ImGuiChildFlags_Borders))
+                {
+                    for (std::size_t index = 0; index < layers.size(); ++index)
+                    {
+                        const std::string& layer = layers[index];
+                        const bool selected = layer == selectedLayer;
+                        ImGui::PushID(static_cast<int>(index));
+
+                        const std::string label = std::to_string(index) + "  " + layer;
+                        ImGui::Selectable(label.c_str(), selected);
+
+                        if (index > 0u && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+                        {
+                            ImGui::SetDragDropPayload(kSortingLayerDragPayload, &index, sizeof(index));
+                            ImGui::TextUnformatted(layer.c_str());
+                            ImGui::EndDragDropSource();
+                        }
+
+                        if (index > 0u && ImGui::BeginDragDropTarget())
+                        {
+                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kSortingLayerDragPayload))
+                            {
+                                if (payload->DataSize == sizeof(std::size_t))
+                                {
+                                    const std::size_t sourceIndex = *static_cast<const std::size_t*>(payload->Data);
+                                    if (sourceIndex > 0u && sourceIndex < layers.size() && sourceIndex != index)
+                                        changed |= scene.MoveSpriteSortingLayer(layers[sourceIndex], index);
+                                }
+                            }
+                            ImGui::EndDragDropTarget();
+                        }
+
+                        ImGui::PopID();
+                    }
+                }
+                ImGui::EndChild();
+                return changed;
+            }
+
             const char* ResolveClearModeLabel(Life::CameraClearMode clearMode) noexcept
             {
                 switch (clearMode)
@@ -436,6 +485,8 @@ namespace EditorApp
             {
                 if (!entity.HasComponent<Life::SpriteComponent>())
                     entity.AddComponent<Life::SpriteComponent>();
+                if (!entity.HasComponent<Life::SpriteRendererComponent>())
+                    entity.AddComponent<Life::SpriteRendererComponent>();
             };
             descriptor.RemoveComponent = [](Life::Entity& entity)
             {
@@ -463,20 +514,57 @@ namespace EditorApp
                 if (!sprite.TextureAssetKey.empty() && services.AssetManager && !sprite.TextureAsset)
                     sprite.TextureAsset = services.AssetManager->get().GetOrLoad<Life::Assets::TextureAsset>(sprite.TextureAssetKey);
 
-                ImGui::Spacing();
+                return changed;
+#else
+                (void)entity;
+                (void)services;
+                return false;
+#endif
+            };
+            return descriptor;
+        }
+
+        EditorComponentDescriptor MakeSpriteRendererDescriptor()
+        {
+            EditorComponentDescriptor descriptor;
+            descriptor.Id = "spriteRenderer";
+            descriptor.DisplayName = "Sprite Renderer";
+            descriptor.Removable = true;
+            descriptor.HasComponent = [](const Life::Entity& entity) { return entity.HasComponent<Life::SpriteRendererComponent>(); };
+            descriptor.CanAddComponent = [](const Life::Entity& entity) { return !entity.HasComponent<Life::SpriteRendererComponent>(); };
+            descriptor.AddComponent = [](Life::Entity& entity)
+            {
+                if (!entity.HasComponent<Life::SpriteRendererComponent>())
+                    entity.AddComponent<Life::SpriteRendererComponent>();
+            };
+            descriptor.RemoveComponent = [](Life::Entity& entity)
+            {
+                return entity.RemoveComponent<Life::SpriteRendererComponent>();
+            };
+            descriptor.DrawInspector = [](Life::Entity& entity, const EditorServices&) -> bool
+            {
+#if __has_include(<imgui.h>)
+                bool changed = false;
+                Life::SpriteRendererComponent& spriteRenderer = entity.GetComponent<Life::SpriteRendererComponent>();
+                Life::Scene& scene = entity.GetScene();
+                if (spriteRenderer.SortingLayer != "Default" &&
+                    std::find(scene.GetSpriteSortingLayers().begin(), scene.GetSpriteSortingLayers().end(), spriteRenderer.SortingLayer) == scene.GetSpriteSortingLayers().end())
+                {
+                    changed |= scene.AddSpriteSortingLayer(spriteRenderer.SortingLayer);
+                }
+
                 changed |= DrawLeftLabelRow("SortingLayerRow", "Layer", [&]()
                     {
                         bool layerChanged = false;
-                        Life::Scene& scene = entity.GetScene();
                         const auto& layers = scene.GetSpriteSortingLayers();
-                        if (ImGui::BeginCombo("##Value", sprite.SortingLayer.c_str()))
+                        if (ImGui::BeginCombo("##Value", spriteRenderer.SortingLayer.c_str()))
                         {
                             for (const std::string& layer : layers)
                             {
-                                const bool selected = sprite.SortingLayer == layer;
+                                const bool selected = spriteRenderer.SortingLayer == layer;
                                 if (ImGui::Selectable(layer.c_str(), selected) && !selected)
                                 {
-                                    sprite.SortingLayer = layer;
+                                    spriteRenderer.SortingLayer = layer;
                                     layerChanged = true;
                                 }
                                 if (selected)
@@ -488,8 +576,12 @@ namespace EditorApp
                     });
                 changed |= DrawLeftLabelRow("SortingOrderRow", "Order", [&]()
                     {
-                        return ImGui::DragInt("##Value", &sprite.SortingOrder, 1.0f);
+                        return ImGui::DragInt("##Value", &spriteRenderer.SortingOrder, 1.0f);
                     });
+
+                ImGui::TextUnformatted("Layer Order");
+                changed |= DrawSortingLayerOrder(scene, spriteRenderer.SortingLayer);
+                ImGui::Spacing();
 
                 static std::string newSortingLayerName = "Foreground";
                 if (DrawStackedTextField("New Sorting Layer", "##NewSortingLayer", newSortingLayerName))
@@ -499,7 +591,7 @@ namespace EditorApp
                 {
                     if (entity.GetScene().AddSpriteSortingLayer(newSortingLayerName))
                     {
-                        sprite.SortingLayer = newSortingLayerName;
+                        spriteRenderer.SortingLayer = newSortingLayerName;
                         changed = true;
                     }
                 }
@@ -507,7 +599,6 @@ namespace EditorApp
                 return changed;
 #else
                 (void)entity;
-                (void)services;
                 return false;
 #endif
             };
@@ -627,6 +718,7 @@ namespace EditorApp
             Register(MakeTransformDescriptor());
             Register(MakeCameraDescriptor());
             Register(MakeSpriteDescriptor());
+            Register(MakeSpriteRendererDescriptor());
         }
 
     void EditorComponentRegistry::Register(EditorComponentDescriptor descriptor)
