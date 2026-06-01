@@ -444,7 +444,7 @@ namespace Life
         if (std::find(m_SpriteSortingLayers.begin(), m_SpriteSortingLayers.end(), name) != m_SpriteSortingLayers.end())
             return false;
 
-        const std::string previousName = *it;
+        std::string previousName = *it;
         *it = name;
         for (Entity entity : GetEntities())
         {
@@ -508,7 +508,7 @@ namespace Life
     void Scene::SetSpriteSortingLayers(std::vector<std::string> layers)
     {
         std::vector<std::string> sanitizedLayers;
-        sanitizedLayers.push_back("Default");
+        sanitizedLayers.emplace_back("Default");
         for (std::string& layer : layers)
         {
             layer = SanitizeSortingLayerName(layer);

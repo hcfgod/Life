@@ -127,6 +127,11 @@ namespace Life::Tests
             return VSyncEnabled;
         }
 
+        bool IsDeviceLost() const override
+        {
+            return DeviceLost;
+        }
+
         void RequestVSync(bool enabled) override
         {
             ++RequestVSyncCallCount;
@@ -156,6 +161,7 @@ namespace Life::Tests
         int ResizeCallCount = 0;
         bool BeginFrameResult = false;
         bool FrameActive = false;
+        bool DeviceLost = false;
         bool VSyncEnabled = false;
     };
 

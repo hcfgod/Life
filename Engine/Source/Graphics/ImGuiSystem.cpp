@@ -272,7 +272,15 @@ namespace Life
             }
         }
 
-        m_Impl->RendererBackend->RenderDrawData(drawData);
+        try
+        {
+            m_Impl->RendererBackend->RenderDrawData(drawData);
+        }
+        catch (...)
+        {
+            m_FrameActive = false;
+            throw;
+        }
         m_FrameActive = false;
 #endif
     }

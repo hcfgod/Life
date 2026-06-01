@@ -23,6 +23,8 @@ namespace Life
             void RunLayerRenderPhase(bool frameStarted);
             void RunImGuiRenderPhase(bool frameStarted);
             void RunPresentPhase(bool frameStarted) noexcept;
+            bool HasLostGraphicsDevice() const noexcept;
+            void StopAfterGraphicsDeviceLoss() noexcept;
 
         private:
             ApplicationHost& m_Host;

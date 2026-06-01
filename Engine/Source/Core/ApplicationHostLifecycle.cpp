@@ -93,11 +93,25 @@ namespace Life
             }
             catch (const std::exception& exception)
             {
-                LOG_CORE_ERROR("Failed to clear layers during initialization cleanup: {}", exception.what());
+                try
+                {
+                    LOG_CORE_ERROR("Failed to clear layers during initialization cleanup: {}", exception.what());
+                }
+                catch (...)
+                {
+                    // Cleanup logging is best-effort; this function must not throw.
+                }
             }
             catch (...)
             {
-                LOG_CORE_ERROR("Failed to clear layers during initialization cleanup due to an unknown exception.");
+                try
+                {
+                    LOG_CORE_ERROR("Failed to clear layers during initialization cleanup due to an unknown exception.");
+                }
+                catch (...)
+                {
+                    // Cleanup logging is best-effort; this function must not throw.
+                }
             }
         }
     }

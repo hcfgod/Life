@@ -382,7 +382,7 @@ namespace Life
                             camera.ClearColor = ReadVec4(cameraJson[kClearColorField], camera.ClearColor);
                         if (cameraJson.contains(kViewportField))
                             camera.ViewportRect = ViewportFromJson(cameraJson[kViewportField], camera.ViewportRect);
-                        entity.AddComponent<CameraComponent>(std::move(camera));
+                        entity.AddComponent<CameraComponent>(camera);
                     }
 
                     if (record.contains(kSpriteField) && record[kSpriteField].is_object())

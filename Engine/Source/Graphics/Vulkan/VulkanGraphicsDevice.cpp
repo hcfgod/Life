@@ -8,6 +8,7 @@
 #include <nvrhi/utils.h>
 
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <string_view>
 
@@ -20,11 +21,23 @@ namespace Life
 
     namespace
     {
+        std::atomic_bool g_NvrhiReportedDeviceRemoved = false;
+
+        bool IsFatalVulkanDeviceResult(VkResult result) noexcept
+        {
+            return result == VK_ERROR_DEVICE_LOST ||
+                   result == VK_ERROR_OUT_OF_DEVICE_MEMORY ||
+                   result == VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+
         class NvrhiMessageCallback final : public nvrhi::IMessageCallback
         {
         public:
             void message(nvrhi::MessageSeverity severity, const char* messageText) override
             {
+                if (messageText != nullptr && std::string_view(messageText).find("Device Removed") != std::string_view::npos)
+                    g_NvrhiReportedDeviceRemoved.store(true, std::memory_order_relaxed);
+
                 switch (severity)
                 {
                 case nvrhi::MessageSeverity::Info:
@@ -116,6 +129,7 @@ namespace Life
     VulkanGraphicsDevice::VulkanGraphicsDevice(const GraphicsDeviceSpecification& spec, Window& window)
         : m_VSync(spec.VSync)
     {
+        g_NvrhiReportedDeviceRemoved.store(false, std::memory_order_relaxed);
         EnsureVulkanDispatchLoaderLinked();
 
         if (!Platform::VulkanInterop::WindowSupportsVulkan(window))
@@ -142,7 +156,7 @@ namespace Life
 
     VulkanGraphicsDevice::~VulkanGraphicsDevice()
     {
-        if (m_Device != VK_NULL_HANDLE)
+        if (m_Device != VK_NULL_HANDLE && !IsDeviceLost())
             vkDeviceWaitIdle(m_Device);
 
         m_CommandList = nullptr;
@@ -502,16 +516,24 @@ namespace Life
     {
         m_FrameActive = false;
 
-        if (m_Device == VK_NULL_HANDLE || m_Swapchain == VK_NULL_HANDLE)
+        if (IsDeviceLost() || m_Device == VK_NULL_HANDLE || m_Swapchain == VK_NULL_HANDLE)
             return false;
 
         if (m_SwapchainWidth == 0 || m_SwapchainHeight == 0 || m_SwapchainImages.empty())
             return false;
 
-        vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
+        const VkResult fenceResult = vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
+        if (fenceResult != VK_SUCCESS)
+        {
+            MarkDeviceLost(fenceResult, "wait for frame fence");
+            return false;
+        }
 
         if (m_NvrhiDevice)
             m_NvrhiDevice->runGarbageCollection();
+
+        if (IsDeviceLost())
+            return false;
 
         VkResult result = vkAcquireNextImageKHR(
             m_Device, m_Swapchain, UINT64_MAX,
@@ -529,11 +551,17 @@ namespace Life
 
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         {
+            MarkDeviceLost(result, "acquire swapchain image");
             LOG_CORE_ERROR("Failed to acquire swapchain image: {}", nvrhi::vulkan::resultToString(result));
             return false;
         }
 
-        vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
+        const VkResult resetFenceResult = vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
+        if (resetFenceResult != VK_SUCCESS)
+        {
+            MarkDeviceLost(resetFenceResult, "reset frame fence");
+            return false;
+        }
 
         m_NvrhiDevice->queueWaitForSemaphore(
             nvrhi::CommandQueue::Graphics,
@@ -547,8 +575,17 @@ namespace Life
 
     void VulkanGraphicsDevice::Present()
     {
+        if (IsDeviceLost() || !m_FrameActive)
+            return;
+
         m_CommandList->close();
         m_NvrhiDevice->executeCommandList(m_CommandList);
+
+        if (IsDeviceLost())
+        {
+            m_FrameActive = false;
+            return;
+        }
 
         m_NvrhiDevice->queueSignalSemaphore(
             nvrhi::CommandQueue::Graphics,
@@ -556,7 +593,19 @@ namespace Life
 
         m_NvrhiDevice->executeCommandLists(nullptr, 0);
 
-        vkQueueSubmit(m_GraphicsQueue, 0, nullptr, m_InFlightFences[m_CurrentFrame]);
+        if (IsDeviceLost())
+        {
+            m_FrameActive = false;
+            return;
+        }
+
+        const VkResult submitResult = vkQueueSubmit(m_GraphicsQueue, 0, nullptr, m_InFlightFences[m_CurrentFrame]);
+        if (submitResult != VK_SUCCESS)
+        {
+            MarkDeviceLost(submitResult, "submit frame fence");
+            m_FrameActive = false;
+            return;
+        }
 
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -573,6 +622,7 @@ namespace Life
         }
         else if (result != VK_SUCCESS)
         {
+            MarkDeviceLost(result, "present swapchain image");
             LOG_CORE_ERROR("Failed to present swapchain image: {}", nvrhi::vulkan::resultToString(result));
         }
 
@@ -589,7 +639,7 @@ namespace Life
 
     nvrhi::ITexture* VulkanGraphicsDevice::GetCurrentBackBuffer()
     {
-        if (m_FrameActive && m_CurrentImageIndex < m_NvrhiSwapchainTextures.size())
+        if (!IsDeviceLost() && m_FrameActive && m_CurrentImageIndex < m_NvrhiSwapchainTextures.size())
             return m_NvrhiSwapchainTextures[m_CurrentImageIndex].Get();
 
         return nullptr;
@@ -602,7 +652,12 @@ namespace Life
 
     nvrhi::ICommandList* VulkanGraphicsDevice::GetCurrentCommandList()
     {
-        return m_FrameActive ? m_CommandList.Get() : nullptr;
+        return !IsDeviceLost() && m_FrameActive ? m_CommandList.Get() : nullptr;
+    }
+
+    bool VulkanGraphicsDevice::IsDeviceLost() const
+    {
+        return m_DeviceLost || g_NvrhiReportedDeviceRemoved.load(std::memory_order_relaxed);
     }
 
     void VulkanGraphicsDevice::RequestVSync(bool enabled)
@@ -623,6 +678,9 @@ namespace Life
 
     void VulkanGraphicsDevice::RecreateSwapchain()
     {
+        if (IsDeviceLost())
+            return;
+
         vkDeviceWaitIdle(m_Device);
 
         m_FrameActive = false;
@@ -640,6 +698,9 @@ namespace Life
 
     void VulkanGraphicsDevice::Resize(uint32_t width, uint32_t height)
     {
+        if (IsDeviceLost())
+            return;
+
         if (width == 0 || height == 0)
             return;
 
@@ -648,5 +709,23 @@ namespace Life
 
         LOG_CORE_INFO("Vulkan swapchain resize requested from {}x{} to {}x{}.", m_SwapchainWidth, m_SwapchainHeight, width, height);
         RecreateSwapchain();
+    }
+
+    void VulkanGraphicsDevice::MarkDeviceLost(VkResult result, const char* operation) noexcept
+    {
+        if (!IsFatalVulkanDeviceResult(result))
+            return;
+
+        if (!m_DeviceLost)
+        {
+            m_DeviceLost = true;
+            try
+            {
+                LOG_CORE_CRITICAL("Vulkan device lost during {}: {}", operation, nvrhi::vulkan::resultToString(result));
+            }
+            catch (...)
+            {
+            }
+        }
     }
 }

@@ -9,6 +9,8 @@
 
 #include <algorithm>
 #include <array>
+#include <stdexcept>
+#include <string>
 #include <unordered_map>
 
 #if LIFE_HAS_IMGUI_VULKAN
@@ -28,6 +30,7 @@ namespace Life::Detail
                 return;
 
             LOG_CORE_ERROR("ImGui Vulkan backend reported VkResult {}.", static_cast<int>(result));
+            throw std::runtime_error("ImGui Vulkan backend failed with VkResult " + std::to_string(static_cast<int>(result)));
         }
     }
 
@@ -234,6 +237,9 @@ namespace Life::Detail
         if (drawData == nullptr || drawData->CmdListsCount == 0)
             return;
 
+        if (m_GraphicsDevice.IsDeviceLost())
+            return;
+
         if (drawData->DisplaySize.x <= 0.0f || drawData->DisplaySize.y <= 0.0f)
             return;
 
@@ -244,6 +250,8 @@ namespace Life::Detail
 
         commandList->setTextureState(backBuffer, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
         commandList->commitBarriers();
+        if (m_GraphicsDevice.IsDeviceLost())
+            return;
 
         VkCommandBuffer vkCommandBuffer = commandList->getNativeObject(nvrhi::ObjectTypes::VK_CommandBuffer);
         if (vkCommandBuffer == VK_NULL_HANDLE)
@@ -274,8 +282,18 @@ namespace Life::Detail
         renderingInfo.pColorAttachments = &colorAttachmentInfo;
 
         vkCmdBeginRendering(vkCommandBuffer, &renderingInfo);
-        ImGui_ImplVulkan_RenderDrawData(drawData, vkCommandBuffer);
+        try
+        {
+            ImGui_ImplVulkan_RenderDrawData(drawData, vkCommandBuffer);
+        }
+        catch (...)
+        {
+            vkCmdEndRendering(vkCommandBuffer);
+            throw;
+        }
         vkCmdEndRendering(vkCommandBuffer);
+        if (m_GraphicsDevice.IsDeviceLost())
+            return;
 
         commandList->setTextureState(backBuffer, nvrhi::AllSubresources, nvrhi::ResourceStates::Present);
         commandList->commitBarriers();

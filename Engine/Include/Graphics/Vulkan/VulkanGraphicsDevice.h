@@ -28,6 +28,7 @@ namespace Life
         uint32_t GetBackBufferHeight() const override { return m_SwapchainHeight; }
         GraphicsBackend GetBackend() const override { return GraphicsBackend::Vulkan; }
         bool IsVSyncEnabled() const override { return m_VSync; }
+        bool IsDeviceLost() const override;
 
         void RequestVSync(bool enabled) override;
 
@@ -56,6 +57,7 @@ namespace Life
         void CreateNvrhiDevice();
         void CreateSwapchainImages();
         void CreateCommandList();
+        void MarkDeviceLost(VkResult result, const char* operation) noexcept;
 
         VkInstance m_Instance = VK_NULL_HANDLE;
         VkDebugUtilsMessengerEXT m_DebugMessenger = VK_NULL_HANDLE;
@@ -85,6 +87,7 @@ namespace Life
         std::vector<VkFence> m_InFlightFences;
         uint32_t m_CurrentFrame = 0;
         bool m_FrameActive = false;
+        bool m_DeviceLost = false;
         bool m_SwapchainRecreationPending = false;
         static constexpr uint32_t MaxFramesInFlight = 2;
 
