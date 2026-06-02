@@ -9,6 +9,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstdio>
 #include <cstring>
 #include <string_view>
 
@@ -28,6 +29,13 @@ namespace Life
             return result == VK_ERROR_DEVICE_LOST ||
                    result == VK_ERROR_OUT_OF_DEVICE_MEMORY ||
                    result == VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+
+        void ReportSuppressedLoggingFailure(const char* message) noexcept
+        {
+            (void)std::fputs(message, stderr);
+            (void)std::fputc('\n', stderr);
+            std::fflush(stderr);
         }
 
         class NvrhiMessageCallback final : public nvrhi::IMessageCallback
@@ -725,6 +733,7 @@ namespace Life
             }
             catch (...)
             {
+                ReportSuppressedLoggingFailure("Failed to report Vulkan device loss.");
             }
         }
     }

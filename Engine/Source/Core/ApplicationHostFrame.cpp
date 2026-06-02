@@ -6,12 +6,20 @@
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/ImGuiSystem.h"
 
+#include <cstdio>
 #include <exception>
 
 namespace Life
 {
     namespace
     {
+        void ReportSuppressedLoggingFailure(const char* message) noexcept
+        {
+            (void)std::fputs(message, stderr);
+            (void)std::fputc('\n', stderr);
+            std::fflush(stderr);
+        }
+
         struct InputFrameFinalizer final
         {
             explicit InputFrameFinalizer(InputSystem& inputSystem)
@@ -158,6 +166,7 @@ namespace Life
                 }
                 catch (...)
                 {
+                    ReportSuppressedLoggingFailure("Failed to report present exception.");
                 }
                 m_Host.m_Running = false;
             }
@@ -179,6 +188,7 @@ namespace Life
             }
             catch (...)
             {
+                ReportSuppressedLoggingFailure("Failed to report graphics device loss.");
             }
             m_Host.m_Running = false;
         }

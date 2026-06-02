@@ -4,10 +4,21 @@
 
 #include "Graphics/ImGuiSystem.h"
 
+#include <cstdio>
 #include <exception>
 
 namespace Life
 {
+    namespace
+    {
+        void ReportSuppressedLoggingFailure(const char* message) noexcept
+        {
+            (void)std::fputs(message, stderr);
+            (void)std::fputc('\n', stderr);
+            std::fflush(stderr);
+        }
+    }
+
     namespace Detail
     {
         ApplicationHostLifecycleController::ApplicationHostLifecycleController(ApplicationHost& host)
@@ -99,7 +110,7 @@ namespace Life
                 }
                 catch (...)
                 {
-                    // Cleanup logging is best-effort; this function must not throw.
+                    ReportSuppressedLoggingFailure("Failed to report layer cleanup exception.");
                 }
             }
             catch (...)
@@ -110,7 +121,7 @@ namespace Life
                 }
                 catch (...)
                 {
-                    // Cleanup logging is best-effort; this function must not throw.
+                    ReportSuppressedLoggingFailure("Failed to report unknown layer cleanup exception.");
                 }
             }
         }
