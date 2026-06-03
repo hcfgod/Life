@@ -54,10 +54,6 @@ namespace RuntimeApp
             PopulateRuntimeScene(scene);
             return;
         }
-
-        Life::Scene& scene = sceneService.GetActiveScene();
-        if (!m_CheckerEntity.IsValid() || !m_AnimatedEntity.IsValid() || !m_AccentEntity.IsValid())
-            PopulateRuntimeScene(scene);
     }
 
     void GameLayer::PopulateRuntimeScene(Life::Scene& scene)
@@ -93,6 +89,11 @@ namespace RuntimeApp
     {
         CacheServices();
         EnsureRuntimeScene();
+        if (m_SceneRuntime && m_SceneService && m_SceneService->get().HasActiveScene())
+        {
+            m_SceneRuntime->get().Start(m_SceneService->get().GetActiveScene());
+            m_RuntimeSceneStarted = true;
+        }
 
         TryAcquireCheckerTexture();
         if (!m_CheckerTextureAsset)
@@ -148,6 +149,10 @@ namespace RuntimeApp
 
     void GameLayer::OnDetach()
     {
+        if (m_SceneRuntime)
+            (void)m_SceneRuntime->get().Stop();
+        m_RuntimeSceneStarted = false;
+
         const Life::OptionalRef<Life::CameraManager> cameraManagerRef = m_CameraManager;
         if (cameraManagerRef.has_value())
         {
@@ -172,6 +177,15 @@ namespace RuntimeApp
 
         TryAcquireCheckerTexture();
         EnsureRuntimeScene();
+        if (m_SceneRuntime && m_SceneService && m_SceneService->get().HasActiveScene())
+        {
+            if (!m_RuntimeSceneStarted || m_SceneRuntime->get().GetActiveScene() != &m_SceneService->get().GetActiveScene())
+            {
+                m_SceneRuntime->get().Start(m_SceneService->get().GetActiveScene());
+                m_RuntimeSceneStarted = true;
+            }
+            (void)m_SceneRuntime->get().Update(timestep);
+        }
 
         if (m_AnimatedEntity.IsValid())
         {
@@ -286,6 +300,7 @@ namespace RuntimeApp
         m_InputSystem = Life::MakeOptionalRef(GetApplication().GetService<Life::InputSystem>());
         m_CameraManager = Life::MakeOptionalRef(GetApplication().GetService<Life::CameraManager>());
         m_SceneService = Life::MakeOptionalRef(GetApplication().GetService<Life::SceneService>());
+        m_SceneRuntime = Life::MakeOptionalRef(GetApplication().TryGetService<Life::SceneRuntime>());
         m_ProjectService = Life::MakeOptionalRef(GetApplication().GetService<Life::Assets::ProjectService>());
 
         if (GetApplication().HasService<Life::SceneRenderer2D>())
@@ -297,6 +312,7 @@ namespace RuntimeApp
     void GameLayer::ResetServices() noexcept
     {
         m_SceneRenderer2D.reset();
+        m_SceneRuntime.reset();
         m_ProjectService.reset();
         m_SceneService.reset();
         m_CameraManager.reset();

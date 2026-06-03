@@ -6,6 +6,7 @@
 #include "Assets/AudioClipAssetImporter.h"
 #include "Assets/InputActionsAssetImporter.h"
 #include "Assets/MaterialAssetImporter.h"
+#include "Assets/PrefabAssetImporter.h"
 #include "Assets/ShaderAssetImporter.h"
 #include "Assets/TextureAssetImporter.h"
 
@@ -14,7 +15,6 @@ namespace Life::Assets
     namespace
     {
         constexpr uint32_t kSceneImporterVersion = 1u;
-        constexpr uint32_t kPrefabImporterVersion = 1u;
         constexpr uint32_t kTilemapImporterVersion = 1u;
         constexpr uint32_t kTilesetImporterVersion = 1u;
         constexpr uint32_t kAudioMixerImporterVersion = 1u;
@@ -42,7 +42,7 @@ namespace Life::Assets
             case AssetType::AudioClip:
                 return AssetImporter<AudioClipAsset>::Version;
             case AssetType::Prefab:
-                return kPrefabImporterVersion;
+                return AssetImporter<PrefabAsset>::Version;
             case AssetType::Tilemap:
                 return kTilemapImporterVersion;
             case AssetType::AnimationClip:

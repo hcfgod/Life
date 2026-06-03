@@ -516,10 +516,10 @@ function ConfigureApplicationEntrypoints()
 end
 
 group "Dependencies"
-include "Vendor/imgui"
+include "BuildScripts/Premake/imgui.lua"
 include "Vendor/ImGuizmo"
-include "Vendor/stb_image"
-include "Vendor/vk-bootstrap"
+include "BuildScripts/Premake/stb_image.lua"
+include "BuildScripts/Premake/vk_bootstrap.lua"
 group ""
 
 include "Engine"

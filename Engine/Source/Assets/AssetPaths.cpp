@@ -1,5 +1,6 @@
 #include "Assets/AssetPaths.h"
 
+#include "Assets/AssetContext.h"
 #include "Core/Log.h"
 #include "Platform/Platform.h"
 
@@ -229,6 +230,9 @@ namespace Life::Assets
 
     std::optional<std::filesystem::path> TryGetActiveProjectRootDirectory()
     {
+        if (AssetContext* context = TryGetActiveAssetContext())
+            return context->TryGetActiveProjectRootDirectory();
+
         return s_ActiveProjectRootOverride;
     }
 
@@ -354,6 +358,9 @@ namespace Life::Assets
 
         if (assetKey.rfind("Assets/", 0) == 0 || assetKey.rfind("Assets\\", 0) == 0)
         {
+            if (AssetContext* context = TryGetActiveAssetContext())
+                return context->ResolveAssetKeyToPath(assetKey);
+
             auto rootResult = FindProjectRootFromWorkingDirectory();
             if (rootResult.IsFailure())
             {

@@ -27,6 +27,9 @@ namespace EditorApp
         std::optional<Life::CameraComponent> Camera;
         std::optional<Life::SpriteComponent> Sprite;
         std::optional<Life::SpriteRendererComponent> SpriteRenderer;
+        std::optional<Life::PrefabInstanceComponent> PrefabInstance;
+        std::optional<Life::AnimatorComponent> Animator;
+        std::optional<Life::AudioSourceComponent> AudioSource;
         std::vector<EditorEntitySnapshot> Children;
     };
 
@@ -73,6 +76,21 @@ namespace EditorApp
     private:
         EditorEntitySnapshot m_Before;
         EditorEntitySnapshot m_After;
+    };
+
+    class RestoreEntitySnapshotsCommand final : public EditorCommand
+    {
+    public:
+        RestoreEntitySnapshotsCommand(std::vector<EditorEntitySnapshot> before, std::vector<EditorEntitySnapshot> after);
+
+        bool Undo(Life::Scene& scene, EditorCommandContext* context) override;
+        bool Redo(Life::Scene& scene, EditorCommandContext* context) override;
+
+    private:
+        static bool Apply(Life::Scene& scene, const std::vector<EditorEntitySnapshot>& remove, const std::vector<EditorEntitySnapshot>& restore, EditorCommandContext* context);
+
+        std::vector<EditorEntitySnapshot> m_Before;
+        std::vector<EditorEntitySnapshot> m_After;
     };
 
     class CreateEntityCommand final : public EditorCommand

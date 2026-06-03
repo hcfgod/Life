@@ -68,6 +68,8 @@ namespace Life
         specification.Width = 1600;
         specification.Height = 900;
         specification.CommandLineArgs = args;
+        if (args.Count > 1 && args[1] != nullptr)
+            specification.ProjectDescriptorPath = args[1];
 
         return CreateScope<RuntimeApplication>(specification);
     }

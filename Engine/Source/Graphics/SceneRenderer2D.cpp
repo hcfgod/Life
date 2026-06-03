@@ -210,8 +210,6 @@ namespace Life
                 renderer2D.DrawRotatedQuad(quad->Position, quad->Size, quad->RotationRadians, quad->Color);
             }
 
-            if (index + 1u < orderedQuads.size())
-                renderer2D.Flush();
         }
     }
 }

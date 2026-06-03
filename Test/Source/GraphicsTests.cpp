@@ -473,7 +473,7 @@ TEST_CASE("ImGui docking vendoring is wired through repository bootstrap and pre
     const std::string rootPremake = ReadTextFile(repositoryRoot / "premake5.lua");
     const std::string enginePremake = ReadTextFile(repositoryRoot / "Engine" / "premake5.lua");
     const std::string editorPremake = ReadTextFile(repositoryRoot / "Editor" / "premake5.lua");
-    const std::string imguiPremake = ReadTextFile(repositoryRoot / "Vendor" / "imgui" / "premake5.lua");
+    const std::string imguiPremake = ReadTextFile(repositoryRoot / "BuildScripts" / "Premake" / "imgui.lua");
     const std::string setupBat = ReadTextFile(repositoryRoot / "Setup.bat");
     const std::string setupSh = ReadTextFile(repositoryRoot / "Setup.sh");
     const std::string bootstrapRepoBat = ReadTextFile(repositoryRoot / "Scripts" / "BootstrapRepo.bat");
@@ -484,7 +484,7 @@ TEST_CASE("ImGui docking vendoring is wired through repository bootstrap and pre
     CHECK(gitmodules.find("url = https://github.com/ocornut/imgui.git") != std::string::npos);
     CHECK(gitmodules.find("branch = docking") != std::string::npos);
     CHECK(rootPremake.find("IncludeDir[\"imgui\"]") != std::string::npos);
-    CHECK(rootPremake.find("include \"Vendor/imgui\"") != std::string::npos);
+    CHECK(rootPremake.find("include \"BuildScripts/Premake/imgui.lua\"") != std::string::npos);
     CHECK(rootPremake.find("include \"Editor\"") != std::string::npos);
     CHECK(rootPremake.find("startproject \"Editor\"") != std::string::npos);
     CHECK(enginePremake.find("\"ImGui\"") != std::string::npos);
@@ -492,10 +492,8 @@ TEST_CASE("ImGui docking vendoring is wired through repository bootstrap and pre
     CHECK(imguiPremake.find("project \"ImGui\"") != std::string::npos);
     CHECK(imguiPremake.find("imgui_impl_sdl3.cpp") != std::string::npos);
     CHECK(imguiPremake.find("imgui_impl_vulkan.cpp") != std::string::npos);
-    CHECK(setupBat.find(":ensure_imgui_premake") != std::string::npos);
-    CHECK(setupBat.find("Vendor\\imgui\\premake5.lua") != std::string::npos);
-    CHECK(setupSh.find("ensure_imgui_premake") != std::string::npos);
-    CHECK(setupSh.find("$REPO_ROOT/Vendor/imgui/premake5.lua") != std::string::npos);
+    CHECK(setupBat.find("Vendor\\imgui\\premake5.lua") == std::string::npos);
+    CHECK(setupSh.find("$REPO_ROOT/Vendor/imgui/premake5.lua") == std::string::npos);
     CHECK(bootstrapRepoBat.find("submoduleBranch") != std::string::npos);
     CHECK(bootstrapRepoSh.find("submodule_branch") != std::string::npos);
 }

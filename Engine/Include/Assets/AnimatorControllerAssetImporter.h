@@ -2,7 +2,7 @@
 
 #include "Assets/AssetImporter.h"
 #include "Assets/AssetDatabase.h"
-#include "Assets/AssetHotReloadManager.h"
+#include "Assets/AssetContext.h"
 #include "Assets/AnimatorControllerAsset.h"
 
 #include "Core/ServiceRegistry.h"
@@ -35,7 +35,7 @@ namespace Life::Assets
             if (recordResult.IsSuccess())
                 db.SetDependencies(recordResult.GetValue().Guid, {});
 
-            AssetHotReloadManager::GetInstance().WatchKey(key);
+            GetAssetHotReloadManager().WatchKey(key);
             return AnimatorControllerAsset::LoadBlocking(key, settings);
         }
 
@@ -49,7 +49,7 @@ namespace Life::Assets
                     db->SetDependencies(recordResult.GetValue().Guid, {});
             }
 
-            AssetHotReloadManager::GetInstance().WatchKey(key);
+            GetAssetHotReloadManager().WatchKey(key);
             return AnimatorControllerAsset::LoadAsync(key, settings);
         }
     };

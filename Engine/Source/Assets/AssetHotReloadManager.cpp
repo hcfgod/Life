@@ -4,7 +4,7 @@
 #include "Assets/AssetImporterVersion.h"
 #include "Assets/AssetManager.h"
 #include "Assets/AssetPaths.h"
-#include "Assets/GeneratedAssetRuntimeRegistry.h"
+#include "Assets/AssetContext.h"
 
 #include "Core/Log.h"
 #include "Core/ServiceRegistry.h"
@@ -40,7 +40,7 @@ namespace Life::Assets
 
         bool ReloadGeneratedRecord(const AssetDatabase::Record& record, AssetManager* assetManager)
         {
-            bool generatedReloaded = GeneratedAssetRuntimeRegistry::GetInstance().Reload(record.Key);
+            bool generatedReloaded = GetGeneratedAssetRuntimeRegistry().Reload(record.Key);
             const bool cachedReloaded = ReloadCachedRecord(record, assetManager);
             return generatedReloaded || cachedReloaded;
         }

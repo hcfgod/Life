@@ -723,6 +723,12 @@ namespace Life
                 destinationEntity.AddComponent<SpriteComponent>(*sprite);
             if (const SpriteRendererComponent* spriteRenderer = sourceEntity.TryGetComponent<SpriteRendererComponent>())
                 destinationEntity.AddComponent<SpriteRendererComponent>(*spriteRenderer);
+            if (const PrefabInstanceComponent* prefabInstance = sourceEntity.TryGetComponent<PrefabInstanceComponent>())
+                destinationEntity.AddComponent<PrefabInstanceComponent>(*prefabInstance);
+            if (const AnimatorComponent* animator = sourceEntity.TryGetComponent<AnimatorComponent>())
+                destinationEntity.AddComponent<AnimatorComponent>(*animator);
+            if (const AudioSourceComponent* audioSource = sourceEntity.TryGetComponent<AudioSourceComponent>())
+                destinationEntity.AddComponent<AudioSourceComponent>(*audioSource);
 
             for (const Entity child : sourceEntity.GetChildren())
                 cloneEntityRecursive(child, destinationEntity);
@@ -732,6 +738,50 @@ namespace Life
             cloneEntityRecursive(rootEntity, {});
 
         return clone;
+    }
+
+    Entity Scene::InstantiatePrefab(const Scene& prefabScene, Entity parent, std::string prefabGuid)
+    {
+        Entity firstCreated;
+
+        std::function<void(Entity, Entity)> instantiateEntityRecursive;
+        instantiateEntityRecursive = [&](Entity sourceEntity, Entity destinationParent)
+        {
+            Entity destinationEntity = destinationParent.IsValid()
+                ? CreateChildEntity(destinationParent, sourceEntity.GetTag())
+                : CreateEntity(sourceEntity.GetTag());
+
+            if (!firstCreated.IsValid())
+                firstCreated = destinationEntity;
+
+            destinationEntity.SetEnabled(sourceEntity.IsEnabled());
+            destinationEntity.GetComponent<TransformComponent>() = sourceEntity.GetComponent<TransformComponent>();
+
+            if (const CameraComponent* camera = sourceEntity.TryGetComponent<CameraComponent>())
+                destinationEntity.AddComponent<CameraComponent>(*camera);
+            if (const SpriteComponent* sprite = sourceEntity.TryGetComponent<SpriteComponent>())
+                destinationEntity.AddComponent<SpriteComponent>(*sprite);
+            if (const SpriteRendererComponent* spriteRenderer = sourceEntity.TryGetComponent<SpriteRendererComponent>())
+                destinationEntity.AddComponent<SpriteRendererComponent>(*spriteRenderer);
+            if (const AnimatorComponent* animator = sourceEntity.TryGetComponent<AnimatorComponent>())
+                destinationEntity.AddComponent<AnimatorComponent>(*animator);
+            if (const AudioSourceComponent* audioSource = sourceEntity.TryGetComponent<AudioSourceComponent>())
+                destinationEntity.AddComponent<AudioSourceComponent>(*audioSource);
+
+            PrefabInstanceComponent prefabInstance;
+            prefabInstance.PrefabGuid = prefabGuid;
+            prefabInstance.SourceEntityId = sourceEntity.GetId();
+            destinationEntity.AddComponent<PrefabInstanceComponent>(std::move(prefabInstance));
+
+            for (const Entity child : sourceEntity.GetChildren())
+                instantiateEntityRecursive(child, destinationEntity);
+        };
+
+        const std::vector<Entity> prefabRoots = prefabScene.GetRootEntities();
+        if (!prefabRoots.empty())
+            instantiateEntityRecursive(prefabRoots.front(), parent);
+
+        return firstCreated;
     }
 
     entt::registry& Scene::GetRegistry() noexcept

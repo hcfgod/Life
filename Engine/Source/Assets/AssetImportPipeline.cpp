@@ -1,6 +1,7 @@
 #include "Assets/AssetImportPipeline.h"
 
 #include "Assets/AssetImporterVersion.h"
+#include "Assets/AssetContext.h"
 #include "Assets/AssetManager.h"
 #include "Assets/AssetPaths.h"
 #include "Assets/AssetTypes.h"
@@ -401,7 +402,7 @@ namespace Life::Assets::AssetImportPipeline
                 {
                     if (dep.SourceKind == AssetSourceKind::Generated)
                     {
-                        bool generatedReloaded = GeneratedAssetRuntimeRegistry::GetInstance().Reload(dep.Key);
+                        bool generatedReloaded = GetGeneratedAssetRuntimeRegistry().Reload(dep.Key);
                         if (assetManager)
                         {
                             const bool cachedReloaded = assetManager->ReloadCachedAssetByKey(dep.Key);

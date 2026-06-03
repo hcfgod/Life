@@ -1,6 +1,8 @@
 #include "Editor/Panels/ProjectAssetsPanel.h"
 
+#include "Assets/PrefabSerializer.h"
 #include "Editor/EditorServices.h"
+#include "Editor/PathSafety.h"
 #include "Editor/Panels/ProjectAssetDragDrop.h"
 
 #include <algorithm>
@@ -24,11 +26,13 @@ namespace EditorApp
     {
         constexpr float kMinGridScale = 0.0f;
         constexpr float kMaxGridScale = 1.8f;
+        constexpr const char* kEntityPayloadType = "EditorSceneEntity";
 
         enum class ProjectEntryKind
         {
             Directory,
             Scene,
+            Prefab,
             Texture,
             Material,
             Shader,
@@ -147,6 +151,18 @@ namespace EditorApp
             return "Assets/" + relativePath.generic_string();
         }
 
+        void ImportPrefabAssetIfPossible(const EditorServices& services, const std::filesystem::path& relativePath)
+        {
+            if (!services.AssetDatabase || relativePath.empty())
+                return;
+
+            (void)services.AssetDatabase->get().ImportOrUpdate(
+                MakeAssetKey(relativePath),
+                Life::Assets::AssetType::Prefab,
+                nlohmann::json::object(),
+                1u);
+        }
+
         bool EndsWith(std::string_view value, std::string_view suffix)
         {
             return value.size() >= suffix.size() && value.substr(value.size() - suffix.size()) == suffix;
@@ -171,6 +187,8 @@ namespace EditorApp
             const std::string lowerExtension = ToLowerAscii(path.extension().string());
             if (EndsWith(lowerName, ".scene") || EndsWith(lowerName, ".scene.json"))
                 return ProjectEntryKind::Scene;
+            if (EndsWith(lowerName, ".prefab.json"))
+                return ProjectEntryKind::Prefab;
             if (EndsWith(lowerName, ".material.json"))
                 return ProjectEntryKind::Material;
             if (lowerExtension == ".glsl" || lowerExtension == ".vert" || lowerExtension == ".frag")
@@ -361,6 +379,7 @@ namespace EditorApp
             {
                 case ProjectEntryKind::Directory: return "DIR";
                 case ProjectEntryKind::Scene: return "SCN";
+                case ProjectEntryKind::Prefab: return "P";
                 case ProjectEntryKind::Texture: return "TEX";
                 case ProjectEntryKind::Material: return "MAT";
                 case ProjectEntryKind::Shader: return "SHD";
@@ -377,6 +396,7 @@ namespace EditorApp
              {
                  case ProjectEntryKind::Directory: return ImVec4(0.38f, 0.62f, 0.96f, 1.0f);
                  case ProjectEntryKind::Scene: return ImVec4(0.40f, 0.82f, 0.60f, 1.0f);
+                 case ProjectEntryKind::Prefab: return ImVec4(0.36f, 0.84f, 0.86f, 1.0f);
                  case ProjectEntryKind::Texture: return ImVec4(0.88f, 0.58f, 0.36f, 1.0f);
                  case ProjectEntryKind::Material: return ImVec4(0.74f, 0.52f, 0.92f, 1.0f);
                  case ProjectEntryKind::Shader: return ImVec4(0.96f, 0.72f, 0.36f, 1.0f);
@@ -388,6 +408,11 @@ namespace EditorApp
 
         bool LoadSceneIntoEditor(const std::filesystem::path& sceneIdentifier, const EditorServices& services, EditorSceneState& sceneState)
         {
+            if (sceneState.IsPrefabMode())
+            {
+                sceneState.SetStatusMessage("Exit Prefab Mode before opening a scene.", true);
+                return false;
+            }
             if (!services.SceneService)
                 return false;
 
@@ -553,6 +578,131 @@ namespace EditorApp
             return true;
         }
 
+        std::filesystem::path MakeUniquePrefabPath(const std::filesystem::path& folderPath, const std::string& stem)
+        {
+            std::filesystem::path candidate = folderPath / (stem + ".prefab.json");
+            if (!std::filesystem::exists(candidate))
+                return candidate;
+
+            for (std::size_t index = 2; index < 10000; ++index)
+            {
+                candidate = folderPath / (stem + "_" + std::to_string(index) + ".prefab.json");
+                if (!std::filesystem::exists(candidate))
+                    return candidate;
+            }
+
+            return folderPath / (stem + "_copy.prefab.json");
+        }
+
+        bool CreatePrefabFromEntityDrop(const std::filesystem::path& assetsDirectory,
+                                        const std::filesystem::path& destinationRelativePath,
+                                        const char* entityId,
+                                        const EditorServices& services,
+                                        EditorSceneState& sceneState,
+                                        std::filesystem::path& outRelativePath)
+        {
+            outRelativePath.clear();
+            if (entityId == nullptr || entityId[0] == '\0')
+                return false;
+            if (sceneState.ExecutionMode != EditorSceneExecutionMode::Edit)
+            {
+                sceneState.SetStatusMessage("Create prefabs from the edit scene, not Play or Simulation mode.", true);
+                return false;
+            }
+            if (!services.SceneService || !services.SceneService->get().HasActiveScene())
+            {
+                sceneState.SetStatusMessage("Open a scene before creating a prefab.", true);
+                return false;
+            }
+
+            Life::Scene* editableScene = sceneState.GetEditableScene(services.SceneService->get());
+            if (editableScene == nullptr)
+            {
+                sceneState.SetStatusMessage("Create prefabs from an editable scene or prefab document.", true);
+                return false;
+            }
+
+            Life::Scene& scene = *editableScene;
+            Life::Entity entity = scene.FindEntityById(entityId);
+            if (!entity.IsValid())
+            {
+                sceneState.SetStatusMessage("Dragged entity no longer exists.", true);
+                return false;
+            }
+
+            const std::filesystem::path destinationFolder = destinationRelativePath.empty()
+                ? assetsDirectory
+                : (assetsDirectory / destinationRelativePath).lexically_normal();
+            if (!IsPathInside(assetsDirectory, destinationFolder))
+            {
+                sceneState.SetStatusMessage("Prefab target must remain inside the project Assets directory.", true);
+                return false;
+            }
+
+            std::error_code ec;
+            if (!std::filesystem::exists(destinationFolder, ec))
+                std::filesystem::create_directories(destinationFolder, ec);
+            if (ec || !std::filesystem::is_directory(destinationFolder, ec))
+            {
+                sceneState.SetStatusMessage("Prefab target folder is not available.", true);
+                return false;
+            }
+
+            const std::string stem = SanitizeName(entity.GetTag()).empty() ? std::string("Prefab") : SanitizeName(entity.GetTag());
+            const std::filesystem::path prefabPath = MakeUniquePrefabPath(destinationFolder, stem);
+            const auto saveResult = Life::Assets::PrefabSerializer::SaveEntityAsPrefab(scene, entity, prefabPath);
+            if (saveResult.IsFailure())
+            {
+                sceneState.SetStatusMessage(saveResult.GetError().GetErrorMessage(), true);
+                return false;
+            }
+
+            outRelativePath = std::filesystem::relative(prefabPath, assetsDirectory, ec).lexically_normal();
+            if (ec)
+                outRelativePath = (destinationRelativePath / prefabPath.filename()).lexically_normal();
+
+            ImportPrefabAssetIfPossible(services, outRelativePath);
+            sceneState.SelectProjectAsset(outRelativePath);
+            sceneState.SetStatusMessage("Created prefab '" + outRelativePath.generic_string() + "'.", false);
+            return true;
+        }
+
+        bool AcceptEntityPrefabDropToFolder(const std::filesystem::path& assetsDirectory,
+                                            const std::filesystem::path& destinationRelativePath,
+                                            const EditorServices& services,
+                                            EditorSceneState& sceneState,
+                                            std::filesystem::path& selectedRelativePath)
+        {
+#if __has_include(<imgui.h>)
+            if (const ImGuiPayload* entityPayload = ImGui::AcceptDragDropPayload(kEntityPayloadType, ImGuiDragDropFlags_AcceptBeforeDelivery))
+            {
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                const ImU32 fillColor = ImGui::GetColorU32(ImVec4(0.20f, 0.62f, 0.66f, 0.16f));
+                const ImU32 borderColor = ImGui::GetColorU32(ImVec4(0.36f, 0.84f, 0.86f, 0.92f));
+                drawList->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), fillColor, 4.0f);
+                drawList->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), borderColor, 4.0f, 0, 2.0f);
+
+                if (!entityPayload->Delivery)
+                    return true;
+
+                const char* entityId = static_cast<const char*>(entityPayload->Data);
+                std::filesystem::path createdRelativePath;
+                if (CreatePrefabFromEntityDrop(assetsDirectory, destinationRelativePath, entityId, services, sceneState, createdRelativePath))
+                {
+                    selectedRelativePath = createdRelativePath;
+                    return true;
+                }
+            }
+#else
+            (void)assetsDirectory;
+            (void)destinationRelativePath;
+            (void)services;
+            (void)sceneState;
+            (void)selectedRelativePath;
+#endif
+            return false;
+        }
+
         bool RenameEntry(const std::filesystem::path& assetsDirectory, const ProjectAssetEntry& entry, const std::string& name, const EditorServices& services, EditorSceneState& sceneState)
         {
             const std::string sanitizedName = SanitizeName(name);
@@ -617,6 +767,12 @@ namespace EditorApp
 
         bool DeleteEntry(const std::filesystem::path& assetsDirectory, const ProjectAssetEntry& entry, EditorSceneState& sceneState)
         {
+            if (!PathSafety::IsSafeAssetDeleteTarget(assetsDirectory, entry.AbsolutePath))
+            {
+                sceneState.SetStatusMessage("Delete target must be inside the project Assets directory and cannot be the Assets root.", true);
+                return false;
+            }
+
             std::error_code ec;
             if (entry.IsDirectory)
             {
@@ -739,9 +895,12 @@ namespace EditorApp
         {
 #if __has_include(<imgui.h>)
             ProjectAssetDragPayload payload{};
-            payload.Kind = entry.Kind == ProjectEntryKind::Scene
-                ? ProjectAssetPayloadKind::Scene
-                : (entry.IsDirectory ? ProjectAssetPayloadKind::Directory : ProjectAssetPayloadKind::File);
+            if (entry.Kind == ProjectEntryKind::Scene)
+                payload.Kind = ProjectAssetPayloadKind::Scene;
+            else if (entry.Kind == ProjectEntryKind::Prefab)
+                payload.Kind = ProjectAssetPayloadKind::Prefab;
+            else
+                payload.Kind = entry.IsDirectory ? ProjectAssetPayloadKind::Directory : ProjectAssetPayloadKind::File;
             const std::string relativeText = entry.RelativePath.generic_string();
             const std::size_t copyLength = std::min(relativeText.size(), payload.RelativePath.size() - 1);
             std::memcpy(payload.RelativePath.data(), relativeText.data(), copyLength);
@@ -1103,7 +1262,10 @@ namespace EditorApp
 
                     if (ImGui::BeginDragDropTarget())
                     {
-                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kProjectAssetDragPayloadType))
+                        if (AcceptEntityPrefabDropToFolder(assetsDirectory, relativePath, services, sceneState, m_SelectedRelativePath))
+                        {
+                        }
+                        else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kProjectAssetDragPayloadType))
                         {
                             const ProjectAssetDragPayload* assetPayload = static_cast<const ProjectAssetDragPayload*>(payload->Data);
                             if (assetPayload != nullptr && assetPayload->RelativePath[0] != '\0')
@@ -1135,6 +1297,16 @@ namespace EditorApp
                 };
 
                 drawFolderNode({}, true);
+                const ImVec2 treeDropAvail = ImGui::GetContentRegionAvail();
+                if (treeDropAvail.x > 1.0f && treeDropAvail.y > ImGui::GetFrameHeight())
+                {
+                    ImGui::InvisibleButton("##ProjectAssetsTreeRootDropArea", ImVec2(treeDropAvail.x, treeDropAvail.y));
+                    if (ImGui::BeginDragDropTarget())
+                    {
+                        (void)AcceptEntityPrefabDropToFolder(assetsDirectory, {}, services, sceneState, m_SelectedRelativePath);
+                        ImGui::EndDragDropTarget();
+                    }
+                }
             }
             ImGui::EndChild();
 
@@ -1171,6 +1343,29 @@ namespace EditorApp
                     ImGui::PopID();
                 }
 
+                const ImVec2 currentFolderDropSize(std::max(ImGui::GetContentRegionAvail().x, 1.0f), ImGui::GetFrameHeight() * 0.7f);
+                ImGui::InvisibleButton("##ProjectAssetsCurrentFolderDropArea", currentFolderDropSize);
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (AcceptEntityPrefabDropToFolder(assetsDirectory, m_ActiveFolderRelativePath, services, sceneState, m_SelectedRelativePath))
+                    {
+                    }
+                    else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kProjectAssetDragPayloadType))
+                    {
+                        const ProjectAssetDragPayload* assetPayload = static_cast<const ProjectAssetDragPayload*>(payload->Data);
+                        if (assetPayload != nullptr && assetPayload->RelativePath[0] != '\0')
+                        {
+                            const std::filesystem::path sourceRelativePath(assetPayload->RelativePath.data());
+                            if (MoveEntry(assetsDirectory, sourceRelativePath, m_ActiveFolderRelativePath, services, sceneState) && m_SelectedRelativePath == sourceRelativePath)
+                            {
+                                m_SelectedRelativePath = m_ActiveFolderRelativePath / sourceRelativePath.filename();
+                                sceneState.SelectProjectAsset(m_SelectedRelativePath);
+                            }
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
                 if (ImGui::BeginPopupContextWindow("##ProjectAssetsGridContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
                 {
                     if (ImGui::MenuItem("Create Folder"))
@@ -1188,24 +1383,6 @@ namespace EditorApp
                         m_OpenPendingPopup = true;
                     }
                     ImGui::EndPopup();
-                }
-
-                if (ImGui::BeginDragDropTarget())
-                {
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kProjectAssetDragPayloadType))
-                    {
-                        const ProjectAssetDragPayload* assetPayload = static_cast<const ProjectAssetDragPayload*>(payload->Data);
-                        if (assetPayload != nullptr && assetPayload->RelativePath[0] != '\0')
-                        {
-                            const std::filesystem::path sourceRelativePath(assetPayload->RelativePath.data());
-                            if (MoveEntry(assetsDirectory, sourceRelativePath, m_ActiveFolderRelativePath, services, sceneState) && m_SelectedRelativePath == sourceRelativePath)
-                            {
-                                m_SelectedRelativePath = m_ActiveFolderRelativePath / sourceRelativePath.filename();
-                                sceneState.SelectProjectAsset(m_SelectedRelativePath);
-                            }
-                        }
-                    }
-                    ImGui::EndDragDropTarget();
                 }
 
                 ImGui::Separator();
@@ -1238,8 +1415,13 @@ namespace EditorApp
                         ImGui::PushID(entry.RelativePath.generic_string().c_str());
                         const bool selected = m_SelectedRelativePath == entry.RelativePath;
                         const ImVec4 accentColor = ResolveAccentColor(entry.Kind);
-                        ImGui::PushStyleColor(ImGuiCol_Header, selected ? ImVec4(accentColor.x * 0.42f, accentColor.y * 0.42f, accentColor.z * 0.42f, 0.88f) : ImVec4(0.12f, 0.15f, 0.20f, 0.68f));
-                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(accentColor.x * 0.32f, accentColor.y * 0.32f, accentColor.z * 0.32f, 0.90f));
+                        const bool isPrefab = entry.Kind == ProjectEntryKind::Prefab;
+                        ImGui::PushStyleColor(ImGuiCol_Header, selected
+                            ? ImVec4(accentColor.x * 0.46f, accentColor.y * 0.46f, accentColor.z * 0.46f, 0.92f)
+                            : (isPrefab ? ImVec4(0.08f, 0.24f, 0.27f, 0.78f) : ImVec4(0.12f, 0.15f, 0.20f, 0.68f)));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, isPrefab
+                            ? ImVec4(0.12f, 0.34f, 0.38f, 0.92f)
+                            : ImVec4(accentColor.x * 0.32f, accentColor.y * 0.32f, accentColor.z * 0.32f, 0.90f));
                         ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(accentColor.x * 0.46f, accentColor.y * 0.46f, accentColor.z * 0.46f, 0.94f));
                         const std::string visibleName = ResolveVisibleName(entry);
                         const std::string rowLabel = std::string("[") + ResolveBadge(entry.Kind) + "] " + visibleName;
@@ -1255,11 +1437,22 @@ namespace EditorApp
                             {
                                 (void)LoadSceneIntoEditor(MakeAssetKey(entry.RelativePath), services, sceneState);
                             }
+                            else if (entry.Kind == ProjectEntryKind::Prefab && ImGui::IsMouseDoubleClicked(0))
+                            {
+                                sceneState.RequestedOpenPrefabAssetKey = MakeAssetKey(entry.RelativePath);
+                            }
                         }
                         ImGui::PopStyleColor(3);
 
                         if (ImGui::BeginPopupContextItem())
                         {
+                            if (entry.Kind == ProjectEntryKind::Prefab)
+                            {
+                                if (ImGui::MenuItem("Open Prefab"))
+                                    sceneState.RequestedOpenPrefabAssetKey = MakeAssetKey(entry.RelativePath);
+                                ImGui::Separator();
+                            }
+
                             if (entry.Kind == ProjectEntryKind::Scene)
                             {
                                 if (ImGui::MenuItem("Open Scene"))
@@ -1320,7 +1513,10 @@ namespace EditorApp
 
                         if (entry.IsDirectory && ImGui::BeginDragDropTarget())
                         {
-                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kProjectAssetDragPayloadType))
+                            if (AcceptEntityPrefabDropToFolder(assetsDirectory, entry.RelativePath, services, sceneState, m_SelectedRelativePath))
+                            {
+                            }
+                            else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kProjectAssetDragPayloadType))
                             {
                                 const ProjectAssetDragPayload* assetPayload = static_cast<const ProjectAssetDragPayload*>(payload->Data);
                                 if (assetPayload != nullptr && assetPayload->RelativePath[0] != '\0')
@@ -1358,9 +1554,15 @@ namespace EditorApp
                             : ImVec4(0.12f + accentColor.x * 0.08f, 0.14f + accentColor.y * 0.08f, 0.18f + accentColor.z * 0.08f, 1.0f);
                         const ImVec4 cardHovered = ImVec4(cardColor.x + 0.05f, cardColor.y + 0.05f, cardColor.z + 0.05f, cardColor.w);
                         const ImVec4 cardActive = ImVec4(cardColor.x + 0.02f, cardColor.y + 0.02f, cardColor.z + 0.02f, cardColor.w);
+                        const bool isPrefab = entry.Kind == ProjectEntryKind::Prefab;
                         ImGui::PushStyleColor(ImGuiCol_Button, cardColor);
                         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, cardHovered);
                         ImGui::PushStyleColor(ImGuiCol_ButtonActive, cardActive);
+                        if (isPrefab)
+                        {
+                            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.46f, 0.92f, 0.94f, 0.92f));
+                            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);
+                        }
                         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
                         if (ImGui::Button((std::string("[") + ResolveBadge(entry.Kind) + "]##Button").c_str(), ImVec2(cellSize - 12.0f, cellSize - 28.0f)))
                         {
@@ -1370,6 +1572,11 @@ namespace EditorApp
                                 m_ActiveFolderRelativePath = entry.RelativePath;
                         }
                         ImGui::PopStyleVar();
+                        if (isPrefab)
+                        {
+                            ImGui::PopStyleVar();
+                            ImGui::PopStyleColor();
+                        }
                         ImGui::PopStyleColor(3);
 
                         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
@@ -1378,10 +1585,19 @@ namespace EditorApp
                                 m_ActiveFolderRelativePath = entry.RelativePath;
                             else if (entry.Kind == ProjectEntryKind::Scene)
                                 (void)LoadSceneIntoEditor(MakeAssetKey(entry.RelativePath), services, sceneState);
+                            else if (entry.Kind == ProjectEntryKind::Prefab)
+                                sceneState.RequestedOpenPrefabAssetKey = MakeAssetKey(entry.RelativePath);
                         }
 
                         if (ImGui::BeginPopupContextItem())
                         {
+                            if (entry.Kind == ProjectEntryKind::Prefab)
+                            {
+                                if (ImGui::MenuItem("Open Prefab"))
+                                    sceneState.RequestedOpenPrefabAssetKey = MakeAssetKey(entry.RelativePath);
+                                ImGui::Separator();
+                            }
+
                             if (entry.Kind == ProjectEntryKind::Scene)
                             {
                                 if (ImGui::MenuItem("Open Scene"))
@@ -1443,7 +1659,10 @@ namespace EditorApp
 
                         if (entry.IsDirectory && ImGui::BeginDragDropTarget())
                         {
-                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kProjectAssetDragPayloadType))
+                            if (AcceptEntityPrefabDropToFolder(assetsDirectory, entry.RelativePath, services, sceneState, m_SelectedRelativePath))
+                            {
+                            }
+                            else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kProjectAssetDragPayloadType))
                             {
                                 const ProjectAssetDragPayload* assetPayload = static_cast<const ProjectAssetDragPayload*>(payload->Data);
                                 if (assetPayload != nullptr && assetPayload->RelativePath[0] != '\0')
@@ -1467,6 +1686,32 @@ namespace EditorApp
                     }
 
                     ImGui::Columns(1);
+                }
+
+                const ImVec2 emptyDropAvail = ImGui::GetContentRegionAvail();
+                if (emptyDropAvail.x > 1.0f && emptyDropAvail.y > ImGui::GetFrameHeight())
+                {
+                    ImGui::InvisibleButton("##ProjectAssetsEmptyFolderDropArea", ImVec2(emptyDropAvail.x, emptyDropAvail.y));
+                    if (ImGui::BeginDragDropTarget())
+                    {
+                        if (AcceptEntityPrefabDropToFolder(assetsDirectory, m_ActiveFolderRelativePath, services, sceneState, m_SelectedRelativePath))
+                        {
+                        }
+                        else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kProjectAssetDragPayloadType))
+                        {
+                            const ProjectAssetDragPayload* assetPayload = static_cast<const ProjectAssetDragPayload*>(payload->Data);
+                            if (assetPayload != nullptr && assetPayload->RelativePath[0] != '\0')
+                            {
+                                const std::filesystem::path sourceRelativePath(assetPayload->RelativePath.data());
+                                if (MoveEntry(assetsDirectory, sourceRelativePath, m_ActiveFolderRelativePath, services, sceneState) && m_SelectedRelativePath == sourceRelativePath)
+                                {
+                                    m_SelectedRelativePath = m_ActiveFolderRelativePath / sourceRelativePath.filename();
+                                    sceneState.SelectProjectAsset(m_SelectedRelativePath);
+                                }
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
                 }
             }
             ImGui::EndChild();

@@ -91,6 +91,7 @@ namespace Life
         bool BuildCameraFromEntity(Entity entity, float aspectRatio, Camera& camera) const;
         bool BuildPrimaryCamera(float aspectRatio, Camera& camera) const;
         Scope<Scene> Clone() const;
+        Entity InstantiatePrefab(const Scene& prefabScene, Entity parent = {}, std::string prefabGuid = {});
 
         entt::registry& GetRegistry() noexcept;
         const entt::registry& GetRegistry() const noexcept;

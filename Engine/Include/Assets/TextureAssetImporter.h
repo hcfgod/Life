@@ -2,7 +2,7 @@
 
 #include "Assets/AssetImporter.h"
 #include "Assets/AssetDatabase.h"
-#include "Assets/AssetHotReloadManager.h"
+#include "Assets/AssetContext.h"
 #include "Assets/AssetLoadCoordinator.h"
 #include "Assets/TextureAsset.h"
 #include "Assets/TextureSpecificationJson.h"
@@ -45,7 +45,7 @@ namespace Life::Assets
                 resolvedSettings = TextureSpecificationFromImporterSettingsJson(recordResult.GetValue().ImporterSettings);
             }
 
-            AssetHotReloadManager::GetInstance().WatchKey(key);
+            GetAssetHotReloadManager().WatchKey(key);
             return TextureAsset::LoadBlocking(key, resolvedSettings);
         }
 
@@ -70,7 +70,7 @@ namespace Life::Assets
                 }
             }
 
-            AssetHotReloadManager::GetInstance().WatchKey(key);
+            GetAssetHotReloadManager().WatchKey(key);
             return TextureAsset::LoadAsync(key, resolvedSettings);
         }
     };

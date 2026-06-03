@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Assets/AssetBundle.h"
+#include "Assets/AssetContext.h"
 #include "Assets/AssetDatabase.h"
 #include "Assets/AssetManager.h"
 #include "Assets/ProjectService.h"
@@ -15,6 +16,7 @@
 namespace Life
 {
     class ApplicationRuntime;
+    class AudioDevice;
     class CameraManager;
     class Event;
     class GraphicsDevice;
@@ -23,6 +25,7 @@ namespace Life
     class Renderer2D;
     class SceneService;
     class SceneRenderer2D;
+    class SceneRuntime;
     class Window;
 
     namespace Detail
@@ -78,6 +81,12 @@ namespace Life
         const SceneService* GetSceneService() const { return m_SceneService.get(); }
         SceneRenderer2D* GetSceneRenderer2D() { return m_SceneRenderer2D.get(); }
         const SceneRenderer2D* GetSceneRenderer2D() const { return m_SceneRenderer2D.get(); }
+        SceneRuntime* GetSceneRuntime() { return m_SceneRuntime.get(); }
+        const SceneRuntime* GetSceneRuntime() const { return m_SceneRuntime.get(); }
+        AudioDevice* GetAudioDevice() { return m_AudioDevice.get(); }
+        const AudioDevice* GetAudioDevice() const { return m_AudioDevice.get(); }
+        Assets::AssetContext& GetAssetContext() { return m_AssetContext; }
+        const Assets::AssetContext& GetAssetContext() const { return m_AssetContext; }
         Assets::AssetDatabase& GetAssetDatabase() { return m_AssetDatabase; }
         const Assets::AssetDatabase& GetAssetDatabase() const { return m_AssetDatabase; }
         Assets::AssetBundle& GetAssetBundle() { return m_AssetBundle; }
@@ -107,6 +116,8 @@ namespace Life
         Scope<Renderer2D> m_Renderer2D;
         Scope<SceneService> m_SceneService;
         Scope<SceneRenderer2D> m_SceneRenderer2D;
+        Scope<SceneRuntime> m_SceneRuntime;
+        Scope<AudioDevice> m_AudioDevice;
         ApplicationContext m_Context;
         ApplicationEventRouter m_EventRouter;
         LayerStack m_LayerStack;
@@ -115,6 +126,7 @@ namespace Life
         Assets::AssetBundle m_AssetBundle;
         Assets::AssetManager m_AssetManager;
         Assets::ProjectService m_ProjectService;
+        Assets::AssetContext m_AssetContext;
         ServiceRegistry m_Services;
         bool m_Running = false;
         bool m_Initialized = false;

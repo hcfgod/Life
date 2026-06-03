@@ -29,6 +29,9 @@ namespace Life::Assets
             return s_Instance;
         }
 
+        AssetHotReloadManager() = default;
+        ~AssetHotReloadManager() { Shutdown(); }
+
         void Enable(bool enable);
         bool IsEnabled() const { return m_Enabled.load(std::memory_order_relaxed); }
 
@@ -40,9 +43,6 @@ namespace Life::Assets
         void SetDebounceWindow(std::chrono::milliseconds window) { m_DebounceWindow = window; }
 
     private:
-        AssetHotReloadManager() = default;
-        ~AssetHotReloadManager() { Shutdown(); }
-
         AssetHotReloadManager(const AssetHotReloadManager&) = delete;
         AssetHotReloadManager& operator=(const AssetHotReloadManager&) = delete;
 

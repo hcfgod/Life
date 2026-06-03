@@ -33,6 +33,12 @@ namespace EditorApp
                 entity.AddComponent<Life::SpriteComponent>(*snapshot.Sprite);
             if (snapshot.SpriteRenderer.has_value())
                 entity.AddComponent<Life::SpriteRendererComponent>(*snapshot.SpriteRenderer);
+            if (snapshot.PrefabInstance.has_value())
+                entity.AddComponent<Life::PrefabInstanceComponent>(*snapshot.PrefabInstance);
+            if (snapshot.Animator.has_value())
+                entity.AddComponent<Life::AnimatorComponent>(*snapshot.Animator);
+            if (snapshot.AudioSource.has_value())
+                entity.AddComponent<Life::AudioSourceComponent>(*snapshot.AudioSource);
 
             if (parent.IsValid())
                 (void)entity.SetParent(parent);
@@ -105,6 +111,12 @@ namespace EditorApp
             snapshot.Sprite = *sprite;
         if (const Life::SpriteRendererComponent* spriteRenderer = entity.TryGetComponent<Life::SpriteRendererComponent>())
             snapshot.SpriteRenderer = *spriteRenderer;
+        if (const Life::PrefabInstanceComponent* prefabInstance = entity.TryGetComponent<Life::PrefabInstanceComponent>())
+            snapshot.PrefabInstance = *prefabInstance;
+        if (const Life::AnimatorComponent* animator = entity.TryGetComponent<Life::AnimatorComponent>())
+            snapshot.Animator = *animator;
+        if (const Life::AudioSourceComponent* audioSource = entity.TryGetComponent<Life::AudioSourceComponent>())
+            snapshot.AudioSource = *audioSource;
 
         for (const Life::Entity child : entity.GetChildren())
             snapshot.Children.push_back(CaptureEntitySnapshot(child));
@@ -201,6 +213,58 @@ namespace EditorApp
         if (entity.IsValid())
             SelectIfAvailable(context, scene, m_After.Id);
         return entity.IsValid();
+    }
+
+    RestoreEntitySnapshotsCommand::RestoreEntitySnapshotsCommand(std::vector<EditorEntitySnapshot> before, std::vector<EditorEntitySnapshot> after)
+        : m_Before(std::move(before))
+        , m_After(std::move(after))
+    {
+    }
+
+    bool RestoreEntitySnapshotsCommand::Undo(Life::Scene& scene, EditorCommandContext* context)
+    {
+        return Apply(scene, m_After, m_Before, context);
+    }
+
+    bool RestoreEntitySnapshotsCommand::Redo(Life::Scene& scene, EditorCommandContext* context)
+    {
+        return Apply(scene, m_Before, m_After, context);
+    }
+
+    bool RestoreEntitySnapshotsCommand::Apply(Life::Scene& scene,
+                                              const std::vector<EditorEntitySnapshot>& remove,
+                                              const std::vector<EditorEntitySnapshot>& restore,
+                                              EditorCommandContext* context)
+    {
+        for (const EditorEntitySnapshot& snapshot : remove)
+        {
+            if (!snapshot.Id.empty() && !scene.FindEntityById(snapshot.Id).IsValid())
+                return false;
+        }
+
+        for (const EditorEntitySnapshot& snapshot : remove)
+        {
+            if (!snapshot.Id.empty())
+            {
+                if (!DestroyEntityById(scene, snapshot.Id))
+                    return false;
+            }
+        }
+
+        bool restoredAny = false;
+        for (const EditorEntitySnapshot& snapshot : restore)
+        {
+            Life::Entity entity = RestoreEntitySnapshot(scene, snapshot);
+            restoredAny |= entity.IsValid();
+        }
+
+        if (!restoredAny)
+            return restore.empty();
+
+        const std::string& selectId = restore.front().Id;
+        if (!selectId.empty())
+            SelectIfAvailable(context, scene, selectId);
+        return true;
     }
 
     CreateEntityCommand::CreateEntityCommand(EditorEntitySnapshot snapshot)
@@ -413,7 +477,10 @@ namespace EditorApp
         std::unique_ptr<EditorCommand> command = std::move(m_Undo.back());
         m_Undo.pop_back();
         if (!command->Undo(scene, &context))
+        {
+            m_Undo.push_back(std::move(command));
             return false;
+        }
 
         m_Redo.push_back(std::move(command));
         return true;
@@ -439,7 +506,10 @@ namespace EditorApp
         std::unique_ptr<EditorCommand> command = std::move(m_Redo.back());
         m_Redo.pop_back();
         if (!command->Redo(scene, &context))
+        {
+            m_Redo.push_back(std::move(command));
             return false;
+        }
 
         m_Undo.push_back(std::move(command));
         return true;

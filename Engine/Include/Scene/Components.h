@@ -69,4 +69,31 @@ namespace Life
         std::string SortingLayer = "Default";
         int32_t SortingOrder = 0;
     };
+
+    struct PrefabInstanceComponent
+    {
+        std::string PrefabGuid;
+        std::string SourceEntityId;
+    };
+
+    struct AnimatorComponent
+    {
+        std::string ControllerAssetKey;
+        std::string ClipAssetKey;
+        std::string CurrentStateName;
+        float PlaybackTimeSeconds = 0.0f;
+        float Speed = 1.0f;
+        bool PlayAutomatically = true;
+        bool Playing = true;
+    };
+
+    struct AudioSourceComponent
+    {
+        std::string ClipAssetKey;
+        float PlaybackTimeSeconds = 0.0f;
+        float Volume = 1.0f;
+        bool PlayOnStart = true;
+        bool Loop = false;
+        bool Playing = false;
+    };
 }

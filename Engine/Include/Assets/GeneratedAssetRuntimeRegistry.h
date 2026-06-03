@@ -31,6 +31,8 @@ namespace Life::Assets
             return s_Instance;
         }
 
+        GeneratedAssetRuntimeRegistry() = default;
+
         void Register(const std::string& virtualKey, FactoryFn factory, ReloadFn reload = nullptr, LoadFn load = nullptr)
         {
             std::lock_guard<std::mutex> lock(m_Mutex);
@@ -91,8 +93,6 @@ namespace Life::Assets
         }
 
     private:
-        GeneratedAssetRuntimeRegistry() = default;
-
         struct Entry
         {
             FactoryFn Factory;

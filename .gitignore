@@ -12,6 +12,8 @@ Vendor/SDL3/Install/
 Vendor/nvrhi/Build/
 Vendor/nvrhi/Install/
 Vendor/VulkanSDK/
+Vendor/**/Build/
+Vendor/**/Install/
 
 # Visual Studio files
 .vs/

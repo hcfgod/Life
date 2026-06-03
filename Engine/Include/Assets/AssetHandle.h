@@ -11,7 +11,9 @@
 
 namespace Life::Assets
 {
+    class AssetManager;
     Life::Ref<Life::Asset> ResolveAssetByGuid(const std::string& guid);
+    Life::Ref<Life::Asset> ResolveAssetByGuid(AssetManager& manager, const std::string& guid);
 }
 
 namespace Life
@@ -80,13 +82,30 @@ namespace Life
             return asset;
         }
 
+        Ref<T> Resolve(Assets::AssetManager& assetManager) const
+        {
+            if (m_Guid.empty()) return nullptr;
+
+            if (auto locked = m_Cached.lock())
+            {
+                return locked;
+            }
+
+            auto asset = std::dynamic_pointer_cast<T>(Assets::ResolveAssetByGuid(assetManager, m_Guid));
+            if (asset)
+            {
+                m_Cached = asset;
+            }
+            return asset;
+        }
+
         Ref<T> Get() const { return Resolve(); }
+
+        bool IsResolved() const { return !m_Cached.expired(); }
 
         explicit operator bool() const
         {
-            if (m_Guid.empty()) return false;
-            if (auto locked = m_Cached.lock()) return true;
-            return false;
+            return HasGuid();
         }
 
         T* operator->() const

@@ -7,6 +7,8 @@ set "VULKAN_SDK_VERSION=1.4.304.1"
 set "CMAKE_CMD="
 set "TARGET_ARCH="
 set "SDL_CMAKE_ARCHITECTURE="
+set "SETUP_INTERACTIVE=0"
+if "%~1"=="" set "SETUP_INTERACTIVE=1"
 set "PREMAKE_ACTION_ARG=%~1"
 if not "%~1"=="" shift
 set "PREMAKE_EXTRA_ARGS=%*"
@@ -44,15 +46,6 @@ echo [Setup] Updating submodules recursively...
 git submodule update --init --recursive
 if errorlevel 1 goto :error
 
-call :ensure_vk_bootstrap_premake
-if errorlevel 1 goto :error
-
-call :ensure_imgui_premake
-if errorlevel 1 goto :error
-
-call :ensure_stb_image_premake
-if errorlevel 1 goto :error
-
 call :ensure_entt_vendor
 if errorlevel 1 goto :error
 
@@ -71,136 +64,122 @@ if errorlevel 1 goto :error
 call :build_nvrhi
 if errorlevel 1 goto :error
 
-echo [Setup] Resolved Premake command: "%PREMAKE_CMD%"
-echo [Setup] Generating project files with Premake (%PREMAKE_ACTION%)...
-call "%PREMAKE_CMD%" %PREMAKE_ACTION% %PREMAKE_EXTRA_ARGS%
-if errorlevel 1 goto :error
+if "%SETUP_INTERACTIVE%"=="1" (
+    echo [Setup] Dependencies, SDL3, and NVRHI are ready.
+    call :interactive_menu
+    if errorlevel 1 goto :error
+) else (
+    call :generate_project_files "%PREMAKE_ACTION%"
+    if errorlevel 1 goto :error
+    echo [Setup] Dependencies, SDL3, NVRHI, and project files are ready.
+)
 
-echo [Setup] Dependencies, SDL3, NVRHI, and project files are ready.
 popd >nul
 exit /b 0
 
-:ensure_vk_bootstrap_premake
-if not exist "Vendor\vk-bootstrap\" (
-    echo [Setup] Vendor\vk-bootstrap was not found after submodule sync.
+:generate_project_files
+set "GENERATE_ACTION=%~1"
+if "%GENERATE_ACTION%"=="" set "GENERATE_ACTION=vs2022"
+echo [Setup] Resolved Premake command: "%PREMAKE_CMD%"
+echo [Setup] Generating project files with Premake (%GENERATE_ACTION%)...
+call "%PREMAKE_CMD%" %GENERATE_ACTION% %PREMAKE_EXTRA_ARGS%
+exit /b %ERRORLEVEL%
+
+:interactive_menu
+echo.
+echo [Setup] What would you like to do next?
+echo   1. Generate Project Files
+echo   2. Build
+echo   3. Clean
+echo   4. Exit
+set "SETUP_MENU_CHOICE="
+set /p SETUP_MENU_CHOICE="Choose an option [1-4]: "
+if "%SETUP_MENU_CHOICE%"=="1" (
+    call :prompt_generate_project_files
+    if errorlevel 1 exit /b 1
+    goto :interactive_menu
+)
+if "%SETUP_MENU_CHOICE%"=="2" (
+    call :prompt_build
+    if errorlevel 1 exit /b 1
+    goto :interactive_menu
+)
+if "%SETUP_MENU_CHOICE%"=="3" (
+    call :clean_generated_outputs
+    if errorlevel 1 exit /b 1
+    goto :interactive_menu
+)
+if "%SETUP_MENU_CHOICE%"=="4" exit /b 0
+echo [Setup] Invalid option.
+goto :interactive_menu
+
+:prompt_generate_project_files
+echo.
+echo [Setup] Select a Premake action:
+echo   1. vs2022
+echo   2. vs2019
+echo   3. vs2017
+set "PREMAKE_MENU_CHOICE="
+set /p PREMAKE_MENU_CHOICE="Choose an option [1-3]: "
+if "%PREMAKE_MENU_CHOICE%"=="1" (
+    call :generate_project_files "vs2022"
+    exit /b !ERRORLEVEL!
+)
+if "%PREMAKE_MENU_CHOICE%"=="2" (
+    call :generate_project_files "vs2019"
+    exit /b !ERRORLEVEL!
+)
+if "%PREMAKE_MENU_CHOICE%"=="3" (
+    call :generate_project_files "vs2017"
+    exit /b !ERRORLEVEL!
+)
+echo [Setup] Invalid Premake action.
+exit /b 1
+
+:prompt_build
+echo.
+echo [Setup] Select a build configuration:
+echo   1. Debug
+echo   2. Release
+echo   3. Dist
+set "BUILD_CONFIGURATION="
+set "BUILD_MENU_CHOICE="
+set /p BUILD_MENU_CHOICE="Choose an option [1-3]: "
+if "%BUILD_MENU_CHOICE%"=="1" set "BUILD_CONFIGURATION=Debug"
+if "%BUILD_MENU_CHOICE%"=="2" set "BUILD_CONFIGURATION=Release"
+if "%BUILD_MENU_CHOICE%"=="3" set "BUILD_CONFIGURATION=Dist"
+if not defined BUILD_CONFIGURATION (
+    echo [Setup] Invalid build configuration.
     exit /b 1
 )
-
-> "Vendor\vk-bootstrap\premake5.lua" echo project "VkBootstrap"
->> "Vendor\vk-bootstrap\premake5.lua" echo     location "."
->> "Vendor\vk-bootstrap\premake5.lua" echo     kind "StaticLib"
->> "Vendor\vk-bootstrap\premake5.lua" echo.
->> "Vendor\vk-bootstrap\premake5.lua" echo     SetupProject()
->> "Vendor\vk-bootstrap\premake5.lua" echo.
->> "Vendor\vk-bootstrap\premake5.lua" echo     files
->> "Vendor\vk-bootstrap\premake5.lua" echo     {
->> "Vendor\vk-bootstrap\premake5.lua" echo         "src/VkBootstrap.h",
->> "Vendor\vk-bootstrap\premake5.lua" echo         "src/VkBootstrap.cpp",
->> "Vendor\vk-bootstrap\premake5.lua" echo         "src/VkBootstrapDispatch.h",
->> "Vendor\vk-bootstrap\premake5.lua" echo         "src/VkBootstrapFeatureChain.h",
->> "Vendor\vk-bootstrap\premake5.lua" echo         "src/VkBootstrapFeatureChain.inl"
->> "Vendor\vk-bootstrap\premake5.lua" echo     }
->> "Vendor\vk-bootstrap\premake5.lua" echo.
->> "Vendor\vk-bootstrap\premake5.lua" echo     includedirs
->> "Vendor\vk-bootstrap\premake5.lua" echo     {
->> "Vendor\vk-bootstrap\premake5.lua" echo         "src"
->> "Vendor\vk-bootstrap\premake5.lua" echo     }
->> "Vendor\vk-bootstrap\premake5.lua" echo.
->> "Vendor\vk-bootstrap\premake5.lua" echo     externalincludedirs
->> "Vendor\vk-bootstrap\premake5.lua" echo     {
->> "Vendor\vk-bootstrap\premake5.lua" echo         IncludeDir["VulkanHeaders"]
->> "Vendor\vk-bootstrap\premake5.lua" echo     }
->> "Vendor\vk-bootstrap\premake5.lua" echo.
->> "Vendor\vk-bootstrap\premake5.lua" echo     ConfigureSanitizers()
->> "Vendor\vk-bootstrap\premake5.lua" echo     ConfigureCommonProject()
-
-if not exist "Vendor\vk-bootstrap\premake5.lua" exit /b 1
-
-exit /b 0
-
-:ensure_imgui_premake
-if not exist "Vendor\imgui\" (
-    echo [Setup] Vendor\imgui was not found after submodule sync.
-    exit /b 1
+if not exist "Life.sln" (
+    echo [Setup] Life.sln not found. Generating vs2022 project files first...
+    call :generate_project_files "vs2022"
+    if errorlevel 1 exit /b 1
 )
+powershell -NoProfile -ExecutionPolicy Bypass -File "Scripts\CI\build_windows.ps1" -Configuration %BUILD_CONFIGURATION%
+set "BUILD_CONFIGURATION="
+exit /b %ERRORLEVEL%
 
-> "Vendor\imgui\premake5.lua" echo project "ImGui"
->> "Vendor\imgui\premake5.lua" echo     location "."
->> "Vendor\imgui\premake5.lua" echo     kind "StaticLib"
->> "Vendor\imgui\premake5.lua" echo.
->> "Vendor\imgui\premake5.lua" echo     SetupProject()
->> "Vendor\imgui\premake5.lua" echo.
->> "Vendor\imgui\premake5.lua" echo     files
->> "Vendor\imgui\premake5.lua" echo     {
->> "Vendor\imgui\premake5.lua" echo         "imgui.h",
->> "Vendor\imgui\premake5.lua" echo         "imgui_internal.h",
->> "Vendor\imgui\premake5.lua" echo         "imconfig.h",
->> "Vendor\imgui\premake5.lua" echo         "imstb_rectpack.h",
->> "Vendor\imgui\premake5.lua" echo         "imstb_textedit.h",
->> "Vendor\imgui\premake5.lua" echo         "imstb_truetype.h",
->> "Vendor\imgui\premake5.lua" echo         "imgui.cpp",
->> "Vendor\imgui\premake5.lua" echo         "imgui_draw.cpp",
->> "Vendor\imgui\premake5.lua" echo         "imgui_tables.cpp",
->> "Vendor\imgui\premake5.lua" echo         "imgui_widgets.cpp",
->> "Vendor\imgui\premake5.lua" echo         "backends/imgui_impl_sdl3.h",
->> "Vendor\imgui\premake5.lua" echo         "backends/imgui_impl_sdl3.cpp",
->> "Vendor\imgui\premake5.lua" echo         "backends/imgui_impl_vulkan.h",
->> "Vendor\imgui\premake5.lua" echo         "backends/imgui_impl_vulkan.cpp"
->> "Vendor\imgui\premake5.lua" echo     }
->> "Vendor\imgui\premake5.lua" echo.
->> "Vendor\imgui\premake5.lua" echo     includedirs
->> "Vendor\imgui\premake5.lua" echo     {
->> "Vendor\imgui\premake5.lua" echo         ".",
->> "Vendor\imgui\premake5.lua" echo         "backends"
->> "Vendor\imgui\premake5.lua" echo     }
->> "Vendor\imgui\premake5.lua" echo.
->> "Vendor\imgui\premake5.lua" echo     externalincludedirs
->> "Vendor\imgui\premake5.lua" echo     {
->> "Vendor\imgui\premake5.lua" echo         IncludeDir["SDL3"],
->> "Vendor\imgui\premake5.lua" echo         IncludeDir["VulkanHeaders"]
->> "Vendor\imgui\premake5.lua" echo     }
->> "Vendor\imgui\premake5.lua" echo.
->> "Vendor\imgui\premake5.lua" echo     ConfigureSanitizers()
->> "Vendor\imgui\premake5.lua" echo     ConfigureCommonProject()
-
-if not exist "Vendor\imgui\premake5.lua" exit /b 1
-
-exit /b 0
-
-:ensure_stb_image_premake
-if not exist "Vendor\stb_image\" (
-    echo [Setup] Vendor\stb_image was not found.
-    exit /b 1
+:clean_generated_outputs
+echo [Setup] Cleaning generated project and build outputs...
+if exist ".vs" rmdir /s /q ".vs"
+if exist "Build" rmdir /s /q "Build"
+if exist "bin-int" rmdir /s /q "bin-int"
+if exist "Life.sln" del /q "Life.sln"
+if exist "Makefile" del /q "Makefile"
+for %%D in (Editor Engine Runtime Test) do (
+    for %%F in (%%D\*.vcxproj %%D\*.vcxproj.filters %%D\*.vcxproj.user %%D\*.vcxitems %%D\*.vcxitems.filters) do (
+        if exist "%%F" (
+            echo [Setup] Removing %%F
+            del /q "%%F"
+        )
+    )
+    for /d %%F in (%%D\*.xcodeproj) do (
+        echo [Setup] Removing %%F
+        rmdir /s /q "%%F"
+    )
 )
-
-> "Vendor\stb_image\premake5.lua" echo project "StbImage"
->> "Vendor\stb_image\premake5.lua" echo     location "."
->> "Vendor\stb_image\premake5.lua" echo     kind "StaticLib"
->> "Vendor\stb_image\premake5.lua" echo.
->> "Vendor\stb_image\premake5.lua" echo     SetupProject()
->> "Vendor\stb_image\premake5.lua" echo.
->> "Vendor\stb_image\premake5.lua" echo     files
->> "Vendor\stb_image\premake5.lua" echo     {
->> "Vendor\stb_image\premake5.lua" echo         "stb_image.h",
->> "Vendor\stb_image\premake5.lua" echo         "stb_image_source.h",
->> "Vendor\stb_image\premake5.lua" echo         "stb_image_impl.cpp"
->> "Vendor\stb_image\premake5.lua" echo     }
->> "Vendor\stb_image\premake5.lua" echo.
->> "Vendor\stb_image\premake5.lua" echo     includedirs
->> "Vendor\stb_image\premake5.lua" echo     {
->> "Vendor\stb_image\premake5.lua" echo         "."
->> "Vendor\stb_image\premake5.lua" echo     }
->> "Vendor\stb_image\premake5.lua" echo.
->> "Vendor\stb_image\premake5.lua" echo     externalincludedirs
->> "Vendor\stb_image\premake5.lua" echo     {
->> "Vendor\stb_image\premake5.lua" echo         IncludeDir["SDL3"]
->> "Vendor\stb_image\premake5.lua" echo     }
->> "Vendor\stb_image\premake5.lua" echo.
->> "Vendor\stb_image\premake5.lua" echo     ConfigureSanitizers()
->> "Vendor\stb_image\premake5.lua" echo     ConfigureCommonProject()
-
-if not exist "Vendor\stb_image\premake5.lua" exit /b 1
-
 exit /b 0
 
 :ensure_entt_vendor

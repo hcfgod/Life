@@ -1,5 +1,6 @@
 #include "Editor/ProjectHub/EditorProjectHub.h"
 
+#include "Editor/PathSafety.h"
 #include "Platform/PlatformDetection.h"
 
 #include <nlohmann/json.hpp>
@@ -286,9 +287,23 @@ namespace EditorApp
 
         std::error_code ec;
         if (m_DeleteProjectFiles)
+        {
+            if (!PathSafety::IsSafeProjectDeleteTarget(rootDirectory, descriptorPath))
+            {
+                SetStatusMessage("Project folder deletion was rejected because the descriptor is not inside the selected project root.", true);
+                return false;
+            }
             std::filesystem::remove_all(rootDirectory, ec);
+        }
         else
+        {
+            if (descriptorPath.extension() != ".lifeproject")
+            {
+                SetStatusMessage("Project descriptor deletion was rejected because the target is not a .lifeproject file.", true);
+                return false;
+            }
             std::filesystem::remove(descriptorPath, ec);
+        }
 
         if (ec)
         {

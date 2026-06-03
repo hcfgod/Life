@@ -25,6 +25,9 @@ namespace Life
         constexpr const char* kCameraField = "camera";
         constexpr const char* kSpriteField = "sprite";
         constexpr const char* kSpriteRendererField = "spriteRenderer";
+        constexpr const char* kPrefabInstanceField = "prefabInstance";
+        constexpr const char* kAnimatorField = "animator";
+        constexpr const char* kAudioSourceField = "audioSource";
         constexpr const char* kPositionField = "position";
         constexpr const char* kRotationField = "rotation";
         constexpr const char* kScaleField = "scale";
@@ -51,6 +54,18 @@ namespace Life
         constexpr const char* kSortingLayerField = "sortingLayer";
         constexpr const char* kSortingOrderField = "sortingOrder";
         constexpr const char* kTextureAssetKeyField = "textureAssetKey";
+        constexpr const char* kPrefabGuidField = "prefabGuid";
+        constexpr const char* kSourceEntityIdField = "sourceEntityId";
+        constexpr const char* kControllerAssetKeyField = "controllerAssetKey";
+        constexpr const char* kClipAssetKeyField = "clipAssetKey";
+        constexpr const char* kCurrentStateNameField = "currentStateName";
+        constexpr const char* kPlaybackTimeSecondsField = "playbackTimeSeconds";
+        constexpr const char* kSpeedField = "speed";
+        constexpr const char* kPlayAutomaticallyField = "playAutomatically";
+        constexpr const char* kPlayingField = "playing";
+        constexpr const char* kVolumeField = "volume";
+        constexpr const char* kPlayOnStartField = "playOnStart";
+        constexpr const char* kLoopField = "loop";
 
         std::filesystem::path NormalizeAbsolutePath(const std::filesystem::path& path)
         {
@@ -259,6 +274,39 @@ namespace Life
                 };
             }
 
+            if (const PrefabInstanceComponent* prefabInstance = entity.TryGetComponent<PrefabInstanceComponent>())
+            {
+                record[kPrefabInstanceField] = {
+                    { kPrefabGuidField, prefabInstance->PrefabGuid },
+                    { kSourceEntityIdField, prefabInstance->SourceEntityId }
+                };
+            }
+
+            if (const AnimatorComponent* animator = entity.TryGetComponent<AnimatorComponent>())
+            {
+                record[kAnimatorField] = {
+                    { kControllerAssetKeyField, animator->ControllerAssetKey },
+                    { kClipAssetKeyField, animator->ClipAssetKey },
+                    { kCurrentStateNameField, animator->CurrentStateName },
+                    { kPlaybackTimeSecondsField, animator->PlaybackTimeSeconds },
+                    { kSpeedField, animator->Speed },
+                    { kPlayAutomaticallyField, animator->PlayAutomatically },
+                    { kPlayingField, animator->Playing }
+                };
+            }
+
+            if (const AudioSourceComponent* audioSource = entity.TryGetComponent<AudioSourceComponent>())
+            {
+                record[kAudioSourceField] = {
+                    { kClipAssetKeyField, audioSource->ClipAssetKey },
+                    { kPlaybackTimeSecondsField, audioSource->PlaybackTimeSeconds },
+                    { kVolumeField, audioSource->Volume },
+                    { kPlayOnStartField, audioSource->PlayOnStart },
+                    { kLoopField, audioSource->Loop },
+                    { kPlayingField, audioSource->Playing }
+                };
+            }
+
             entities.push_back(std::move(record));
 
             for (const Entity child : entity.GetChildren())
@@ -428,6 +476,57 @@ namespace Life
                         if (scene->ResolveSpriteSortingLayerIndex(spriteRenderer.SortingLayer) == 0 && spriteRenderer.SortingLayer != "Default")
                             spriteRenderer.SortingLayer = "Default";
                         entity.AddComponent<SpriteRendererComponent>(std::move(spriteRenderer));
+                    }
+
+                    if (record.contains(kPrefabInstanceField) && record[kPrefabInstanceField].is_object())
+                    {
+                        PrefabInstanceComponent prefabInstance;
+                        const nlohmann::json& prefabJson = record[kPrefabInstanceField];
+                        if (prefabJson.contains(kPrefabGuidField) && prefabJson[kPrefabGuidField].is_string())
+                            prefabInstance.PrefabGuid = prefabJson[kPrefabGuidField].get<std::string>();
+                        if (prefabJson.contains(kSourceEntityIdField) && prefabJson[kSourceEntityIdField].is_string())
+                            prefabInstance.SourceEntityId = prefabJson[kSourceEntityIdField].get<std::string>();
+                        entity.AddComponent<PrefabInstanceComponent>(std::move(prefabInstance));
+                    }
+
+                    if (record.contains(kAnimatorField) && record[kAnimatorField].is_object())
+                    {
+                        AnimatorComponent animator;
+                        const nlohmann::json& animatorJson = record[kAnimatorField];
+                        if (animatorJson.contains(kControllerAssetKeyField) && animatorJson[kControllerAssetKeyField].is_string())
+                            animator.ControllerAssetKey = animatorJson[kControllerAssetKeyField].get<std::string>();
+                        if (animatorJson.contains(kClipAssetKeyField) && animatorJson[kClipAssetKeyField].is_string())
+                            animator.ClipAssetKey = animatorJson[kClipAssetKeyField].get<std::string>();
+                        if (animatorJson.contains(kCurrentStateNameField) && animatorJson[kCurrentStateNameField].is_string())
+                            animator.CurrentStateName = animatorJson[kCurrentStateNameField].get<std::string>();
+                        if (animatorJson.contains(kPlaybackTimeSecondsField) && animatorJson[kPlaybackTimeSecondsField].is_number())
+                            animator.PlaybackTimeSeconds = animatorJson[kPlaybackTimeSecondsField].get<float>();
+                        if (animatorJson.contains(kSpeedField) && animatorJson[kSpeedField].is_number())
+                            animator.Speed = animatorJson[kSpeedField].get<float>();
+                        if (animatorJson.contains(kPlayAutomaticallyField) && animatorJson[kPlayAutomaticallyField].is_boolean())
+                            animator.PlayAutomatically = animatorJson[kPlayAutomaticallyField].get<bool>();
+                        if (animatorJson.contains(kPlayingField) && animatorJson[kPlayingField].is_boolean())
+                            animator.Playing = animatorJson[kPlayingField].get<bool>();
+                        entity.AddComponent<AnimatorComponent>(std::move(animator));
+                    }
+
+                    if (record.contains(kAudioSourceField) && record[kAudioSourceField].is_object())
+                    {
+                        AudioSourceComponent audioSource;
+                        const nlohmann::json& audioJson = record[kAudioSourceField];
+                        if (audioJson.contains(kClipAssetKeyField) && audioJson[kClipAssetKeyField].is_string())
+                            audioSource.ClipAssetKey = audioJson[kClipAssetKeyField].get<std::string>();
+                        if (audioJson.contains(kPlaybackTimeSecondsField) && audioJson[kPlaybackTimeSecondsField].is_number())
+                            audioSource.PlaybackTimeSeconds = audioJson[kPlaybackTimeSecondsField].get<float>();
+                        if (audioJson.contains(kVolumeField) && audioJson[kVolumeField].is_number())
+                            audioSource.Volume = audioJson[kVolumeField].get<float>();
+                        if (audioJson.contains(kPlayOnStartField) && audioJson[kPlayOnStartField].is_boolean())
+                            audioSource.PlayOnStart = audioJson[kPlayOnStartField].get<bool>();
+                        if (audioJson.contains(kLoopField) && audioJson[kLoopField].is_boolean())
+                            audioSource.Loop = audioJson[kLoopField].get<bool>();
+                        if (audioJson.contains(kPlayingField) && audioJson[kPlayingField].is_boolean())
+                            audioSource.Playing = audioJson[kPlayingField].get<bool>();
+                        entity.AddComponent<AudioSourceComponent>(std::move(audioSource));
                     }
 
                     entitiesById[entity.GetId()] = entity;

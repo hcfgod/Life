@@ -2,7 +2,7 @@
 
 #include "Assets/AssetImporter.h"
 #include "Assets/AssetDatabase.h"
-#include "Assets/AssetHotReloadManager.h"
+#include "Assets/AssetContext.h"
 #include "Assets/AudioClipAsset.h"
 
 #include "Core/ServiceRegistry.h"
@@ -36,7 +36,7 @@ namespace Life::Assets
             if (recordResult.IsSuccess())
                 db.SetDependencies(recordResult.GetValue().Guid, {});
 
-            AssetHotReloadManager::GetInstance().WatchKey(key);
+            GetAssetHotReloadManager().WatchKey(key);
             return AudioClipAsset::LoadBlocking(key, settings);
         }
 
@@ -50,7 +50,7 @@ namespace Life::Assets
                     db->SetDependencies(recordResult.GetValue().Guid, {});
             }
 
-            AssetHotReloadManager::GetInstance().WatchKey(key);
+            GetAssetHotReloadManager().WatchKey(key);
             return AudioClipAsset::LoadAsync(key, settings);
         }
     };

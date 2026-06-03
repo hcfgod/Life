@@ -1,6 +1,7 @@
 #include "Assets/ProjectService.h"
 
 #include "Assets/AssetDatabase.h"
+#include "Assets/AssetContext.h"
 #include "Assets/AssetManager.h"
 #include "Assets/AssetPaths.h"
 #include "Assets/ProjectSerializer.h"
@@ -10,16 +11,25 @@
 
 namespace Life::Assets
 {
+    void ProjectService::BindAssetSystems(AssetDatabase& assetDatabase, AssetManager& assetManager, AssetContext& assetContext) noexcept
+    {
+        m_AssetDatabase = &assetDatabase;
+        m_AssetManager = &assetManager;
+        m_AssetContext = &assetContext;
+    }
+
     void ProjectService::BindAssetSystems(AssetDatabase& assetDatabase, AssetManager& assetManager) noexcept
     {
         m_AssetDatabase = &assetDatabase;
         m_AssetManager = &assetManager;
+        m_AssetContext = nullptr;
     }
 
     void ProjectService::UnbindAssetSystems() noexcept
     {
         m_AssetDatabase = nullptr;
         m_AssetManager = nullptr;
+        m_AssetContext = nullptr;
     }
 
     Result<Project> ProjectService::CreateProject(const ProjectCreateOptions& options, bool makeActive)
@@ -155,9 +165,19 @@ namespace Life::Assets
     Result<void> ProjectService::RebindProjectRoot(const Project* project)
     {
         if (project != nullptr)
-            SetActiveProjectRootDirectory(project->Paths.RootDirectory);
+        {
+            if (m_AssetContext != nullptr)
+                m_AssetContext->SetActiveProjectRootDirectory(project->Paths.RootDirectory);
+            else
+                SetActiveProjectRootDirectory(project->Paths.RootDirectory);
+        }
         else
-            ClearActiveProjectRootDirectory();
+        {
+            if (m_AssetContext != nullptr)
+                m_AssetContext->ClearActiveProjectRootDirectory();
+            else
+                ClearActiveProjectRootDirectory();
+        }
 
         if (m_AssetDatabase != nullptr)
             m_AssetDatabase->Reset();

@@ -13,6 +13,7 @@
 #include "Assets/AudioClipAssetImporter.h"
 #include "Assets/InputActionsAssetImporter.h"
 #include "Assets/MaterialAssetImporter.h"
+#include "Assets/PrefabAssetImporter.h"
 #include "Assets/ShaderAssetImporter.h"
 #include "Assets/TextureAssetImporter.h"
 
@@ -310,5 +311,10 @@ namespace Life::Assets
     {
         auto* mgr = GetServices().TryGet<AssetManager>();
         return mgr ? mgr->GetByGuidAsset(guid) : nullptr;
+    }
+
+    inline Ref<Life::Asset> ResolveAssetByGuid(AssetManager& manager, const std::string& guid)
+    {
+        return manager.GetByGuidAsset(guid);
     }
 }

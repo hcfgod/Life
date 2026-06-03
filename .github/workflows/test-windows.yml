@@ -26,3 +26,22 @@ jobs:
         Build/windows-*/Debug/Runtime/**
         Build/windows-*/Debug/Test/**
         Build/Logs/windows-test-msbuild.log
+
+  live-backend-smoke-windows:
+    uses: ./.github/workflows/reusable-platform-job.yml
+    with:
+      job_name: Windows Live Backend Smoke
+      runs_on: windows-2022
+      platform: windows
+      dependency_profile: windows
+      premake_cache_dir: windows
+      cmake_cache_dir: windows
+      sdl_cache_dir: windows/x64
+      setup_command: Setup.bat vs2022 --arch=x64
+      build_command: ./Scripts/CI/build_windows.ps1 -Configuration Debug -Platform x64 -LogPath Build/Logs/windows-live-backend-smoke-msbuild.log
+      test_command: ./Scripts/CI/run_windows_tests.ps1 -Configuration Debug -Platform x64 -LiveBackendSmoke
+      artifact_name: windows-live-backend-smoke-build
+      artifact_path: |
+        Build/windows-*/Debug/Runtime/**
+        Build/windows-*/Debug/Test/**
+        Build/Logs/windows-live-backend-smoke-msbuild.log

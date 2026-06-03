@@ -2,8 +2,9 @@
 
 #include "Core/ApplicationHost.h"
 
-#include "Assets/AssetHotReloadManager.h"
+#include "Assets/AssetContext.h"
 #include "Assets/ProjectService.h"
+#include "Audio/AudioDevice.h"
 #include "Core/ApplicationRuntime.h"
 #include "Core/Concurrency/AsyncIO.h"
 #include "Core/Concurrency/JobSystem.h"
@@ -16,7 +17,10 @@
 #include "Graphics/Renderer.h"
 #include "Graphics/Renderer2D.h"
 #include "Graphics/SceneRenderer2D.h"
+#include "Scene/AnimationSceneSystem.h"
+#include "Scene/AudioSceneSystem.h"
 #include "Scene/SceneService.h"
+#include "Scene/SceneRuntime.h"
 #include "Platform/PlatformDetection.h"
 
 #include <algorithm>
@@ -237,13 +241,20 @@ namespace Life
 
             m_Host.m_Services.Register<Assets::AssetDatabase>(m_Host.m_AssetDatabase);
             m_Host.m_Services.Register<Assets::AssetBundle>(m_Host.m_AssetBundle);
+            m_Host.m_Services.Register<Assets::AssetContext>(m_Host.m_AssetContext);
             m_Host.m_AssetManager.BindDatabase(m_Host.m_AssetDatabase);
             m_Host.m_Services.Register<Assets::AssetManager>(m_Host.m_AssetManager);
-            m_Host.m_ProjectService.BindAssetSystems(m_Host.m_AssetDatabase, m_Host.m_AssetManager);
+            m_Host.m_ProjectService.BindAssetSystems(m_Host.m_AssetDatabase, m_Host.m_AssetManager, m_Host.m_AssetContext);
             m_Host.m_Services.Register<Assets::ProjectService>(m_Host.m_ProjectService);
             m_Host.m_SceneService = CreateScope<SceneService>();
             m_Host.m_SceneService->BindAssetManager(m_Host.m_AssetManager);
             m_Host.m_Services.Register<SceneService>(*m_Host.m_SceneService);
+            m_Host.m_SceneRuntime = CreateScope<SceneRuntime>();
+            m_Host.m_SceneRuntime->RegisterSystem(CreateRef<AnimationSceneSystem>());
+            m_Host.m_SceneRuntime->RegisterSystem(CreateRef<AudioSceneSystem>());
+            m_Host.m_Services.Register<SceneRuntime>(*m_Host.m_SceneRuntime);
+            m_Host.m_AudioDevice = CreateScope<AudioDevice>();
+            m_Host.m_Services.Register<AudioDevice>(*m_Host.m_AudioDevice);
 
             if (!specification.ProjectDescriptorPath.empty())
             {
@@ -296,7 +307,7 @@ namespace Life
             m_Host.m_InputSystem.SyncConnectedGamepads();
             SetGlobalServiceRegistry(&m_Host.m_Services);
             m_Host.m_GlobalServicesRegistered = true;
-            Assets::AssetHotReloadManager::GetInstance().Enable(true);
+            m_Host.m_AssetContext.GetHotReloadManager().Enable(true);
             ApplicationHost* host = &m_Host;
 
             m_Host.m_Context.Bind(
@@ -317,7 +328,7 @@ namespace Life
             if (!m_Host.m_GlobalServicesRegistered)
                 return;
 
-            Assets::AssetHotReloadManager::GetInstance().Enable(false);
+            m_Host.m_AssetContext.GetHotReloadManager().Enable(false);
             SetGlobalServiceRegistry(nullptr);
             m_Host.m_GlobalServicesRegistered = false;
         }
@@ -344,6 +355,8 @@ namespace Life
         {
             m_Host.m_ImGuiSystem.reset();
             m_Host.m_SceneRenderer2D.reset();
+            m_Host.m_SceneRuntime.reset();
+            m_Host.m_AudioDevice.reset();
             m_Host.m_SceneService.reset();
             m_Host.m_Renderer2D.reset();
             m_Host.m_CameraManager.reset();

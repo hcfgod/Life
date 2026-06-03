@@ -117,6 +117,11 @@ namespace EditorApp
             return ExecutionMode != EditorSceneExecutionMode::Edit;
         }
 
+        bool IsPrefabMode() const noexcept
+        {
+            return static_cast<bool>(PrefabScene);
+        }
+
         void ResetRuntimeState() noexcept
         {
             ExecutionMode = EditorSceneExecutionMode::Edit;
@@ -126,8 +131,19 @@ namespace EditorApp
             RuntimeScene.reset();
         }
 
+        void ResetPrefabMode() noexcept
+        {
+            PrefabScene.reset();
+            PrefabAssetKey.clear();
+            PrefabAssetPath.clear();
+            PrefabDisplayName.clear();
+            PrefabDirty = false;
+        }
+
         Life::Scene* GetEffectiveScene(Life::SceneService& sceneService) noexcept
         {
+            if (IsPrefabMode())
+                return PrefabScene.get();
             if (IsRuntimeMode() && RuntimeScene)
                 return RuntimeScene.get();
             return sceneService.TryGetActiveScene();
@@ -135,9 +151,41 @@ namespace EditorApp
 
         const Life::Scene* GetEffectiveScene(const Life::SceneService& sceneService) const noexcept
         {
+            if (IsPrefabMode())
+                return PrefabScene.get();
             if (IsRuntimeMode() && RuntimeScene)
                 return RuntimeScene.get();
             return sceneService.TryGetActiveScene();
+        }
+
+        Life::Scene* GetEditableScene(Life::SceneService& sceneService) noexcept
+        {
+            if (IsPrefabMode())
+                return PrefabScene.get();
+            if (IsRuntimeMode())
+                return nullptr;
+            return sceneService.TryGetActiveScene();
+        }
+
+        const Life::Scene* GetEditableScene(const Life::SceneService& sceneService) const noexcept
+        {
+            if (IsPrefabMode())
+                return PrefabScene.get();
+            if (IsRuntimeMode())
+                return nullptr;
+            return sceneService.TryGetActiveScene();
+        }
+
+        void MarkEditableDocumentDirty(Life::SceneService& sceneService) noexcept
+        {
+            if (IsPrefabMode())
+            {
+                PrefabDirty = true;
+                return;
+            }
+
+            if (!IsRuntimeMode())
+                sceneService.MarkActiveSceneDirty();
         }
 
         std::string SelectedEntityId;
@@ -160,5 +208,11 @@ namespace EditorApp
         EditorViewportGridMode GridMode = EditorViewportGridMode::Auto;
         float GridSize = 1.0f;
         Life::Scope<Life::Scene> RuntimeScene;
+        Life::Scope<Life::Scene> PrefabScene;
+        std::string PrefabAssetKey;
+        std::filesystem::path PrefabAssetPath;
+        std::string PrefabDisplayName;
+        bool PrefabDirty = false;
+        std::string RequestedOpenPrefabAssetKey;
     };
 }

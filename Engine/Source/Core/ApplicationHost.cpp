@@ -4,6 +4,7 @@
 #include "Core/CrashDiagnostics.h"
 #include "Core/Detail/ApplicationHostConstruction.h"
 #include "Core/Window.h"
+#include "Audio/AudioDevice.h"
 #include "Graphics/CameraManager.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/ImGuiSystem.h"
@@ -11,6 +12,7 @@
 #include "Graphics/Renderer2D.h"
 #include "Graphics/SceneRenderer2D.h"
 #include "Scene/SceneService.h"
+#include "Scene/SceneRuntime.h"
 
 #include <cstdio>
 #include <exception>

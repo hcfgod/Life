@@ -6,6 +6,7 @@
 namespace Life::Assets
 {
     class AssetDatabase;
+    class AssetContext;
     class AssetManager;
 
     class ProjectService final
@@ -17,6 +18,7 @@ namespace Life::Assets
         ProjectService(const ProjectService&) = delete;
         ProjectService& operator=(const ProjectService&) = delete;
 
+        void BindAssetSystems(AssetDatabase& assetDatabase, AssetManager& assetManager, AssetContext& assetContext) noexcept;
         void BindAssetSystems(AssetDatabase& assetDatabase, AssetManager& assetManager) noexcept;
         void UnbindAssetSystems() noexcept;
 
@@ -40,5 +42,6 @@ namespace Life::Assets
         bool m_HasActiveProject = false;
         AssetDatabase* m_AssetDatabase = nullptr;
         AssetManager* m_AssetManager = nullptr;
+        AssetContext* m_AssetContext = nullptr;
     };
 }

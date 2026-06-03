@@ -552,8 +552,7 @@ namespace EditorApp
                             if (undoStack.Execute(std::make_unique<DeleteEntityCommand>(CaptureEntitySnapshot(selectedEntity)), scene, sceneState))
                             {
                                 sceneState.SetStatusMessage("Deleted entity '" + deletedId + "'.", false);
-                                if (sceneState.ExecutionMode == EditorSceneExecutionMode::Edit)
-                                    sceneService.MarkActiveSceneDirty();
+                                sceneState.MarkEditableDocumentDirty(sceneService);
                             }
                             ImGui::PopStyleColor(3);
                             return;
@@ -667,8 +666,8 @@ namespace EditorApp
                             pendingSnapshotBefore = {};
                         }
 
-                        if ((changed || hasPendingSnapshot) && sceneState.ExecutionMode == EditorSceneExecutionMode::Edit)
-                            sceneService.MarkActiveSceneDirty();
+                        if (changed || hasPendingSnapshot)
+                            sceneState.MarkEditableDocumentDirty(sceneService);
             #else
                         (void)scene;
                         (void)sceneService;

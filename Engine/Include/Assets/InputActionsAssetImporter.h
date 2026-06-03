@@ -2,7 +2,7 @@
 
 #include "Assets/AssetImporter.h"
 #include "Assets/AssetDatabase.h"
-#include "Assets/AssetHotReloadManager.h"
+#include "Assets/AssetContext.h"
 #include "Assets/InputActionsAssetResource.h"
 
 #include "Core/ServiceRegistry.h"
@@ -32,7 +32,7 @@ namespace Life::Assets
             const auto recordResult = db.ImportOrUpdate(key, Type, SettingsToJson(settings), Version);
             (void)recordResult;
 
-            AssetHotReloadManager::GetInstance().WatchKey(key);
+            GetAssetHotReloadManager().WatchKey(key);
             return InputActionsAssetResource::LoadBlocking(key, settings);
         }
 
@@ -45,7 +45,7 @@ namespace Life::Assets
                 (void)recordResult;
             }
 
-            AssetHotReloadManager::GetInstance().WatchKey(key);
+            GetAssetHotReloadManager().WatchKey(key);
             return InputActionsAssetResource::LoadAsync(key, settings);
         }
     };

@@ -1,5 +1,6 @@
 #include "Editor/Viewport/SceneViewportPanel.h"
 
+#include "Assets/PrefabAsset.h"
 #include "Editor/Camera/EditorCameraTool.h"
 #include "Editor/Panels/ProjectAssetDragDrop.h"
 
@@ -283,6 +284,13 @@ namespace
             extension == ".gif" ||
             extension == ".ppm" ||
             extension == ".pnm";
+    }
+
+    bool IsPrefabAssetPath(const std::filesystem::path& relativePath)
+    {
+        const std::string lowerName = ToLowerAscii(relativePath.filename().string());
+        constexpr std::string_view suffix = ".prefab.json";
+        return lowerName.size() >= suffix.size() && lowerName.substr(lowerName.size() - suffix.size()) == suffix;
     }
 
     std::string MakeAssetKey(const std::filesystem::path& relativePath)
@@ -890,6 +898,54 @@ namespace
         return true;
     }
 
+    bool InstantiatePrefabAtViewport(Life::Scene& scene,
+                                     const EditorApp::EditorServices& services,
+                                     EditorApp::EditorSceneState& sceneState,
+                                     EditorApp::EditorUndoStack& undoStack,
+                                     const std::filesystem::path& relativePath,
+                                     const ViewportProjection& viewportProjection,
+                                     const ImVec2& mousePosition)
+    {
+        if (!services.AssetManager)
+        {
+            sceneState.SetStatusMessage("Prefab instantiation requires an asset manager.", true);
+            return false;
+        }
+
+        const std::string assetKey = MakeAssetKey(relativePath);
+        Life::Ref<Life::Assets::PrefabAsset> prefab = services.AssetManager->get().GetOrLoad<Life::Assets::PrefabAsset>(assetKey);
+        if (!prefab || prefab->GetPrefabScene() == nullptr)
+        {
+            sceneState.SetStatusMessage("Failed to load prefab '" + assetKey + "'.", true);
+            return false;
+        }
+
+        glm::vec3 worldPosition{ 0.0f };
+        if (!ScreenToWorldOnZPlane(viewportProjection, mousePosition, 0.0f, worldPosition))
+            worldPosition = glm::vec3(0.0f);
+        if (sceneState.SnapToGrid)
+        {
+            const float gridSize = std::max(sceneState.GridSize, 0.05f);
+            worldPosition.x = std::round(worldPosition.x / gridSize) * gridSize;
+            worldPosition.y = std::round(worldPosition.y / gridSize) * gridSize;
+        }
+
+        Life::Entity created = scene.InstantiatePrefab(*prefab->GetPrefabScene(), {}, prefab->GetGuid());
+        if (!created.IsValid())
+        {
+            sceneState.SetStatusMessage("Prefab '" + assetKey + "' did not contain any entities.", true);
+            return false;
+        }
+
+        created.GetComponent<Life::TransformComponent>().LocalPosition = worldPosition;
+        sceneState.SelectEntity(created);
+        undoStack.CommitExecuted(std::make_unique<EditorApp::CreateEntityCommand>(EditorApp::CaptureEntitySnapshot(created)));
+        if (services.SceneService)
+            sceneState.MarkEditableDocumentDirty(services.SceneService->get());
+        sceneState.SetStatusMessage("Instantiated prefab '" + assetKey + "'.", false);
+        return true;
+    }
+
 #if __has_include(<ImGuizmo.h>)
     ImGuizmo::OPERATION ResolveGizmoOperation(EditorApp::EditorViewportTool tool) noexcept
     {
@@ -1061,19 +1117,26 @@ namespace EditorApp
                                     assetPayload->RelativePath[0] != '\0' &&
                                     services.SceneService)
                                 {
-                                    sceneState.ResetRuntimeState();
-                                    const std::string sceneAssetKey = std::string("Assets/") + assetPayload->RelativePath.data();
-                                    const auto loadResult = services.SceneService->get().LoadScene(sceneAssetKey);
-                                    if (loadResult.IsFailure())
+                                    if (sceneState.IsPrefabMode())
                                     {
-                                        sceneState.SetStatusMessage(loadResult.GetError().GetErrorMessage(), true);
+                                        sceneState.SetStatusMessage("Exit Prefab Mode before opening a scene.", true);
                                     }
                                     else
                                     {
-                                        sceneState.ClearSelection();
-                                        sceneState.SetStatusMessage(
-                                            "Opened scene '" + services.SceneService->get().GetActiveScene().GetName() + "'.",
-                                            false);
+                                        sceneState.ResetRuntimeState();
+                                        const std::string sceneAssetKey = std::string("Assets/") + assetPayload->RelativePath.data();
+                                        const auto loadResult = services.SceneService->get().LoadScene(sceneAssetKey);
+                                        if (loadResult.IsFailure())
+                                        {
+                                            sceneState.SetStatusMessage(loadResult.GetError().GetErrorMessage(), true);
+                                        }
+                                        else
+                                        {
+                                            sceneState.ClearSelection();
+                                            sceneState.SetStatusMessage(
+                                                "Opened scene '" + services.SceneService->get().GetActiveScene().GetName() + "'.",
+                                                false);
+                                        }
                                     }
                                 }
                             }
@@ -1423,19 +1486,40 @@ namespace EditorApp
                         const std::filesystem::path relativePath(assetPayload->RelativePath.data());
                         if (assetPayload->Kind == ProjectAssetPayloadKind::Scene)
                         {
-                            sceneState.ResetRuntimeState();
-                            const std::string sceneAssetKey = MakeAssetKey(relativePath);
-                            const auto loadResult = services.SceneService->get().LoadScene(sceneAssetKey);
-                            if (loadResult.IsFailure())
+                            if (sceneState.IsPrefabMode())
                             {
-                                sceneState.SetStatusMessage(loadResult.GetError().GetErrorMessage(), true);
+                                sceneState.SetStatusMessage("Exit Prefab Mode before opening a scene.", true);
                             }
                             else
                             {
-                                sceneState.ClearSelection();
-                                sceneState.SetStatusMessage(
-                                    "Opened scene '" + services.SceneService->get().GetActiveScene().GetName() + "'.",
-                                    false);
+                                sceneState.ResetRuntimeState();
+                                const std::string sceneAssetKey = MakeAssetKey(relativePath);
+                                const auto loadResult = services.SceneService->get().LoadScene(sceneAssetKey);
+                                if (loadResult.IsFailure())
+                                {
+                                    sceneState.SetStatusMessage(loadResult.GetError().GetErrorMessage(), true);
+                                }
+                                else
+                                {
+                                    sceneState.ClearSelection();
+                                    sceneState.SetStatusMessage(
+                                        "Opened scene '" + services.SceneService->get().GetActiveScene().GetName() + "'.",
+                                        false);
+                                }
+                            }
+                        }
+                        else if (assetPayload->Kind == ProjectAssetPayloadKind::Prefab || IsPrefabAssetPath(relativePath))
+                        {
+                            if (TryConsumeProjectAssetDropDelivery(*assetPayload))
+                            {
+                                (void)InstantiatePrefabAtViewport(
+                                    *effectiveScene,
+                                    services,
+                                    sceneState,
+                                    undoStack,
+                                    relativePath,
+                                    viewportProjection,
+                                    mousePosition);
                             }
                         }
                         else if (assetPayload->Kind == ProjectAssetPayloadKind::File && IsTextureAssetPath(relativePath))
@@ -1451,7 +1535,7 @@ namespace EditorApp
                                         before,
                                         CaptureEntitySnapshot(target)));
                                     sceneState.SelectEntity(target);
-                                    services.SceneService->get().MarkActiveSceneDirty();
+                                    sceneState.MarkEditableDocumentDirty(services.SceneService->get());
                                 }
                             }
                             else
@@ -1475,7 +1559,7 @@ namespace EditorApp
                                     sprite.TextureAsset = services.AssetManager->get().GetOrLoad<Life::Assets::TextureAsset>(assetKey);
                                 sceneState.SelectEntity(spriteEntity);
                                 undoStack.CommitExecuted(std::make_unique<CreateEntityCommand>(CaptureEntitySnapshot(spriteEntity)));
-                                services.SceneService->get().MarkActiveSceneDirty();
+                                sceneState.MarkEditableDocumentDirty(services.SceneService->get());
                             }
                         }
                     }
@@ -1533,7 +1617,7 @@ namespace EditorApp
                                 m_GizmoEntityId,
                                 m_GizmoTransformBefore,
                                 after));
-                            services.SceneService->get().MarkActiveSceneDirty();
+                            sceneState.MarkEditableDocumentDirty(services.SceneService->get());
                         }
                     }
 

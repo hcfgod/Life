@@ -31,6 +31,7 @@ namespace RuntimeApp
         Life::OptionalRef<Life::Assets::ProjectService> m_ProjectService;
         Life::OptionalRef<Life::CameraManager> m_CameraManager;
         Life::OptionalRef<Life::SceneService> m_SceneService;
+        Life::OptionalRef<Life::SceneRuntime> m_SceneRuntime;
         Life::OptionalRef<Life::SceneRenderer2D> m_SceneRenderer2D;
         Life::Ref<Life::Assets::TextureAsset> m_CheckerTextureAsset;
         Life::Entity m_CheckerEntity;
@@ -38,6 +39,7 @@ namespace RuntimeApp
         Life::Entity m_AccentEntity;
         float m_ElapsedTime = 0.0f;
         bool m_HasLoggedRuntime = false;
+        bool m_RuntimeSceneStarted = false;
         bool m_WasMovementInputActive = false;
         bool m_IsUsingPerspectiveCamera = false;
         std::string m_OrthographicCameraName = "Main2D";

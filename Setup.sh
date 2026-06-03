@@ -8,6 +8,11 @@ CMAKE_VERSION="4.3.0"
 VULKAN_SDK_VERSION="1.4.304.1"
 cd "$REPO_ROOT"
 
+SETUP_INTERACTIVE=0
+if [ $# -eq 0 ]; then
+    SETUP_INTERACTIVE=1
+fi
+
 PREMAKE_ACTION=${1:-}
 if [ $# -gt 0 ]; then
     shift
@@ -201,132 +206,6 @@ git submodule init
 
 echo "[Setup] Updating submodules recursively..."
 git submodule update --init --recursive
-
-ensure_vk_bootstrap_premake() {
-    if [ ! -d "$REPO_ROOT/Vendor/vk-bootstrap" ]; then
-        echo "[Setup] Vendor/vk-bootstrap was not found after submodule sync."
-        exit 1
-    fi
-
-    cat > "$REPO_ROOT/Vendor/vk-bootstrap/premake5.lua" <<'EOF'
-project "VkBootstrap"
-    location "."
-    kind "StaticLib"
-
-    SetupProject()
-
-    files
-    {
-        "src/VkBootstrap.h",
-        "src/VkBootstrap.cpp",
-        "src/VkBootstrapDispatch.h",
-        "src/VkBootstrapFeatureChain.h",
-        "src/VkBootstrapFeatureChain.inl"
-    }
-
-    includedirs
-    {
-        "src"
-    }
-
-    externalincludedirs
-    {
-        IncludeDir["VulkanHeaders"]
-    }
-
-    ConfigureSanitizers()
-    ConfigureCommonProject()
-EOF
-}
-
-ensure_vk_bootstrap_premake
-
-ensure_imgui_premake() {
-    if [ ! -d "$REPO_ROOT/Vendor/imgui" ]; then
-        echo "[Setup] Vendor/imgui was not found after submodule sync."
-        exit 1
-    fi
-
-    cat > "$REPO_ROOT/Vendor/imgui/premake5.lua" <<'EOF'
-project "ImGui"
-    location "."
-    kind "StaticLib"
-
-    SetupProject()
-
-    files
-    {
-        "imgui.h",
-        "imgui_internal.h",
-        "imconfig.h",
-        "imstb_rectpack.h",
-        "imstb_textedit.h",
-        "imstb_truetype.h",
-        "imgui.cpp",
-        "imgui_draw.cpp",
-        "imgui_tables.cpp",
-        "imgui_widgets.cpp",
-        "backends/imgui_impl_sdl3.h",
-        "backends/imgui_impl_sdl3.cpp",
-        "backends/imgui_impl_vulkan.h",
-        "backends/imgui_impl_vulkan.cpp"
-    }
-
-    includedirs
-    {
-        ".",
-        "backends"
-    }
-
-    externalincludedirs
-    {
-        IncludeDir["SDL3"],
-        IncludeDir["VulkanHeaders"]
-    }
-
-    ConfigureSanitizers()
-    ConfigureCommonProject()
-EOF
-}
-
-ensure_imgui_premake
-
-ensure_stb_image_premake() {
-    if [ ! -d "$REPO_ROOT/Vendor/stb_image" ]; then
-        echo "[Setup] Vendor/stb_image was not found."
-        exit 1
-    fi
-
-    cat > "$REPO_ROOT/Vendor/stb_image/premake5.lua" <<'EOF'
-project "StbImage"
-    location "."
-    kind "StaticLib"
-
-    SetupProject()
-
-    files
-    {
-        "stb_image.h",
-        "stb_image_source.h",
-        "stb_image_impl.cpp"
-    }
-
-    includedirs
-    {
-        "."
-    }
-
-    externalincludedirs
-    {
-        IncludeDir["SDL3"]
-    }
-
-    ConfigureSanitizers()
-    ConfigureCommonProject()
-EOF
-}
-
-ensure_stb_image_premake
 
 ensure_entt_vendor() {
     if [ ! -f "$REPO_ROOT/Vendor/entt/src/entt/entt.hpp" ]; then
@@ -829,8 +708,111 @@ build_sdl
 resolve_vulkan_sdk
 build_nvrhi
 
-echo "[Setup] Using Premake command: $PREMAKE_CMD"
-echo "[Setup] Generating project files with Premake ($PREMAKE_ACTION)..."
-"$PREMAKE_CMD" "$PREMAKE_ACTION" "$@"
+generate_project_files() {
+    generate_action=$1
+    shift || true
+    echo "[Setup] Using Premake command: $PREMAKE_CMD"
+    echo "[Setup] Generating project files with Premake ($generate_action)..."
+    "$PREMAKE_CMD" "$generate_action" "$@"
+}
 
-echo "[Setup] Dependencies, SDL3, NVRHI, and project files are ready."
+prompt_generate_project_files() {
+    echo
+    echo "[Setup] Select a Premake action:"
+    case "$(uname -s)" in
+        Darwin)
+            echo "  1. xcode4"
+            echo "  2. gmake2"
+            printf '%s' "Choose an option [1-2]: "
+            read -r premake_menu_choice
+            case "$premake_menu_choice" in
+                1) generate_project_files xcode4 "$@" ;;
+                2) generate_project_files gmake2 "$@" ;;
+                *) echo "[Setup] Invalid Premake action."; return 1 ;;
+            esac
+            ;;
+        Linux)
+            echo "  1. gmake2"
+            printf '%s' "Choose an option [1]: "
+            read -r premake_menu_choice
+            case "$premake_menu_choice" in
+                1|"") generate_project_files gmake2 "$@" ;;
+                *) echo "[Setup] Invalid Premake action."; return 1 ;;
+            esac
+            ;;
+        *)
+            echo "[Setup] Unsupported platform for interactive Premake generation."
+            return 1
+            ;;
+    esac
+}
+
+prompt_build() {
+    echo
+    echo "[Setup] Select a build configuration:"
+    echo "  1. Debug"
+    echo "  2. Release"
+    echo "  3. Dist"
+    printf '%s' "Choose an option [1-3]: "
+    read -r build_menu_choice
+    case "$build_menu_choice" in
+        1) build_configuration=Debug ;;
+        2) build_configuration=Release ;;
+        3) build_configuration=Dist ;;
+        *) echo "[Setup] Invalid build configuration."; return 1 ;;
+    esac
+
+    if [ ! -f "$REPO_ROOT/Makefile" ]; then
+        echo "[Setup] Makefile not found. Generating gmake2 project files first..."
+        generate_project_files gmake2 "$@"
+    fi
+
+    "$REPO_ROOT/Scripts/CI/build_make.sh" "$build_configuration" "$@"
+}
+
+clean_generated_outputs() {
+    echo "[Setup] Cleaning generated project and build outputs..."
+    rm -rf "$REPO_ROOT/Build" "$REPO_ROOT/bin-int" "$REPO_ROOT/.vs"
+    rm -f "$REPO_ROOT/Life.sln" "$REPO_ROOT/Makefile"
+
+    for project_dir in Editor Engine Runtime Test; do
+        [ -d "$REPO_ROOT/$project_dir" ] || continue
+        find "$REPO_ROOT/$project_dir" -maxdepth 1 \( \
+            -name '*.vcxproj' -o \
+            -name '*.vcxproj.filters' -o \
+            -name '*.vcxproj.user' -o \
+            -name '*.vcxitems' -o \
+            -name '*.vcxitems.filters' -o \
+            -name '*.make' -o \
+            -name '*.xcodeproj' \
+        \) -exec rm -rf {} +
+    done
+}
+
+interactive_menu() {
+    while :; do
+        echo
+        echo "[Setup] What would you like to do next?"
+        echo "  1. Generate Project Files"
+        echo "  2. Build"
+        echo "  3. Clean"
+        echo "  4. Exit"
+        printf '%s' "Choose an option [1-4]: "
+        read -r setup_menu_choice
+        case "$setup_menu_choice" in
+            1) prompt_generate_project_files "$@" ;;
+            2) prompt_build "$@" ;;
+            3) clean_generated_outputs ;;
+            4) return 0 ;;
+            *) echo "[Setup] Invalid option." ;;
+        esac
+    done
+}
+
+if [ "$SETUP_INTERACTIVE" -eq 1 ]; then
+    echo "[Setup] Dependencies, SDL3, and NVRHI are ready."
+    interactive_menu "$@"
+else
+    generate_project_files "$PREMAKE_ACTION" "$@"
+    echo "[Setup] Dependencies, SDL3, NVRHI, and project files are ready."
+fi

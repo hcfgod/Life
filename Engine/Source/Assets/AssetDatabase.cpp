@@ -1,6 +1,7 @@
 #include "Assets/AssetDatabase.h"
 
 #include "Assets/AssetBundle.h"
+#include "Assets/AssetContext.h"
 #include "Assets/AssetImporterVersion.h"
 #include "Assets/AssetPaths.h"
 #include "Assets/AssetRegistryCache.h"
@@ -201,9 +202,18 @@ namespace Life::Assets
         // the active project's Assets/ tree.
         std::filesystem::path projectRootForValidation;
         {
-            const auto rootResult = FindProjectRootFromWorkingDirectory();
-            if (rootResult.IsSuccess())
-                projectRootForValidation = rootResult.GetValue();
+            if (AssetContext* context = TryGetActiveAssetContext())
+            {
+                if (const auto activeRoot = context->TryGetActiveProjectRootDirectory(); activeRoot.has_value())
+                    projectRootForValidation = activeRoot.value();
+            }
+
+            if (projectRootForValidation.empty())
+            {
+                const auto rootResult = FindProjectRootFromWorkingDirectory();
+                if (rootResult.IsSuccess())
+                    projectRootForValidation = rootResult.GetValue();
+            }
         }
 
         if (!projectRootForValidation.empty())

@@ -2,7 +2,7 @@
 
 #include "Core/ApplicationHost.h"
 
-#include "Assets/AssetHotReloadManager.h"
+#include "Assets/AssetContext.h"
 #include "Graphics/GraphicsDevice.h"
 #include "Graphics/ImGuiSystem.h"
 
@@ -113,7 +113,7 @@ namespace Life
         void ApplicationHostFrameController::RunAssetHotReloadPhase()
         {
             if (m_Host.m_Running)
-                Assets::AssetHotReloadManager::GetInstance().Pump();
+                m_Host.m_AssetContext.GetHotReloadManager().Pump();
         }
 
         void ApplicationHostFrameController::RunLayerUpdatePhase(float timestep)

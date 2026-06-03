@@ -42,10 +42,17 @@ namespace EditorApp
         std::string BuildDefaultScenePath(const std::string& sceneName) const;
         void SetSceneStatus(std::string message, bool isError);
         void HandleWorkspaceShortcuts();
+        bool OpenPrefabMode(const std::string& assetKey);
+        bool SavePrefabMode();
+        bool ApplyPrefabModeToOpenScene();
+        bool DiscardPrefabMode();
+        bool ExitPrefabMode();
+        void RenderPrefabModeBanner();
+        void HandlePendingPrefabModeRequests();
         bool BeginSceneExecution(EditorSceneExecutionMode executionMode);
         void StopSceneExecution();
         void UpdateSceneExecution(float timestep);
-        static bool SupportsRuntimeSceneTicks() noexcept;
+        bool SupportsRuntimeSceneTicks() const noexcept;
 
         EditorServices m_Services;
         EditorPanelVisibility m_PanelVisibility;
@@ -59,6 +66,7 @@ namespace EditorApp
         InspectorPanel m_InspectorPanel;
         EditorSceneState m_SceneState;
         EditorUndoStack m_UndoStack;
+        EditorUndoStack m_PrefabUndoStack;
         ConsolePanel m_ConsolePanel;
         FpsOverlayPanel m_FpsOverlayPanel;
         StatsPanel m_StatsPanel;
