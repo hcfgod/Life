@@ -25,14 +25,21 @@ project "ImGui"
     includedirs
     {
         path.join(RootDir, "Vendor/imgui"),
-        path.join(RootDir, "Vendor/imgui/backends")
+        path.join(RootDir, "Vendor/imgui/backends"),
+        IncludeDir["VulkanHeaders"]
     }
 
     externalincludedirs
     {
-        IncludeDir["SDL3"],
-        IncludeDir["VulkanHeaders"]
+        IncludeDir["SDL3"]
     }
+
+    if VulkanSDKPath ~= nil then
+        filter { "system:windows" }
+            includedirs { path.join(VulkanSDKPath, "Include") }
+    end
+
+    filter {}
 
     ConfigureSanitizers()
     ConfigureCommonProject()

@@ -15,13 +15,16 @@ project "VkBootstrap"
 
     includedirs
     {
-        path.join(RootDir, "Vendor/vk-bootstrap/src")
-    }
-
-    externalincludedirs
-    {
+        path.join(RootDir, "Vendor/vk-bootstrap/src"),
         IncludeDir["VulkanHeaders"]
     }
+
+    if VulkanSDKPath ~= nil then
+        filter { "system:windows" }
+            includedirs { path.join(VulkanSDKPath, "Include") }
+    end
+
+    filter {}
 
     ConfigureSanitizers()
     ConfigureCommonProject()

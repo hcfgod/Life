@@ -12,7 +12,8 @@ project "ImGuizmo"
 
     defines
     {
-        "IMGUI_DEFINE_MATH_OPERATORS"
+        "IMGUI_DEFINE_MATH_OPERATORS",
+        "IMGUI_DISABLE_OBSOLETE_FUNCTIONS"
     }
 
     disablewarnings

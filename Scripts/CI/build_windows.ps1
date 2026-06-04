@@ -66,6 +66,7 @@ if ($LogPath -ne '') {
 $arguments = @(
     $SolutionPath,
     '/m',
+    '/nodeReuse:false',
     '/restore',
     "/p:Configuration=$Configuration",
     "/p:Platform=$Platform",

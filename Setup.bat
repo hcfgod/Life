@@ -152,11 +152,9 @@ if not defined BUILD_CONFIGURATION (
     echo [Setup] Invalid build configuration.
     exit /b 1
 )
-if not exist "Life.sln" (
-    echo [Setup] Life.sln not found. Generating vs2022 project files first...
-    call :generate_project_files "vs2022"
-    if errorlevel 1 exit /b 1
-)
+echo [Setup] Generating vs2022 project files before build...
+call :generate_project_files "vs2022"
+if errorlevel 1 exit /b 1
 powershell -NoProfile -ExecutionPolicy Bypass -File "Scripts\CI\build_windows.ps1" -Configuration %BUILD_CONFIGURATION%
 set "BUILD_CONFIGURATION="
 exit /b %ERRORLEVEL%
