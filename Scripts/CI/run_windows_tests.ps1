@@ -145,6 +145,78 @@ function Find-VulkanBinDirectory() {
     return $null
 }
 
+function Find-VulkanInfoTool([string]$VulkanBinDir) {
+    $candidates = @()
+
+    if (-not [string]::IsNullOrWhiteSpace($VulkanBinDir)) {
+        $candidates += (Join-Path $VulkanBinDir 'vulkaninfoSDK.exe')
+        $candidates += (Join-Path $VulkanBinDir 'vulkaninfo.exe')
+    }
+
+    $pathVulkanInfoSdk = Get-Command 'vulkaninfoSDK.exe' -ErrorAction SilentlyContinue
+    if ($null -ne $pathVulkanInfoSdk) {
+        $candidates += $pathVulkanInfoSdk.Source
+    }
+
+    $pathVulkanInfo = Get-Command 'vulkaninfo.exe' -ErrorAction SilentlyContinue
+    if ($null -ne $pathVulkanInfo) {
+        $candidates += $pathVulkanInfo.Source
+    }
+
+    foreach ($candidate in ($candidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Test-LiveBackendSmokePrerequisites([string]$VulkanBinDir) {
+    $vulkanInfoTool = Find-VulkanInfoTool -VulkanBinDir $VulkanBinDir
+    if ($null -eq $vulkanInfoTool) {
+        Write-Host "[CI] WARNING: Live backend smoke skipped because vulkaninfo is unavailable."
+        return $false
+    }
+
+    $previousLayerPath = $env:VK_LAYER_PATH
+    try {
+        if (-not [string]::IsNullOrWhiteSpace($VulkanBinDir)) {
+            $env:VK_LAYER_PATH = $VulkanBinDir
+        }
+
+        Write-Host "[CI] Checking Vulkan live backend prerequisites with $vulkanInfoTool ..."
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $vulkanInfoOutput = & $vulkanInfoTool --summary 2>&1 | Out-String
+            $vulkanInfoExitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+
+        $hasSurfaceExtension = $vulkanInfoOutput -match 'VK_KHR_surface'
+        $hasWin32SurfaceExtension = $vulkanInfoOutput -match 'VK_KHR_win32_surface'
+        $hasPhysicalDevice = $vulkanInfoOutput -match '(?m)^\s*GPU\d+:' -or $vulkanInfoOutput -match '(?m)^\s*deviceName\s*='
+
+        if (-not $hasSurfaceExtension -or -not $hasWin32SurfaceExtension -or -not $hasPhysicalDevice) {
+            Write-Host "[CI] WARNING: Live backend smoke skipped because this Windows runner does not expose a Vulkan WSI-capable device."
+            Write-Host "[CI] Vulkan prerequisite summary: exit=$vulkanInfoExitCode VK_KHR_surface=$hasSurfaceExtension VK_KHR_win32_surface=$hasWin32SurfaceExtension physicalDevice=$hasPhysicalDevice"
+            return $false
+        }
+
+        return $true
+    }
+    finally {
+        if ($null -eq $previousLayerPath) {
+            Remove-Item Env:\VK_LAYER_PATH -ErrorAction SilentlyContinue
+        } else {
+            $env:VK_LAYER_PATH = $previousLayerPath
+        }
+    }
+}
+
 $platformSuffix = Resolve-PlatformSuffix $Platform
 $testBinary = Find-TestBinary -PlatformSuffix $platformSuffix -BuildConfiguration $Configuration
 $testDirectory = Split-Path -Parent $testBinary
@@ -178,8 +250,12 @@ Push-Location $testDirectory
 $previousLiveBackendSmoke = $env:LIFE_ENABLE_LIVE_BACKEND_SMOKE
 try {
     if ($LiveBackendSmoke) {
-        $env:LIFE_ENABLE_LIVE_BACKEND_SMOKE = '1'
-        Write-Host "[CI] Live backend smoke test enabled."
+        if (Test-LiveBackendSmokePrerequisites -VulkanBinDir $vulkanBinDirectory) {
+            $env:LIFE_ENABLE_LIVE_BACKEND_SMOKE = '1'
+            Write-Host "[CI] Live backend smoke test enabled."
+        } else {
+            Remove-Item Env:\LIFE_ENABLE_LIVE_BACKEND_SMOKE -ErrorAction SilentlyContinue
+        }
     }
 
     & $testBinary
