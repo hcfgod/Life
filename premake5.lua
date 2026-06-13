@@ -205,7 +205,8 @@ end
 function UseEngineIncludeDirs(extraIncludeDirs)
     local includeDirs =
     {
-        IncludeDir["Engine"]
+        IncludeDir["Engine"],
+        IncludeDir["VulkanHeaders"]
     }
 
     local externalIncludeDirs =
@@ -217,7 +218,6 @@ function UseEngineIncludeDirs(extraIncludeDirs)
         IncludeDir["imgui"],
         IncludeDir["stb_image"],
         IncludeDir["entt"],
-        IncludeDir["VulkanHeaders"],
         IncludeDir["vk_bootstrap"]
     }
 
@@ -229,6 +229,11 @@ function UseEngineIncludeDirs(extraIncludeDirs)
 
     includedirs(includeDirs)
     externalincludedirs(externalIncludeDirs)
+
+    if VulkanSDKPath ~= nil then
+        filter { "system:windows" }
+            includedirs { path.join(VulkanSDKPath, "Include") }
+    end
 
     filter { "system:windows", "configurations:Debug" }
         externalincludedirs { GetNVRHIInstallPath("windows", "Debug", "include") }
@@ -518,6 +523,8 @@ end
 group "Dependencies"
 include "BuildScripts/Premake/imgui.lua"
 include "Vendor/ImGuizmo"
+project "ImGuizmo"
+    defines { "IMGUI_DISABLE_OBSOLETE_FUNCTIONS" }
 include "BuildScripts/Premake/stb_image.lua"
 include "BuildScripts/Premake/vk_bootstrap.lua"
 group ""

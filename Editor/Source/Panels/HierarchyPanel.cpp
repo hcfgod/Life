@@ -710,6 +710,11 @@ namespace EditorApp
             const bool entityItemClicked = ImGui::IsItemClicked();
             const bool entityItemDoubleClicked = ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
             const bool entityItemRightClicked = ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right);
+            if (!isRenaming && BeginEntityDragSource(entity))
+                ImGui::EndDragDropSource();
+
+            changed |= AcceptEntityDrop(scene, entity, services, sceneState, undoStack);
+
             const std::string contextPopupId = "##EntityContext_" + entity.GetId();
             if (entityItemRightClicked)
             {
@@ -755,11 +760,6 @@ namespace EditorApp
                     g_RenameBuffer.clear();
                 }
             }
-
-            if (BeginEntityDragSource(entity))
-                ImGui::EndDragDropSource();
-
-            changed |= AcceptEntityDrop(scene, entity, services, sceneState, undoStack);
 
             if (ImGui::BeginPopup(contextPopupId.c_str()))
             {
