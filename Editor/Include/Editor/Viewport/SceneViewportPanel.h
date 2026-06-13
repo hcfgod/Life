@@ -5,6 +5,9 @@
 #include "Editor/Undo/EditorUndoStack.h"
 #include "Engine.h"
 
+#include <string>
+#include <vector>
+
 namespace EditorApp
 {
     class EditorCameraTool;
@@ -69,6 +72,13 @@ namespace EditorApp
                                 bool viewportHovered,
                                 bool viewportFocused);
 
+        struct GizmoSelectionSnapshot
+        {
+            std::string EntityId;
+            Life::TransformComponent TransformBefore{};
+            glm::mat4 WorldTransformBefore{ 1.0f };
+        };
+
         float m_LastTimestep = 0.0f;
         Life::Scope<Life::SceneSurface> m_SceneSurface;
         SceneViewportState m_State;
@@ -77,7 +87,13 @@ namespace EditorApp
         bool m_2DPanning = false;
         glm::vec3 m_2DPanAnchorWorld{ 0.0f };
         bool m_GizmoManipulating = false;
-        std::string m_GizmoEntityId;
-        Life::TransformComponent m_GizmoTransformBefore{};
+        glm::mat4 m_GizmoPivotBefore{ 1.0f };
+        std::vector<GizmoSelectionSnapshot> m_GizmoSelectionBefore;
+        bool m_SelectionDragCandidate = false;
+        bool m_SelectionDragging = false;
+        bool m_SelectionDragCtrl = false;
+        bool m_SelectionDragShift = false;
+        glm::vec2 m_SelectionDragStart{ 0.0f };
+        glm::vec2 m_SelectionDragCurrent{ 0.0f };
     };
 }

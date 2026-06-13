@@ -4,8 +4,10 @@
 #include "Engine.h"
 
 #include <filesystem>
+#include <algorithm>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace EditorApp
 {
@@ -40,44 +42,195 @@ namespace EditorApp
     {
         void SelectEntity(const Life::Entity& entity)
         {
-            SelectedEntityId = entity.IsValid() ? entity.GetId() : std::string{};
+            SelectedEntityIds.clear();
+            ActiveSelectedEntityId.clear();
+            if (entity.IsValid())
+            {
+                SelectedEntityIds.push_back(entity.GetId());
+                ActiveSelectedEntityId = entity.GetId();
+            }
             SelectedProjectAssetRelativePath.clear();
+        }
+
+        void SetEntitySelection(std::vector<std::string> entityIds, std::string activeEntityId = {})
+        {
+            SelectedEntityIds.clear();
+            for (std::string& entityId : entityIds)
+            {
+                if (entityId.empty())
+                    continue;
+                if (std::find(SelectedEntityIds.begin(), SelectedEntityIds.end(), entityId) == SelectedEntityIds.end())
+                    SelectedEntityIds.push_back(std::move(entityId));
+            }
+
+            if (!activeEntityId.empty() &&
+                std::find(SelectedEntityIds.begin(), SelectedEntityIds.end(), activeEntityId) != SelectedEntityIds.end())
+            {
+                ActiveSelectedEntityId = std::move(activeEntityId);
+            }
+            else
+            {
+                ActiveSelectedEntityId = SelectedEntityIds.empty() ? std::string{} : SelectedEntityIds.back();
+            }
+            SelectedProjectAssetRelativePath.clear();
+        }
+
+        void SetEntitySelection(const std::vector<Life::Entity>& entities, const Life::Entity& activeEntity = {})
+        {
+            std::vector<std::string> entityIds;
+            entityIds.reserve(entities.size());
+            for (const Life::Entity& entity : entities)
+            {
+                if (entity.IsValid())
+                    entityIds.push_back(entity.GetId());
+            }
+            SetEntitySelection(std::move(entityIds), activeEntity.IsValid() ? activeEntity.GetId() : std::string{});
+        }
+
+        void AddEntityToSelection(const Life::Entity& entity)
+        {
+            if (!entity.IsValid())
+                return;
+
+            const std::string& entityId = entity.GetId();
+            if (std::find(SelectedEntityIds.begin(), SelectedEntityIds.end(), entityId) == SelectedEntityIds.end())
+                SelectedEntityIds.push_back(entityId);
+            ActiveSelectedEntityId = entityId;
+            SelectedProjectAssetRelativePath.clear();
+        }
+
+        void RemoveEntityFromSelection(const Life::Entity& entity)
+        {
+            if (!entity.IsValid())
+                return;
+
+            const std::string entityId = entity.GetId();
+            SelectedEntityIds.erase(
+                std::remove(SelectedEntityIds.begin(), SelectedEntityIds.end(), entityId),
+                SelectedEntityIds.end());
+            if (ActiveSelectedEntityId == entityId)
+                ActiveSelectedEntityId = SelectedEntityIds.empty() ? std::string{} : SelectedEntityIds.back();
+        }
+
+        void ToggleEntitySelection(const Life::Entity& entity)
+        {
+            if (!entity.IsValid())
+                return;
+
+            if (IsEntitySelected(entity))
+                RemoveEntityFromSelection(entity);
+            else
+                AddEntityToSelection(entity);
+            SelectedProjectAssetRelativePath.clear();
+        }
+
+        bool IsEntitySelected(const Life::Entity& entity) const
+        {
+            if (!entity.IsValid())
+                return false;
+
+            const std::string& entityId = entity.GetId();
+            return std::find(SelectedEntityIds.begin(), SelectedEntityIds.end(), entityId) != SelectedEntityIds.end();
+        }
+
+        void ClearEntitySelection() noexcept
+        {
+            SelectedEntityIds.clear();
+            ActiveSelectedEntityId.clear();
         }
 
         void SelectProjectAsset(const std::filesystem::path& relativePath)
         {
-            SelectedEntityId.clear();
+            ClearEntitySelection();
             SelectedProjectAssetRelativePath = relativePath.lexically_normal().generic_string();
         }
 
         void ClearSelection() noexcept
         {
-            SelectedEntityId.clear();
+            ClearEntitySelection();
             SelectedProjectAssetRelativePath.clear();
         }
 
         Life::Entity GetSelectedEntity(const Life::SceneService& sceneService) const
         {
-            if (SelectedEntityId.empty() || !sceneService.HasActiveScene())
+            if (ActiveSelectedEntityId.empty() || !sceneService.HasActiveScene())
                 return {};
 
-            return sceneService.GetActiveScene().FindEntityById(SelectedEntityId);
+            return sceneService.GetActiveScene().FindEntityById(ActiveSelectedEntityId);
         }
 
         Life::Entity GetSelectedEntity(Life::Scene& scene) const
         {
-            if (SelectedEntityId.empty())
+            if (ActiveSelectedEntityId.empty())
                 return {};
 
-            return scene.FindEntityById(SelectedEntityId);
+            return scene.FindEntityById(ActiveSelectedEntityId);
         }
 
         Life::Entity GetSelectedEntity(const Life::Scene& scene) const
         {
-            if (SelectedEntityId.empty())
+            if (ActiveSelectedEntityId.empty())
                 return {};
 
-            return scene.FindEntityById(SelectedEntityId);
+            return scene.FindEntityById(ActiveSelectedEntityId);
+        }
+
+        Life::Entity GetActiveSelectedEntity(Life::Scene& scene) const
+        {
+            return GetSelectedEntity(scene);
+        }
+
+        Life::Entity GetActiveSelectedEntity(const Life::Scene& scene) const
+        {
+            return GetSelectedEntity(scene);
+        }
+
+        std::vector<Life::Entity> GetSelectedEntities(Life::Scene& scene) const
+        {
+            std::vector<Life::Entity> entities;
+            entities.reserve(SelectedEntityIds.size());
+            for (const std::string& entityId : SelectedEntityIds)
+            {
+                Life::Entity entity = scene.FindEntityById(entityId);
+                if (entity.IsValid())
+                    entities.push_back(entity);
+            }
+            return entities;
+        }
+
+        std::vector<Life::Entity> GetSelectedEntities(const Life::Scene& scene) const
+        {
+            std::vector<Life::Entity> entities;
+            entities.reserve(SelectedEntityIds.size());
+            for (const std::string& entityId : SelectedEntityIds)
+            {
+                Life::Entity entity = scene.FindEntityById(entityId);
+                if (entity.IsValid())
+                    entities.push_back(entity);
+            }
+            return entities;
+        }
+
+        void ValidateEntitySelection(const Life::Scene& scene)
+        {
+            std::vector<std::string> validIds;
+            validIds.reserve(SelectedEntityIds.size());
+            for (const std::string& entityId : SelectedEntityIds)
+            {
+                if (!entityId.empty() &&
+                    scene.FindEntityById(entityId).IsValid() &&
+                    std::find(validIds.begin(), validIds.end(), entityId) == validIds.end())
+                {
+                    validIds.push_back(entityId);
+                }
+            }
+
+            SelectedEntityIds = std::move(validIds);
+            if (ActiveSelectedEntityId.empty() ||
+                std::find(SelectedEntityIds.begin(), SelectedEntityIds.end(), ActiveSelectedEntityId) == SelectedEntityIds.end())
+            {
+                ActiveSelectedEntityId = SelectedEntityIds.empty() ? std::string{} : SelectedEntityIds.back();
+            }
         }
 
         bool HasSelection(const Life::SceneService& sceneService) const
@@ -88,6 +241,11 @@ namespace EditorApp
         bool HasSelection(const Life::Scene& scene) const
         {
             return GetSelectedEntity(scene).IsValid();
+        }
+
+        bool HasEntitySelection() const noexcept
+        {
+            return !SelectedEntityIds.empty();
         }
 
         std::filesystem::path GetSelectedProjectAssetRelativePath() const
@@ -188,7 +346,8 @@ namespace EditorApp
                 sceneService.MarkActiveSceneDirty();
         }
 
-        std::string SelectedEntityId;
+        std::vector<std::string> SelectedEntityIds;
+        std::string ActiveSelectedEntityId;
         std::string SelectedProjectAssetRelativePath;
         std::string StatusMessage;
         bool StatusIsError = false;

@@ -323,6 +323,27 @@ namespace EditorApp
                 }
             }
         }
+
+        void RenderMultiEntityInspector(const std::vector<Life::Entity>& selectedEntities)
+        {
+            DrawPanelHeader("Inspector", "Selected entity details");
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 7.0f));
+            if (ImGui::BeginChild("##InspectorMultiEntityCard", ImVec2(0.0f, 100.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+            {
+                ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Multiple Entities");
+                ImGui::Text("%zu entities selected", selectedEntities.size());
+                std::size_t transformCount = 0;
+                for (const Life::Entity& entity : selectedEntities)
+                {
+                    if (entity.HasComponent<Life::TransformComponent>())
+                        ++transformCount;
+                }
+                ImGui::TextDisabled("%zu transformable", transformCount);
+            }
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::TextDisabled("Use the hierarchy or scene gizmos to edit multiple selected entities.");
+        }
         #endif
 
         bool HasAddableComponents(const Life::Entity& entity)
@@ -693,12 +714,21 @@ namespace EditorApp
                     {
                         effectiveScene = sceneState.GetEffectiveScene(*sceneService);
                         if (effectiveScene != nullptr)
+                        {
+                            sceneState.ValidateEntitySelection(*effectiveScene);
                             selectedEntity = sceneState.GetSelectedEntity(*effectiveScene);
-                        if (!selectedEntity.IsValid() && !sceneState.SelectedEntityId.empty())
-                            sceneState.SelectedEntityId.clear();
+                        }
                     }
 
-                    if (selectedEntity.IsValid() && sceneService != nullptr && effectiveScene != nullptr)
+                    const std::vector<Life::Entity> selectedEntities = effectiveScene != nullptr
+                        ? sceneState.GetSelectedEntities(*effectiveScene)
+                        : std::vector<Life::Entity>{};
+
+                    if (selectedEntities.size() > 1u)
+                    {
+                        RenderMultiEntityInspector(selectedEntities);
+                    }
+                    else if (selectedEntity.IsValid() && sceneService != nullptr && effectiveScene != nullptr)
                     {
                         RenderSelectedEntityInspector(*effectiveScene, *sceneService, selectedEntity, services, sceneState, undoStack);
                     }

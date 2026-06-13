@@ -23,6 +23,8 @@
 #include <string_view>
 #include <utility>
 
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 namespace
@@ -422,6 +424,71 @@ namespace
         return point.x >= minimum.x && point.x <= maximum.x && point.y >= minimum.y && point.y <= maximum.y;
     }
 
+    struct ScreenRect
+    {
+        ImVec2 Minimum{ 0.0f, 0.0f };
+        ImVec2 Maximum{ 0.0f, 0.0f };
+    };
+
+    ScreenRect MakeScreenRect(ImVec2 first, ImVec2 second) noexcept
+    {
+        return {
+            { std::min(first.x, second.x), std::min(first.y, second.y) },
+            { std::max(first.x, second.x), std::max(first.y, second.y) }
+        };
+    }
+
+    bool IntersectsRect(const ScreenRect& left, const ScreenRect& right) noexcept
+    {
+        return left.Minimum.x <= right.Maximum.x &&
+            left.Maximum.x >= right.Minimum.x &&
+            left.Minimum.y <= right.Maximum.y &&
+            left.Maximum.y >= right.Minimum.y;
+    }
+
+    bool BuildSpriteScreenBounds(const Life::Scene& scene,
+                                 const Life::Entity& entity,
+                                 const ViewportProjection& projection,
+                                 ScreenRect& bounds)
+    {
+        const Life::SpriteComponent* sprite = entity.TryGetComponent<Life::SpriteComponent>();
+        if (sprite == nullptr)
+            return false;
+
+        const glm::mat4 worldTransform = scene.GetWorldTransformMatrix(entity);
+        const glm::vec3 center = glm::vec3(worldTransform[3]);
+        const glm::vec3 xAxis = glm::vec3(worldTransform * glm::vec4(sprite->Size.x, 0.0f, 0.0f, 0.0f));
+        const glm::vec3 yAxis = glm::vec3(worldTransform * glm::vec4(0.0f, sprite->Size.y, 0.0f, 0.0f));
+        const std::array<glm::vec3, 4> corners{{
+            center - (xAxis * 0.5f) - (yAxis * 0.5f),
+            center + (xAxis * 0.5f) - (yAxis * 0.5f),
+            center + (xAxis * 0.5f) + (yAxis * 0.5f),
+            center - (xAxis * 0.5f) + (yAxis * 0.5f)
+        }};
+
+        ImVec2 minimum(std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
+        ImVec2 maximum(-std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity());
+        bool anyProjected = false;
+        for (const glm::vec3& corner : corners)
+        {
+            ImVec2 projected;
+            if (!TryProjectWorldPointToViewport(projection, corner, projected))
+                continue;
+
+            minimum.x = std::min(minimum.x, projected.x);
+            minimum.y = std::min(minimum.y, projected.y);
+            maximum.x = std::max(maximum.x, projected.x);
+            maximum.y = std::max(maximum.y, projected.y);
+            anyProjected = true;
+        }
+
+        if (!anyProjected)
+            return false;
+
+        bounds = { minimum, maximum };
+        return true;
+    }
+
     Life::SceneRenderer2D::RenderOptions ResolveSceneRenderOptions(const EditorApp::EditorServices& services)
     {
         Life::SceneRenderer2D::RenderOptions options;
@@ -439,6 +506,147 @@ namespace
         return glm::length(left.LocalPosition - right.LocalPosition) > epsilon ||
             glm::length(left.LocalRotation - right.LocalRotation) > epsilon ||
             glm::length(left.LocalScale - right.LocalScale) > epsilon;
+    }
+
+    std::vector<Life::Entity> FilterTopLevelTransformSelection(const std::vector<Life::Entity>& selectedEntities)
+    {
+        std::vector<Life::Entity> filtered;
+        filtered.reserve(selectedEntities.size());
+        for (const Life::Entity& candidate : selectedEntities)
+        {
+            if (!candidate.IsValid() || !candidate.HasComponent<Life::TransformComponent>())
+                continue;
+
+            bool hasSelectedAncestor = false;
+            for (const Life::Entity& other : selectedEntities)
+            {
+                if (!other.IsValid() || other == candidate)
+                    continue;
+                if (candidate.IsDescendantOf(other))
+                {
+                    hasSelectedAncestor = true;
+                    break;
+                }
+            }
+
+            if (!hasSelectedAncestor)
+                filtered.push_back(candidate);
+        }
+        return filtered;
+    }
+
+    glm::mat4 BuildOrientationMatrixFromWorldTransform(const glm::mat4& worldTransform)
+    {
+        glm::vec3 xAxis = glm::vec3(worldTransform[0]);
+        glm::vec3 yAxis = glm::vec3(worldTransform[1]);
+        glm::vec3 zAxis = glm::vec3(worldTransform[2]);
+        if (glm::length(xAxis) > std::numeric_limits<float>::epsilon())
+            xAxis = glm::normalize(xAxis);
+        else
+            xAxis = { 1.0f, 0.0f, 0.0f };
+        if (glm::length(yAxis) > std::numeric_limits<float>::epsilon())
+            yAxis = glm::normalize(yAxis);
+        else
+            yAxis = { 0.0f, 1.0f, 0.0f };
+        if (glm::length(zAxis) > std::numeric_limits<float>::epsilon())
+            zAxis = glm::normalize(zAxis);
+        else
+            zAxis = { 0.0f, 0.0f, 1.0f };
+
+        glm::mat4 orientation(1.0f);
+        orientation[0] = glm::vec4(xAxis, 0.0f);
+        orientation[1] = glm::vec4(yAxis, 0.0f);
+        orientation[2] = glm::vec4(zAxis, 0.0f);
+        return orientation;
+    }
+
+    glm::mat4 BuildSelectionPivotTransform(const Life::Scene& scene,
+                                           const std::vector<Life::Entity>& selectedEntities,
+                                           const Life::Entity& activeEntity,
+                                           EditorApp::EditorTransformSpace transformSpace)
+    {
+        glm::vec3 averagePosition{ 0.0f };
+        std::size_t count = 0;
+        for (const Life::Entity& entity : selectedEntities)
+        {
+            if (!entity.IsValid() || !entity.HasComponent<Life::TransformComponent>())
+                continue;
+
+            averagePosition += glm::vec3(scene.GetWorldTransformMatrix(entity)[3]);
+            ++count;
+        }
+
+        if (count > 0)
+            averagePosition /= static_cast<float>(count);
+
+        glm::mat4 pivot = glm::translate(glm::mat4(1.0f), averagePosition);
+        if (transformSpace == EditorApp::EditorTransformSpace::Local && activeEntity.IsValid())
+        {
+            glm::mat4 orientation = BuildOrientationMatrixFromWorldTransform(scene.GetWorldTransformMatrix(activeEntity));
+            orientation[3] = glm::vec4(averagePosition, 1.0f);
+            pivot = orientation;
+        }
+        return pivot;
+    }
+
+    std::vector<Life::Entity> CollectMarqueeSelectionEntities(const Life::Scene& scene,
+                                                              const ViewportProjection& projection,
+                                                              const ScreenRect& marquee)
+    {
+        std::vector<Life::Entity> selected;
+        for (const Life::Entity entity : scene.GetEntities())
+        {
+            if (!entity.IsEnabled() || !entity.HasComponent<Life::TransformComponent>())
+                continue;
+
+            ScreenRect spriteBounds;
+            if (BuildSpriteScreenBounds(scene, entity, projection, spriteBounds))
+            {
+                if (IntersectsRect(spriteBounds, marquee))
+                    selected.push_back(entity);
+                continue;
+            }
+
+            ImVec2 origin;
+            if (TryProjectWorldPointToViewport(projection, glm::vec3(scene.GetWorldTransformMatrix(entity)[3]), origin) &&
+                ContainsPoint(marquee.Minimum, marquee.Maximum, origin))
+            {
+                selected.push_back(entity);
+            }
+        }
+        return selected;
+    }
+
+    void ApplyEntitySelectionWithModifiers(EditorApp::EditorSceneState& sceneState,
+                                           const std::vector<Life::Entity>& entities,
+                                           bool ctrl,
+                                           bool shift)
+    {
+        if (ctrl)
+        {
+            for (const Life::Entity& entity : entities)
+                sceneState.ToggleEntitySelection(entity);
+            return;
+        }
+
+        if (shift)
+        {
+            for (const Life::Entity& entity : entities)
+                sceneState.AddEntityToSelection(entity);
+            return;
+        }
+
+        const Life::Entity activeEntity = entities.empty() ? Life::Entity{} : entities.back();
+        sceneState.SetEntitySelection(entities, activeEntity);
+    }
+
+    void DrawMarqueeSelectionRect(const ScreenRect& rect)
+    {
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const ImU32 fill = ImGui::GetColorU32(ImVec4(0.20f, 0.62f, 1.0f, 0.14f));
+        const ImU32 outline = ImGui::GetColorU32(ImVec4(0.20f, 0.62f, 1.0f, 0.86f));
+        drawList->AddRectFilled(rect.Minimum, rect.Maximum, fill);
+        drawList->AddRect(rect.Minimum, rect.Maximum, outline, 0.0f, 0, 1.5f);
     }
 
     Life::Entity PickSpriteEntity(const Life::Scene& scene,
@@ -702,6 +910,46 @@ namespace
         const auto corners = ResolveSpriteWorldCorners(scene, entity, *sprite);
         for (std::size_t index = 0; index < corners.size(); ++index)
             DrawClippedWorldLine(*drawList, projection, corners[index], corners[(index + 1u) % corners.size()], color, 2.0f);
+    }
+
+    bool ResolveSelectionFrameBounds(const Life::Scene& scene,
+                                     const std::vector<Life::Entity>& selectedEntities,
+                                     glm::vec3& center,
+                                     float& radius)
+    {
+        glm::vec3 minimum(std::numeric_limits<float>::infinity());
+        glm::vec3 maximum(-std::numeric_limits<float>::infinity());
+        bool hasPoint = false;
+        auto includePoint = [&](const glm::vec3& point)
+        {
+            minimum = glm::min(minimum, point);
+            maximum = glm::max(maximum, point);
+            hasPoint = true;
+        };
+
+        for (const Life::Entity& entity : selectedEntities)
+        {
+            if (!entity.IsValid())
+                continue;
+
+            if (const Life::SpriteComponent* sprite = entity.TryGetComponent<Life::SpriteComponent>())
+            {
+                const auto corners = ResolveSpriteWorldCorners(scene, entity, *sprite);
+                for (const glm::vec3& corner : corners)
+                    includePoint(corner);
+            }
+            else if (entity.HasComponent<Life::TransformComponent>())
+            {
+                includePoint(glm::vec3(scene.GetWorldTransformMatrix(entity)[3]));
+            }
+        }
+
+        if (!hasPoint)
+            return false;
+
+        center = (minimum + maximum) * 0.5f;
+        radius = std::max(1.0f, glm::length(maximum - center));
+        return true;
     }
 
     bool ComputeGridPlaneViewBounds(const ViewportProjection& projection,
@@ -1004,6 +1252,11 @@ namespace EditorApp
     {
         SetCameraNavigationActive(false);
         m_2DPanning = false;
+        m_GizmoManipulating = false;
+        m_GizmoPivotBefore = glm::mat4(1.0f);
+        m_GizmoSelectionBefore.clear();
+        m_SelectionDragCandidate = false;
+        m_SelectionDragging = false;
         m_SceneSurface.reset();
         m_State = {};
         m_LastTimestep = 0.0f;
@@ -1454,25 +1707,21 @@ namespace EditorApp
             const ImVec2 viewportSize(displayWidth, displayHeight);
             const ViewportProjection viewportProjection = BuildViewportProjection(*activeCamera, viewportTopLeft, viewportSize);
             const ImVec2 mousePosition = ImGui::GetIO().MousePos;
+            sceneState.ValidateEntitySelection(*effectiveScene);
             Life::Entity selectedEntity = sceneState.GetSelectedEntity(*effectiveScene);
+            std::vector<Life::Entity> selectedEntities = sceneState.GetSelectedEntities(*effectiveScene);
             const bool screenGridMode = ShouldDrawScreenGrid(sceneState, *activeCamera);
 
             DrawGridOverlay(sceneState, *activeCamera, viewportProjection);
-            if (selectedEntity.IsValid())
-                DrawSelectedSpriteOutline(*effectiveScene, selectedEntity, viewportProjection, screenGridMode);
+            for (const Life::Entity& outlinedEntity : selectedEntities)
+                DrawSelectedSpriteOutline(*effectiveScene, outlinedEntity, viewportProjection, screenGridMode);
 
-            if (viewportHovered && viewportFocused && ImGui::IsKeyPressed(ImGuiKey_F, false) && selectedEntity.IsValid())
+            if (viewportHovered && viewportFocused && ImGui::IsKeyPressed(ImGuiKey_F, false) && !selectedEntities.empty())
             {
-                glm::vec3 center = glm::vec3(effectiveScene->GetWorldTransformMatrix(selectedEntity)[3]);
+                glm::vec3 center{ 0.0f };
                 float radius = 1.0f;
-                if (const Life::SpriteComponent* sprite = selectedEntity.TryGetComponent<Life::SpriteComponent>())
-                {
-                    const auto corners = ResolveSpriteWorldCorners(*effectiveScene, selectedEntity, *sprite);
-                    radius = 0.0f;
-                    for (const glm::vec3& corner : corners)
-                        radius = std::max(radius, glm::length(corner - center));
-                }
-                cameraTool.FrameBounds(*activeCamera, sceneState.SceneViewMode, center, radius);
+                if (ResolveSelectionFrameBounds(*effectiveScene, selectedEntities, center, radius))
+                    cameraTool.FrameBounds(*activeCamera, sceneState.SceneViewMode, center, radius);
             }
 
             if (ImGui::BeginDragDropTarget())
@@ -1573,13 +1822,13 @@ namespace EditorApp
             ImGuizmo::SetRect(viewportTopLeft.x, viewportTopLeft.y, viewportSize.x, viewportSize.y);
             ImGuizmo::SetOrthographic(activeCamera->GetProjectionType() == Life::ProjectionType::Orthographic);
 
-            const bool canShowGizmo = selectedEntity.IsValid() &&
-                sceneState.ViewportTool != EditorViewportTool::Select &&
-                selectedEntity.HasComponent<Life::TransformComponent>();
+            std::vector<Life::Entity> gizmoEntities = FilterTopLevelTransformSelection(selectedEntities);
+            const bool canShowGizmo = !gizmoEntities.empty() &&
+                sceneState.ViewportTool != EditorViewportTool::Select;
 
             if (canShowGizmo)
             {
-                glm::mat4 worldTransform = effectiveScene->GetWorldTransformMatrix(selectedEntity);
+                glm::mat4 pivotTransform = BuildSelectionPivotTransform(*effectiveScene, gizmoEntities, selectedEntity, sceneState.TransformSpace);
                 const glm::mat4 viewMatrix = activeCamera->GetViewMatrix();
                 const glm::mat4 projectionMatrix = activeCamera->GetProjectionMatrix();
                 std::array<float, 3> snapValues = ResolveSnapValues(sceneState);
@@ -1590,47 +1839,68 @@ namespace EditorApp
                     glm::value_ptr(projectionMatrix),
                     ResolveGizmoOperation(sceneState.ViewportTool),
                     ResolveGizmoMode(sceneState.TransformSpace),
-                    glm::value_ptr(worldTransform),
+                    glm::value_ptr(pivotTransform),
                     nullptr,
                     snap);
 
                 const bool usingGizmo = ImGuizmo::IsUsing();
-                if (usingGizmo && (!m_GizmoManipulating || m_GizmoEntityId != selectedEntity.GetId()))
+                if (usingGizmo && !m_GizmoManipulating)
                 {
                     m_GizmoManipulating = true;
-                    m_GizmoEntityId = selectedEntity.GetId();
-                    m_GizmoTransformBefore = selectedEntity.GetComponent<Life::TransformComponent>();
+                    m_GizmoPivotBefore = BuildSelectionPivotTransform(*effectiveScene, gizmoEntities, selectedEntity, sceneState.TransformSpace);
+                    m_GizmoSelectionBefore.clear();
+                    m_GizmoSelectionBefore.reserve(gizmoEntities.size());
+                    for (const Life::Entity& entity : gizmoEntities)
+                    {
+                        m_GizmoSelectionBefore.push_back({
+                            entity.GetId(),
+                            entity.GetComponent<Life::TransformComponent>(),
+                            effectiveScene->GetWorldTransformMatrix(entity)
+                        });
+                    }
                 }
 
                 if (manipulated)
-                    (void)Life::SetEntityWorldTransform(*effectiveScene, selectedEntity, worldTransform);
+                {
+                    const glm::mat4 delta = pivotTransform * glm::inverse(m_GizmoPivotBefore);
+                    for (const GizmoSelectionSnapshot& snapshot : m_GizmoSelectionBefore)
+                    {
+                        Life::Entity entity = effectiveScene->FindEntityById(snapshot.EntityId);
+                        if (entity.IsValid())
+                            (void)Life::SetEntityWorldTransform(*effectiveScene, entity, delta * snapshot.WorldTransformBefore);
+                    }
+                }
 
                 if (!usingGizmo && m_GizmoManipulating)
                 {
-                    Life::Entity manipulatedEntity = effectiveScene->FindEntityById(m_GizmoEntityId);
-                    if (manipulatedEntity.IsValid())
+                    std::vector<MultiEntityTransformChange> changes;
+                    changes.reserve(m_GizmoSelectionBefore.size());
+                    for (const GizmoSelectionSnapshot& snapshot : m_GizmoSelectionBefore)
                     {
-                        const Life::TransformComponent after = manipulatedEntity.GetComponent<Life::TransformComponent>();
-                        if (TransformChanged(m_GizmoTransformBefore, after))
-                        {
-                            undoStack.CommitExecuted(std::make_unique<SetEntityTransformCommand>(
-                                m_GizmoEntityId,
-                                m_GizmoTransformBefore,
-                                after));
-                            sceneState.MarkEditableDocumentDirty(services.SceneService->get());
-                        }
+                        Life::Entity entity = effectiveScene->FindEntityById(snapshot.EntityId);
+                        if (!entity.IsValid())
+                            continue;
+
+                        const Life::TransformComponent after = entity.GetComponent<Life::TransformComponent>();
+                        if (TransformChanged(snapshot.TransformBefore, after))
+                            changes.push_back({ snapshot.EntityId, snapshot.TransformBefore, after });
                     }
 
+                    if (!changes.empty())
+                    {
+                        undoStack.CommitExecuted(std::make_unique<SetMultiEntityTransformCommand>(std::move(changes)));
+                        sceneState.MarkEditableDocumentDirty(services.SceneService->get());
+                    }
                     m_GizmoManipulating = false;
-                    m_GizmoEntityId.clear();
-                    m_GizmoTransformBefore = {};
+                    m_GizmoPivotBefore = glm::mat4(1.0f);
+                    m_GizmoSelectionBefore.clear();
                 }
             }
             else if (m_GizmoManipulating && !ImGuizmo::IsUsing())
             {
                 m_GizmoManipulating = false;
-                m_GizmoEntityId.clear();
-                m_GizmoTransformBefore = {};
+                m_GizmoPivotBefore = glm::mat4(1.0f);
+                m_GizmoSelectionBefore.clear();
             }
 
             const bool gizmoOwnsMouse = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
@@ -1638,24 +1908,75 @@ namespace EditorApp
             const bool gizmoOwnsMouse = false;
             (void)undoStack;
 #endif
-            if (viewportHovered &&
-                viewportFocused &&
-                !m_CameraNavigationActive &&
-                !gizmoOwnsMouse &&
-                ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            const bool canUseViewportSelection = viewportFocused && !m_CameraNavigationActive && !gizmoOwnsMouse;
+            const ImGuiIO& io = ImGui::GetIO();
+            if (viewportHovered && canUseViewportSelection && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
-                Life::Entity pickedEntity = PickSpriteEntity(*effectiveScene, *activeCamera, viewportProjection, mousePosition);
-                if (pickedEntity.IsValid())
-                    sceneState.SelectEntity(pickedEntity);
-                else
-                    sceneState.ClearSelection();
+                m_SelectionDragCandidate = true;
+                m_SelectionDragging = false;
+                m_SelectionDragCtrl = io.KeyCtrl;
+                m_SelectionDragShift = io.KeyShift;
+                m_SelectionDragStart = { mousePosition.x, mousePosition.y };
+                m_SelectionDragCurrent = m_SelectionDragStart;
             }
+
+            if (m_SelectionDragCandidate && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            {
+                m_SelectionDragCurrent = { mousePosition.x, mousePosition.y };
+                const glm::vec2 delta = m_SelectionDragCurrent - m_SelectionDragStart;
+                if (!m_SelectionDragging && glm::length(delta) >= 4.0f)
+                    m_SelectionDragging = true;
+            }
+
+            if (m_SelectionDragCandidate && m_SelectionDragging)
+            {
+                DrawMarqueeSelectionRect(MakeScreenRect(
+                    { m_SelectionDragStart.x, m_SelectionDragStart.y },
+                    { m_SelectionDragCurrent.x, m_SelectionDragCurrent.y }));
+            }
+
+            if (m_SelectionDragCandidate && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+            {
+                if (m_SelectionDragging)
+                {
+                    const ScreenRect marquee = MakeScreenRect(
+                        { m_SelectionDragStart.x, m_SelectionDragStart.y },
+                        { m_SelectionDragCurrent.x, m_SelectionDragCurrent.y });
+                    const std::vector<Life::Entity> marqueeEntities = CollectMarqueeSelectionEntities(*effectiveScene, viewportProjection, marquee);
+                    ApplyEntitySelectionWithModifiers(sceneState, marqueeEntities, m_SelectionDragCtrl, m_SelectionDragShift);
+                }
+                else
+                {
+                    Life::Entity pickedEntity = PickSpriteEntity(*effectiveScene, *activeCamera, viewportProjection, mousePosition);
+                    if (pickedEntity.IsValid())
+                    {
+                        if (m_SelectionDragCtrl)
+                            sceneState.ToggleEntitySelection(pickedEntity);
+                        else if (m_SelectionDragShift)
+                            sceneState.AddEntityToSelection(pickedEntity);
+                        else
+                            sceneState.SelectEntity(pickedEntity);
+                    }
+                    else if (!m_SelectionDragCtrl && !m_SelectionDragShift)
+                    {
+                        sceneState.ClearSelection();
+                    }
+                }
+
+                m_SelectionDragCandidate = false;
+                m_SelectionDragging = false;
+            }
+
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) && !ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+                m_SelectionDragCandidate = false;
         }
         else
         {
             m_GizmoManipulating = false;
-            m_GizmoEntityId.clear();
-            m_GizmoTransformBefore = {};
+            m_GizmoPivotBefore = glm::mat4(1.0f);
+            m_GizmoSelectionBefore.clear();
+            m_SelectionDragCandidate = false;
+            m_SelectionDragging = false;
         }
 #else
         (void)viewportScreenX;

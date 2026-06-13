@@ -337,6 +337,23 @@ namespace Life
 #endif
     }
 
+    void* ImGuiSystem::GetTextureHandle(TextureResource& texture, ImGuiTextureSampling sampling)
+    {
+#if LIFE_HAS_IMGUI
+        if (!m_Initialized || !m_Available || m_Impl == nullptr || !m_Impl->RendererBackend)
+            return nullptr;
+
+        const Detail::ImGuiTextureSampling backendSampling = sampling == ImGuiTextureSampling::Nearest
+            ? Detail::ImGuiTextureSampling::Nearest
+            : Detail::ImGuiTextureSampling::Linear;
+        return m_Impl->RendererBackend->GetTextureHandle(texture, backendSampling);
+#else
+        (void)texture;
+        (void)sampling;
+        return nullptr;
+#endif
+    }
+
     void ImGuiSystem::ReleaseTextureHandle(TextureResource& texture) noexcept
     {
 #if LIFE_HAS_IMGUI

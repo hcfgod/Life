@@ -41,6 +41,7 @@ namespace EditorApp
         std::filesystem::path m_SelectedRelativePath;
         std::filesystem::path m_PopupTargetRelativePath;
         std::unordered_map<std::string, bool> m_ExpandedFolders;
+        std::unordered_map<std::string, Life::Scope<Life::SceneSurface>> m_PrefabPreviewSurfaces;
         std::vector<PendingExternalDrop> m_PendingExternalDrops;
         std::string m_SearchFilter;
         std::string m_PopupName = "New Folder";

@@ -31,6 +31,8 @@ namespace Life
 
         Renderer2D& GetRenderer2D() noexcept { return m_Renderer2D; }
         const Renderer2D& GetRenderer2D() const noexcept { return m_Renderer2D; }
+        TextureResource* GetColorTarget() noexcept { return m_ColorTarget.get(); }
+        const TextureResource* GetColorTarget() const noexcept { return m_ColorTarget.get(); }
         bool IsReady() const noexcept;
         uint32_t GetWidth() const noexcept { return m_Width; }
         uint32_t GetHeight() const noexcept { return m_Height; }

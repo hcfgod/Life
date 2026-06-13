@@ -1,5 +1,6 @@
 #include "Editor/Panels/ProjectAssetsPanel.h"
 
+#include "Assets/PrefabAsset.h"
 #include "Assets/PrefabSerializer.h"
 #include "Editor/EditorServices.h"
 #include "Editor/PathSafety.h"
@@ -8,13 +9,17 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <functional>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <vector>
+
+#include <glm/gtc/matrix_transform.hpp>
 
 #if __has_include(<imgui.h>)
 #include <imgui.h>
@@ -373,22 +378,6 @@ namespace EditorApp
             return false;
         }
 
-        const char* ResolveBadge(ProjectEntryKind kind)
-        {
-            switch (kind)
-            {
-                case ProjectEntryKind::Directory: return "DIR";
-                case ProjectEntryKind::Scene: return "SCN";
-                case ProjectEntryKind::Prefab: return "P";
-                case ProjectEntryKind::Texture: return "TEX";
-                case ProjectEntryKind::Material: return "MAT";
-                case ProjectEntryKind::Shader: return "SHD";
-                case ProjectEntryKind::Other: return "FILE";
-            }
-
-            return "FILE";
-        }
-
 #if __has_include(<imgui.h>)
          ImVec4 ResolveAccentColor(ProjectEntryKind kind)
          {
@@ -403,6 +392,279 @@ namespace EditorApp
                  case ProjectEntryKind::Other:
                  default: return ImVec4(0.62f, 0.66f, 0.76f, 1.0f);
              }
+         }
+
+         void DrawProjectEntryIcon(ProjectEntryKind kind, ImVec2 topLeft, float size, ImVec4 accentColor)
+         {
+             ImDrawList* drawList = ImGui::GetWindowDrawList();
+             const ImU32 color = ImGui::GetColorU32(accentColor);
+             const ImU32 muted = ImGui::GetColorU32(ImVec4(accentColor.x, accentColor.y, accentColor.z, 0.34f));
+             const ImU32 dark = ImGui::GetColorU32(ImVec4(0.04f, 0.05f, 0.07f, 0.86f));
+             const float x = topLeft.x;
+             const float y = topLeft.y;
+             const float s = size;
+             const float stroke = std::max(1.0f, s * 0.075f);
+
+             switch (kind)
+             {
+                 case ProjectEntryKind::Directory:
+                 {
+                     drawList->AddRectFilled(ImVec2(x + s * 0.06f, y + s * 0.28f), ImVec2(x + s * 0.94f, y + s * 0.86f), muted, s * 0.08f);
+                     drawList->AddRectFilled(ImVec2(x + s * 0.10f, y + s * 0.18f), ImVec2(x + s * 0.46f, y + s * 0.36f), muted, s * 0.05f);
+                     drawList->AddRect(ImVec2(x + s * 0.06f, y + s * 0.28f), ImVec2(x + s * 0.94f, y + s * 0.86f), color, s * 0.08f, 0, stroke);
+                     break;
+                 }
+                 case ProjectEntryKind::Scene:
+                 {
+                     for (int row = 0; row < 2; ++row)
+                     {
+                         for (int column = 0; column < 2; ++column)
+                         {
+                             const ImVec2 center(x + s * (0.34f + column * 0.32f), y + s * (0.34f + row * 0.32f));
+                             drawList->AddCircleFilled(center, s * 0.10f, muted, 12);
+                             drawList->AddCircle(center, s * 0.10f, color, 12, stroke);
+                         }
+                     }
+                     drawList->AddLine(ImVec2(x + s * 0.34f, y + s * 0.34f), ImVec2(x + s * 0.66f, y + s * 0.66f), color, stroke);
+                     drawList->AddLine(ImVec2(x + s * 0.66f, y + s * 0.34f), ImVec2(x + s * 0.34f, y + s * 0.66f), color, stroke);
+                     break;
+                 }
+                 case ProjectEntryKind::Prefab:
+                 {
+                     const ImVec2 a(x + s * 0.50f, y + s * 0.14f);
+                     const ImVec2 b(x + s * 0.82f, y + s * 0.32f);
+                     const ImVec2 c(x + s * 0.82f, y + s * 0.68f);
+                     const ImVec2 d(x + s * 0.50f, y + s * 0.86f);
+                     const ImVec2 e(x + s * 0.18f, y + s * 0.68f);
+                     const ImVec2 f(x + s * 0.18f, y + s * 0.32f);
+                     const std::array<ImVec2, 6> points{ a, b, c, d, e, f };
+                     drawList->AddPolyline(points.data(), static_cast<int>(points.size()), color, ImDrawFlags_Closed, stroke);
+                     drawList->AddLine(a, d, color, stroke);
+                     drawList->AddLine(f, ImVec2(x + s * 0.50f, y + s * 0.50f), color, stroke);
+                     drawList->AddLine(b, ImVec2(x + s * 0.50f, y + s * 0.50f), color, stroke);
+                     break;
+                 }
+                 case ProjectEntryKind::Texture:
+                 {
+                     drawList->AddRectFilled(ImVec2(x + s * 0.16f, y + s * 0.18f), ImVec2(x + s * 0.84f, y + s * 0.82f), dark, s * 0.04f);
+                     drawList->AddRect(ImVec2(x + s * 0.16f, y + s * 0.18f), ImVec2(x + s * 0.84f, y + s * 0.82f), color, s * 0.04f, 0, stroke);
+                     drawList->AddCircleFilled(ImVec2(x + s * 0.66f, y + s * 0.36f), s * 0.07f, color, 12);
+                     drawList->AddTriangleFilled(ImVec2(x + s * 0.24f, y + s * 0.74f), ImVec2(x + s * 0.46f, y + s * 0.50f), ImVec2(x + s * 0.66f, y + s * 0.74f), muted);
+                     drawList->AddTriangleFilled(ImVec2(x + s * 0.42f, y + s * 0.74f), ImVec2(x + s * 0.62f, y + s * 0.56f), ImVec2(x + s * 0.78f, y + s * 0.74f), muted);
+                     break;
+                 }
+                 case ProjectEntryKind::Material:
+                 {
+                     drawList->AddCircleFilled(ImVec2(x + s * 0.50f, y + s * 0.50f), s * 0.34f, muted, 24);
+                     drawList->AddCircle(ImVec2(x + s * 0.50f, y + s * 0.50f), s * 0.34f, color, 24, stroke);
+                     drawList->AddCircleFilled(ImVec2(x + s * 0.40f, y + s * 0.38f), s * 0.10f, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.30f)), 16);
+                     break;
+                 }
+                 case ProjectEntryKind::Shader:
+                 {
+                     drawList->AddLine(ImVec2(x + s * 0.38f, y + s * 0.24f), ImVec2(x + s * 0.18f, y + s * 0.50f), color, stroke);
+                     drawList->AddLine(ImVec2(x + s * 0.18f, y + s * 0.50f), ImVec2(x + s * 0.38f, y + s * 0.76f), color, stroke);
+                     drawList->AddLine(ImVec2(x + s * 0.62f, y + s * 0.24f), ImVec2(x + s * 0.82f, y + s * 0.50f), color, stroke);
+                     drawList->AddLine(ImVec2(x + s * 0.82f, y + s * 0.50f), ImVec2(x + s * 0.62f, y + s * 0.76f), color, stroke);
+                     drawList->AddLine(ImVec2(x + s * 0.54f, y + s * 0.22f), ImVec2(x + s * 0.42f, y + s * 0.78f), color, stroke);
+                     break;
+                 }
+                 case ProjectEntryKind::Other:
+                 default:
+                 {
+                     drawList->AddRectFilled(ImVec2(x + s * 0.24f, y + s * 0.14f), ImVec2(x + s * 0.76f, y + s * 0.86f), dark, s * 0.04f);
+                     drawList->AddRect(ImVec2(x + s * 0.24f, y + s * 0.14f), ImVec2(x + s * 0.76f, y + s * 0.86f), color, s * 0.04f, 0, stroke);
+                     drawList->AddLine(ImVec2(x + s * 0.34f, y + s * 0.38f), ImVec2(x + s * 0.66f, y + s * 0.38f), color, stroke);
+                     drawList->AddLine(ImVec2(x + s * 0.34f, y + s * 0.54f), ImVec2(x + s * 0.66f, y + s * 0.54f), color, stroke);
+                     break;
+                 }
+             }
+         }
+
+         bool DrawTextureThumbnail(Life::TextureResource& texture,
+                                   Life::ImGuiSystem& imguiSystem,
+                                   ImVec2 minimum,
+                                   ImVec2 maximum,
+                                   bool preserveAspect = true)
+         {
+             void* handle = imguiSystem.GetTextureHandle(texture, Life::ImGuiTextureSampling::Nearest);
+             if (handle == nullptr)
+                 return false;
+
+             ImVec2 imageMin = minimum;
+             ImVec2 imageMax = maximum;
+             if (preserveAspect)
+             {
+                 const float boxWidth = std::max(maximum.x - minimum.x, 1.0f);
+                 const float boxHeight = std::max(maximum.y - minimum.y, 1.0f);
+                 const float textureWidth = static_cast<float>(std::max(texture.GetWidth(), 1u));
+                 const float textureHeight = static_cast<float>(std::max(texture.GetHeight(), 1u));
+                 const float scale = std::min(boxWidth / textureWidth, boxHeight / textureHeight);
+                 const ImVec2 imageSize(textureWidth * scale, textureHeight * scale);
+                 imageMin = ImVec2(minimum.x + (boxWidth - imageSize.x) * 0.5f, minimum.y + (boxHeight - imageSize.y) * 0.5f);
+                 imageMax = ImVec2(imageMin.x + imageSize.x, imageMin.y + imageSize.y);
+             }
+
+             ImDrawList* drawList = ImGui::GetWindowDrawList();
+             drawList->AddRectFilled(minimum, maximum, ImGui::GetColorU32(ImVec4(0.04f, 0.05f, 0.07f, 0.92f)), 4.0f);
+             drawList->AddImage(ImTextureRef(handle), imageMin, imageMax);
+             drawList->AddRect(minimum, maximum, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.16f)), 4.0f);
+             return true;
+         }
+
+         std::array<glm::vec3, 4> ResolveSpriteWorldCorners(const Life::Scene& scene, const Life::Entity& entity, const Life::SpriteComponent& sprite)
+         {
+             const glm::mat4 worldTransform = scene.GetWorldTransformMatrix(entity);
+             const glm::vec3 center = glm::vec3(worldTransform[3]);
+             const glm::vec3 xAxis = glm::vec3(worldTransform * glm::vec4(sprite.Size.x, 0.0f, 0.0f, 0.0f));
+             const glm::vec3 yAxis = glm::vec3(worldTransform * glm::vec4(0.0f, sprite.Size.y, 0.0f, 0.0f));
+             return {{
+                 center - (xAxis * 0.5f) - (yAxis * 0.5f),
+                 center + (xAxis * 0.5f) - (yAxis * 0.5f),
+                 center + (xAxis * 0.5f) + (yAxis * 0.5f),
+                 center - (xAxis * 0.5f) + (yAxis * 0.5f)
+             }};
+         }
+
+         bool ResolvePrefabPreviewBounds(const Life::Scene& scene, glm::vec3& center, float& orthographicSize)
+         {
+             glm::vec3 minimum(std::numeric_limits<float>::infinity());
+             glm::vec3 maximum(-std::numeric_limits<float>::infinity());
+             bool hasBounds = false;
+             for (const Life::Entity entity : scene.GetEntities())
+             {
+                 if (!entity.IsEnabled())
+                     continue;
+
+                 const Life::SpriteComponent* sprite = entity.TryGetComponent<Life::SpriteComponent>();
+                 if (sprite == nullptr)
+                     continue;
+
+                 const auto corners = ResolveSpriteWorldCorners(scene, entity, *sprite);
+                 for (const glm::vec3& corner : corners)
+                 {
+                     minimum = glm::min(minimum, corner);
+                     maximum = glm::max(maximum, corner);
+                     hasBounds = true;
+                 }
+             }
+
+             if (!hasBounds)
+                 return false;
+
+             center = (minimum + maximum) * 0.5f;
+             const glm::vec3 span = maximum - minimum;
+             orthographicSize = std::max({ span.x, span.y, 1.0f }) * 1.18f;
+             return true;
+         }
+
+         void ResolvePrefabSpriteTextures(Life::Scene& scene, const EditorServices& services)
+         {
+             if (!services.AssetManager)
+                 return;
+
+             for (Life::Entity entity : scene.GetEntities())
+             {
+                 Life::SpriteComponent* sprite = entity.TryGetComponent<Life::SpriteComponent>();
+                 if (sprite == nullptr || sprite->TextureAsset || sprite->TextureAssetKey.empty())
+                     continue;
+
+                 sprite->TextureAsset = services.AssetManager->get().GetOrLoad<Life::Assets::TextureAsset>(sprite->TextureAssetKey);
+             }
+         }
+
+         bool RenderPrefabPreviewToSurface(Life::SceneSurface& surface,
+                                           Life::Scene& scene,
+                                           const EditorServices& services,
+                                           uint32_t thumbnailSize)
+         {
+             if (!services.SceneRenderer2D || thumbnailSize == 0u)
+                 return false;
+
+             glm::vec3 center{ 0.0f };
+             float orthographicSize = 1.0f;
+             if (!ResolvePrefabPreviewBounds(scene, center, orthographicSize))
+                 return false;
+
+             if (!surface.Resize(thumbnailSize, thumbnailSize))
+                 return false;
+
+             Life::CameraSpecification cameraSpec;
+             cameraSpec.Name = "Prefab Preview";
+             cameraSpec.Projection = Life::ProjectionType::Orthographic;
+             cameraSpec.OrthoSize = orthographicSize;
+             cameraSpec.OrthoNear = -1000.0f;
+             cameraSpec.OrthoFar = 1000.0f;
+             cameraSpec.AspectRatio = 1.0f;
+             cameraSpec.ClearMode = Life::CameraClearMode::SolidColor;
+             cameraSpec.ClearColor = { 0.035f, 0.040f, 0.052f, 1.0f };
+             Life::Camera camera(cameraSpec);
+             camera.SetPosition({ center.x, center.y, center.z + 10.0f });
+
+             ResolvePrefabSpriteTextures(scene, services);
+             return services.SceneRenderer2D->get().RenderToSurface(
+                 surface,
+                 scene,
+                 camera,
+                 Life::SceneRenderer2D::QuadSortMode::BackToFront);
+         }
+
+         bool DrawTextureAssetThumbnail(const ProjectAssetEntry& entry,
+                                        const EditorServices& services,
+                                        ImVec2 minimum,
+                                        ImVec2 maximum)
+         {
+             if (!services.AssetManager || !services.ImGuiSystem)
+                 return false;
+
+             Life::Ref<Life::Assets::TextureAsset> textureAsset = services.AssetManager->get().GetOrLoad<Life::Assets::TextureAsset>(MakeAssetKey(entry.RelativePath));
+             Life::TextureResource* texture = textureAsset ? textureAsset->TryGetTextureResource() : nullptr;
+             return texture != nullptr && DrawTextureThumbnail(*texture, services.ImGuiSystem->get(), minimum, maximum);
+         }
+
+         bool DrawPrefabAssetThumbnail(const ProjectAssetEntry& entry,
+                                       const EditorServices& services,
+                                       std::unordered_map<std::string, Life::Scope<Life::SceneSurface>>& previewSurfaces,
+                                       ImVec2 minimum,
+                                       ImVec2 maximum)
+         {
+             if (!services.AssetManager || !services.Renderer || !services.SceneRenderer2D || !services.ImGuiSystem)
+                 return false;
+
+             const std::string assetKey = MakeAssetKey(entry.RelativePath);
+             Life::Ref<Life::Assets::PrefabAsset> prefab = services.AssetManager->get().GetOrLoad<Life::Assets::PrefabAsset>(assetKey);
+             if (!prefab || prefab->GetPrefabScene() == nullptr)
+                 return false;
+
+             Life::Scope<Life::SceneSurface>& surface = previewSurfaces[assetKey];
+             if (!surface)
+             {
+                 surface = Life::CreateScope<Life::SceneSurface>(
+                     services.Renderer->get(),
+                     services.SceneRenderer2D->get().GetRenderer2D(),
+                     services.ImGuiSystem->get());
+             }
+
+             const float boxSize = std::max(std::min(maximum.x - minimum.x, maximum.y - minimum.y), 1.0f);
+             const uint32_t renderSize = std::clamp(static_cast<uint32_t>(std::lround(boxSize * ImGui::GetIO().DisplayFramebufferScale.x)), 32u, 192u);
+             if (!RenderPrefabPreviewToSurface(*surface, *prefab->GetPrefabScene(), services, renderSize))
+                 return false;
+
+             Life::TextureResource* texture = surface->GetColorTarget();
+             return texture != nullptr && DrawTextureThumbnail(*texture, services.ImGuiSystem->get(), minimum, maximum, false);
+         }
+
+         bool DrawProjectEntryThumbnail(const ProjectAssetEntry& entry,
+                                        const EditorServices& services,
+                                        std::unordered_map<std::string, Life::Scope<Life::SceneSurface>>& prefabPreviewSurfaces,
+                                        ImVec2 minimum,
+                                        ImVec2 maximum)
+         {
+             if (entry.Kind == ProjectEntryKind::Texture)
+                 return DrawTextureAssetThumbnail(entry, services, minimum, maximum);
+             if (entry.Kind == ProjectEntryKind::Prefab)
+                 return DrawPrefabAssetThumbnail(entry, services, prefabPreviewSurfaces, minimum, maximum);
+             return false;
          }
 #endif
 
@@ -1188,14 +1450,19 @@ namespace EditorApp
                 {
                     const std::string key = relativePath.generic_string();
                     const std::string label = isRoot
-                        ? std::string("Assets##ProjectAssetsRoot")
-                        : (relativePath.filename().string() + "##" + key);
+                        ? std::string("    Assets##ProjectAssetsRoot")
+                        : ("    " + relativePath.filename().string() + "##" + key);
                     bool openState = isRoot ? true : (m_ExpandedFolders.contains(key) ? m_ExpandedFolders[key] : false);
                     ImGui::SetNextItemOpen(openState, ImGuiCond_Once);
                     const bool nodeOpen = ImGui::TreeNodeEx(
                         label.c_str(),
                         ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow |
                             ((relativePath == m_ActiveFolderRelativePath) ? ImGuiTreeNodeFlags_Selected : ImGuiTreeNodeFlags_None));
+                    {
+                        const ImVec2 itemMin = ImGui::GetItemRectMin();
+                        const float iconSize = ImGui::GetTextLineHeight() * 0.92f;
+                        DrawProjectEntryIcon(ProjectEntryKind::Directory, ImVec2(itemMin.x + ImGui::GetTreeNodeToLabelSpacing(), itemMin.y + 1.0f), iconSize, ResolveAccentColor(ProjectEntryKind::Directory));
+                    }
                     if (!isRoot)
                         m_ExpandedFolders[key] = nodeOpen;
 
@@ -1424,8 +1691,8 @@ namespace EditorApp
                             : ImVec4(accentColor.x * 0.32f, accentColor.y * 0.32f, accentColor.z * 0.32f, 0.90f));
                         ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(accentColor.x * 0.46f, accentColor.y * 0.46f, accentColor.z * 0.46f, 0.94f));
                         const std::string visibleName = ResolveVisibleName(entry);
-                        const std::string rowLabel = std::string("[") + ResolveBadge(entry.Kind) + "] " + visibleName;
-                        if (ImGui::Selectable(rowLabel.c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick))
+                        const float rowHeight = std::max(ImGui::GetFrameHeight(), 24.0f);
+                        if (ImGui::Selectable("##ProjectAssetRow", selected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0.0f, rowHeight)))
                         {
                             m_SelectedRelativePath = entry.RelativePath;
                             sceneState.SelectProjectAsset(entry.RelativePath);
@@ -1442,6 +1709,16 @@ namespace EditorApp
                                 sceneState.RequestedOpenPrefabAssetKey = MakeAssetKey(entry.RelativePath);
                             }
                         }
+                        const ImVec2 rowMin = ImGui::GetItemRectMin();
+                        const float iconSize = std::min(rowHeight - 4.0f, 20.0f);
+                        const ImVec2 iconMin(rowMin.x + 4.0f, rowMin.y + (rowHeight - iconSize) * 0.5f);
+                        const ImVec2 iconMax(iconMin.x + iconSize, iconMin.y + iconSize);
+                        if (!DrawProjectEntryThumbnail(entry, services, m_PrefabPreviewSurfaces, iconMin, iconMax))
+                            DrawProjectEntryIcon(entry.Kind, iconMin, iconSize, accentColor);
+                        ImGui::GetWindowDrawList()->AddText(
+                            ImVec2(rowMin.x + iconSize + 12.0f, rowMin.y + (rowHeight - ImGui::GetTextLineHeight()) * 0.5f),
+                            ImGui::GetColorU32(ImGuiCol_Text),
+                            visibleName.c_str());
                         ImGui::PopStyleColor(3);
 
                         if (ImGui::BeginPopupContextItem())
@@ -1564,12 +1841,21 @@ namespace EditorApp
                             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);
                         }
                         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
-                        if (ImGui::Button((std::string("[") + ResolveBadge(entry.Kind) + "]##Button").c_str(), ImVec2(cellSize - 12.0f, cellSize - 28.0f)))
+                        const ImVec2 buttonSize(cellSize - 12.0f, cellSize - 28.0f);
+                        if (ImGui::Button("##Button", buttonSize))
                         {
                             m_SelectedRelativePath = entry.RelativePath;
                             sceneState.SelectProjectAsset(entry.RelativePath);
                             if (entry.IsDirectory)
                                 m_ActiveFolderRelativePath = entry.RelativePath;
+                        }
+                        {
+                            const ImVec2 buttonMin = ImGui::GetItemRectMin();
+                            const float iconSize = std::clamp(buttonSize.y * 0.48f, 22.0f, 48.0f);
+                            const ImVec2 iconMin(buttonMin.x + (buttonSize.x - iconSize) * 0.5f, buttonMin.y + (buttonSize.y - iconSize) * 0.5f);
+                            const ImVec2 iconMax(iconMin.x + iconSize, iconMin.y + iconSize);
+                            if (!DrawProjectEntryThumbnail(entry, services, m_PrefabPreviewSurfaces, iconMin, iconMax))
+                                DrawProjectEntryIcon(entry.Kind, iconMin, iconSize, accentColor);
                         }
                         ImGui::PopStyleVar();
                         if (isPrefab)

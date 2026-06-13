@@ -39,6 +39,33 @@ namespace EditorApp
         }
 #endif
 
+        std::vector<Life::Entity> FilterTopLevelSelection(const std::vector<Life::Entity>& selectedEntities)
+        {
+            std::vector<Life::Entity> filtered;
+            filtered.reserve(selectedEntities.size());
+            for (const Life::Entity& candidate : selectedEntities)
+            {
+                if (!candidate.IsValid())
+                    continue;
+
+                bool hasSelectedAncestor = false;
+                for (const Life::Entity& other : selectedEntities)
+                {
+                    if (!other.IsValid() || other == candidate)
+                        continue;
+                    if (candidate.IsDescendantOf(other))
+                    {
+                        hasSelectedAncestor = true;
+                        break;
+                    }
+                }
+
+                if (!hasSelectedAncestor)
+                    filtered.push_back(candidate);
+            }
+            return filtered;
+        }
+
         std::string SanitizeSceneStem(std::string value)
         {
             value.erase(value.begin(), std::find_if(value.begin(), value.end(), [](unsigned char character)
@@ -812,12 +839,23 @@ namespace EditorApp
                 Life::SceneService& sceneService = m_Services.SceneService->get();
                 Life::Scene* editableScene = m_SceneState.GetEditableScene(sceneService);
                 EditorUndoStack& undoStack = m_SceneState.IsPrefabMode() ? m_PrefabUndoStack : m_UndoStack;
-                Life::Entity selected = editableScene != nullptr ? m_SceneState.GetSelectedEntity(*editableScene) : Life::Entity{};
-                if (editableScene != nullptr && selected.IsValid() &&
-                    undoStack.Execute(std::make_unique<DuplicateEntityCommand>(CreateDuplicateEntitySnapshot(selected)), *editableScene, m_SceneState))
+                const std::vector<Life::Entity> selectedEntities = editableScene != nullptr
+                    ? FilterTopLevelSelection(m_SceneState.GetSelectedEntities(*editableScene))
+                    : std::vector<Life::Entity>{};
+                std::vector<EditorEntitySnapshot> duplicateSnapshots;
+                duplicateSnapshots.reserve(selectedEntities.size());
+                for (const Life::Entity& selected : selectedEntities)
+                    duplicateSnapshots.push_back(CreateDuplicateEntitySnapshot(selected));
+
+                if (editableScene != nullptr &&
+                    !duplicateSnapshots.empty() &&
+                    undoStack.Execute(
+                        std::make_unique<RestoreEntitySnapshotsCommand>(std::vector<EditorEntitySnapshot>{}, std::move(duplicateSnapshots)),
+                        *editableScene,
+                        m_SceneState))
                 {
                     m_SceneState.MarkEditableDocumentDirty(sceneService);
-                    SetSceneStatus("Duplicated entity.", false);
+                    SetSceneStatus(selectedEntities.size() == 1u ? "Duplicated entity." : "Duplicated entities.", false);
                 }
             }
             return;
@@ -830,12 +868,23 @@ namespace EditorApp
                 Life::SceneService& sceneService = m_Services.SceneService->get();
                 Life::Scene* editableScene = m_SceneState.GetEditableScene(sceneService);
                 EditorUndoStack& undoStack = m_SceneState.IsPrefabMode() ? m_PrefabUndoStack : m_UndoStack;
-                Life::Entity selected = editableScene != nullptr ? m_SceneState.GetSelectedEntity(*editableScene) : Life::Entity{};
-                if (editableScene != nullptr && selected.IsValid() &&
-                    undoStack.Execute(std::make_unique<DeleteEntityCommand>(CaptureEntitySnapshot(selected)), *editableScene, m_SceneState))
+                const std::vector<Life::Entity> selectedEntities = editableScene != nullptr
+                    ? FilterTopLevelSelection(m_SceneState.GetSelectedEntities(*editableScene))
+                    : std::vector<Life::Entity>{};
+                std::vector<EditorEntitySnapshot> deleteSnapshots;
+                deleteSnapshots.reserve(selectedEntities.size());
+                for (const Life::Entity& selected : selectedEntities)
+                    deleteSnapshots.push_back(CaptureEntitySnapshot(selected));
+
+                if (editableScene != nullptr &&
+                    !deleteSnapshots.empty() &&
+                    undoStack.Execute(
+                        std::make_unique<RestoreEntitySnapshotsCommand>(std::move(deleteSnapshots), std::vector<EditorEntitySnapshot>{}),
+                        *editableScene,
+                        m_SceneState))
                 {
                     m_SceneState.MarkEditableDocumentDirty(sceneService);
-                    SetSceneStatus("Deleted entity.", false);
+                    SetSceneStatus(selectedEntities.size() == 1u ? "Deleted entity." : "Deleted entities.", false);
                 }
             }
             return;

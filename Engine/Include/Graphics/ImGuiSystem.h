@@ -39,6 +39,7 @@ namespace Life
         void OnSdlEvent(const SDL_Event& event);
         void CaptureEvent(Event& event);
         bool DrawImage(TextureResource& texture, float width, float height, ImGuiTextureSampling sampling = ImGuiTextureSampling::Linear);
+        void* GetTextureHandle(TextureResource& texture, ImGuiTextureSampling sampling = ImGuiTextureSampling::Linear);
         void ReleaseTextureHandle(TextureResource& texture) noexcept;
 
         bool IsInitialized() const noexcept { return m_Initialized; }

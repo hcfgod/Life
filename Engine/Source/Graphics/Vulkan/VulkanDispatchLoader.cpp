@@ -1,4 +1,15 @@
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
+#if defined(_WIN32)
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #include <Windows.h>
+    #define VULKAN_HPP_NO_WIN32_PROTOTYPES
+#endif
+
 #include <cstdio>
 #include <exception>
 #include <vulkan/vulkan.hpp>

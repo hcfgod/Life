@@ -16,8 +16,33 @@ namespace EditorApp
             Life::Entity entity = scene.FindEntityById(entityId);
             if (entity.IsValid())
                 context->SceneState->SelectEntity(entity);
-            else if (!entityId.empty() && context->SceneState->SelectedEntityId == entityId)
-                context->SceneState->ClearSelection();
+            else if (!entityId.empty())
+                context->SceneState->ValidateEntitySelection(scene);
+        }
+
+        void SelectAllAvailable(EditorCommandContext* context, Life::Scene& scene, const std::vector<std::string>& entityIds)
+        {
+            if (context == nullptr || context->SceneState == nullptr)
+                return;
+
+            std::vector<Life::Entity> entities;
+            entities.reserve(entityIds.size());
+            Life::Entity activeEntity;
+            for (const std::string& entityId : entityIds)
+            {
+                Life::Entity entity = scene.FindEntityById(entityId);
+                if (!entity.IsValid())
+                    continue;
+
+                if (!activeEntity.IsValid())
+                    activeEntity = entity;
+                entities.push_back(entity);
+            }
+
+            if (!entities.empty())
+                context->SceneState->SetEntitySelection(entities, activeEntity);
+            else
+                context->SceneState->ClearEntitySelection();
         }
 
         void RestoreSnapshotRecursive(Life::Scene& scene, const EditorEntitySnapshot& snapshot, Life::Entity parent)
@@ -193,6 +218,49 @@ namespace EditorApp
         return true;
     }
 
+    SetMultiEntityTransformCommand::SetMultiEntityTransformCommand(std::vector<MultiEntityTransformChange> changes)
+        : m_Changes(std::move(changes))
+    {
+    }
+
+    bool SetMultiEntityTransformCommand::Undo(Life::Scene& scene, EditorCommandContext* context)
+    {
+        return Apply(scene, m_Changes, true, context);
+    }
+
+    bool SetMultiEntityTransformCommand::Redo(Life::Scene& scene, EditorCommandContext* context)
+    {
+        return Apply(scene, m_Changes, false, context);
+    }
+
+    bool SetMultiEntityTransformCommand::Apply(Life::Scene& scene,
+                                               const std::vector<MultiEntityTransformChange>& changes,
+                                               bool useBefore,
+                                               EditorCommandContext* context)
+    {
+        if (changes.empty())
+            return false;
+
+        for (const MultiEntityTransformChange& change : changes)
+        {
+            Life::Entity entity = scene.FindEntityById(change.EntityId);
+            if (!entity.IsValid())
+                return false;
+        }
+
+        std::vector<std::string> appliedIds;
+        appliedIds.reserve(changes.size());
+        for (const MultiEntityTransformChange& change : changes)
+        {
+            Life::Entity entity = scene.FindEntityById(change.EntityId);
+            entity.GetComponent<Life::TransformComponent>() = useBefore ? change.Before : change.After;
+            appliedIds.push_back(change.EntityId);
+        }
+
+        SelectAllAvailable(context, scene, appliedIds);
+        return true;
+    }
+
     RestoreEntitySnapshotCommand::RestoreEntitySnapshotCommand(EditorEntitySnapshot before, EditorEntitySnapshot after)
         : m_Before(std::move(before))
         , m_After(std::move(after))
@@ -261,9 +329,14 @@ namespace EditorApp
         if (!restoredAny)
             return restore.empty();
 
-        const std::string& selectId = restore.front().Id;
-        if (!selectId.empty())
-            SelectIfAvailable(context, scene, selectId);
+        std::vector<std::string> restoredIds;
+        restoredIds.reserve(restore.size());
+        for (const EditorEntitySnapshot& snapshot : restore)
+        {
+            if (!snapshot.Id.empty())
+                restoredIds.push_back(snapshot.Id);
+        }
+        SelectAllAvailable(context, scene, restoredIds);
         return true;
     }
 
@@ -275,8 +348,8 @@ namespace EditorApp
     bool CreateEntityCommand::Undo(Life::Scene& scene, EditorCommandContext* context)
     {
         const bool destroyed = DestroyEntityById(scene, m_Snapshot.Id);
-        if (destroyed && context != nullptr && context->SceneState != nullptr && context->SceneState->SelectedEntityId == m_Snapshot.Id)
-            context->SceneState->ClearSelection();
+        if (destroyed && context != nullptr && context->SceneState != nullptr)
+            context->SceneState->ValidateEntitySelection(scene);
         return destroyed;
     }
 
@@ -304,8 +377,8 @@ namespace EditorApp
     bool DeleteEntityCommand::Redo(Life::Scene& scene, EditorCommandContext* context)
     {
         const bool destroyed = DestroyEntityById(scene, m_Snapshot.Id);
-        if (destroyed && context != nullptr && context->SceneState != nullptr && context->SceneState->SelectedEntityId == m_Snapshot.Id)
-            context->SceneState->ClearSelection();
+        if (destroyed && context != nullptr && context->SceneState != nullptr)
+            context->SceneState->ValidateEntitySelection(scene);
         return destroyed;
     }
 
@@ -317,8 +390,8 @@ namespace EditorApp
     bool DuplicateEntityCommand::Undo(Life::Scene& scene, EditorCommandContext* context)
     {
         const bool destroyed = DestroyEntityById(scene, m_Snapshot.Id);
-        if (destroyed && context != nullptr && context->SceneState != nullptr && context->SceneState->SelectedEntityId == m_Snapshot.Id)
-            context->SceneState->ClearSelection();
+        if (destroyed && context != nullptr && context->SceneState != nullptr)
+            context->SceneState->ValidateEntitySelection(scene);
         return destroyed;
     }
 

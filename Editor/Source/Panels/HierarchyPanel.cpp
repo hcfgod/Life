@@ -28,6 +28,7 @@ namespace EditorApp
 
         std::string g_RenamingEntityId;
         std::string g_RenameBuffer;
+        std::vector<std::string> g_LastVisibleHierarchyIds;
 
         enum class DropMode
         {
@@ -63,6 +64,65 @@ namespace EditorApp
         bool CanApplyDrop(const Life::Entity& dragged, const Life::Entity& target)
         {
             return dragged.IsValid() && target.IsValid() && dragged != target && !target.IsDescendantOf(dragged);
+        }
+
+        std::vector<Life::Entity> FilterTopLevelSelection(const std::vector<Life::Entity>& selectedEntities)
+        {
+            std::vector<Life::Entity> filtered;
+            filtered.reserve(selectedEntities.size());
+            for (const Life::Entity& candidate : selectedEntities)
+            {
+                if (!candidate.IsValid())
+                    continue;
+
+                bool hasSelectedAncestor = false;
+                for (const Life::Entity& other : selectedEntities)
+                {
+                    if (!other.IsValid() || other == candidate)
+                        continue;
+                    if (candidate.IsDescendantOf(other))
+                    {
+                        hasSelectedAncestor = true;
+                        break;
+                    }
+                }
+                if (!hasSelectedAncestor)
+                    filtered.push_back(candidate);
+            }
+            return filtered;
+        }
+
+        void ApplyHierarchyClickSelection(EditorSceneState& sceneState, const Life::Entity& entity, const ImGuiIO& io)
+        {
+            if (!entity.IsValid())
+                return;
+
+            if (io.KeyCtrl)
+            {
+                sceneState.ToggleEntitySelection(entity);
+                return;
+            }
+
+            if (io.KeyShift && !sceneState.ActiveSelectedEntityId.empty())
+            {
+                const auto activeIt = std::find(g_LastVisibleHierarchyIds.begin(), g_LastVisibleHierarchyIds.end(), sceneState.ActiveSelectedEntityId);
+                const auto clickedIt = std::find(g_LastVisibleHierarchyIds.begin(), g_LastVisibleHierarchyIds.end(), entity.GetId());
+                if (activeIt != g_LastVisibleHierarchyIds.end() && clickedIt != g_LastVisibleHierarchyIds.end())
+                {
+                    const std::ptrdiff_t activeIndex = std::distance(g_LastVisibleHierarchyIds.begin(), activeIt);
+                    const std::ptrdiff_t clickedIndex = std::distance(g_LastVisibleHierarchyIds.begin(), clickedIt);
+                    const std::ptrdiff_t first = std::min(activeIndex, clickedIndex);
+                    const std::ptrdiff_t last = std::max(activeIndex, clickedIndex);
+                    std::vector<std::string> rangeIds;
+                    rangeIds.reserve(static_cast<std::size_t>(last - first + 1));
+                    for (std::ptrdiff_t index = first; index <= last; ++index)
+                        rangeIds.push_back(g_LastVisibleHierarchyIds[static_cast<std::size_t>(index)]);
+                    sceneState.SetEntitySelection(std::move(rangeIds), entity.GetId());
+                    return;
+                }
+            }
+
+            sceneState.SelectEntity(entity);
         }
 
         bool InputTextString(const char* label, std::string& value, ImGuiInputTextFlags flags = 0)
@@ -625,13 +685,34 @@ namespace EditorApp
             return changed;
         }
 
+        bool ReparentEntityToRoot(Life::Scene& scene, Life::Entity dragged, EditorUndoStack& undoStack)
+        {
+            if (!dragged.IsValid() || !dragged.HasParent())
+                return false;
+
+            const std::string entityId = dragged.GetId();
+            const std::string beforeParentId = GetParentId(dragged);
+            const std::size_t beforeSiblingIndex = scene.GetSiblingIndex(dragged);
+            const Life::TransformComponent beforeTransform = dragged.GetComponent<Life::TransformComponent>();
+            const glm::mat4 worldTransform = scene.GetWorldTransformMatrix(dragged);
+            dragged.RemoveParent();
+            (void)Life::SetEntityWorldTransform(scene, dragged, worldTransform);
+            undoStack.CommitExecuted(std::make_unique<SetEntityParentCommand>(
+                entityId,
+                beforeParentId,
+                beforeSiblingIndex,
+                beforeTransform,
+                std::string{},
+                scene.GetSiblingIndex(dragged),
+                dragged.GetComponent<Life::TransformComponent>()));
+            return true;
+        }
+
         bool RenderRootDropTarget(Life::Scene& scene, const EditorServices& services, EditorSceneState& sceneState, EditorUndoStack& undoStack)
         {
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::TextUnformatted("Scene Root");
-            const ImVec2 targetSize(ImGui::GetContentRegionAvail().x, ImGui::GetFrameHeight() * 1.35f);
-            ImGui::Selectable("Drop here to reparent to root", false, ImGuiSelectableFlags_None, targetSize);
+            const ImVec2 available = ImGui::GetContentRegionAvail();
+            const ImVec2 targetSize(std::max(available.x, 1.0f), std::max(available.y, ImGui::GetFrameHeight() * 1.35f));
+            ImGui::InvisibleButton("##HierarchyRootDropArea", targetSize);
 
             bool changed = false;
             if (ImGui::BeginDragDropTarget())
@@ -643,24 +724,7 @@ namespace EditorApp
                     DrawRootDropPreview(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), valid);
 
                     if (payload->Delivery && valid)
-                    {
-                        const std::string entityId = dragged.GetId();
-                        const std::string beforeParentId = GetParentId(dragged);
-                        const std::size_t beforeSiblingIndex = scene.GetSiblingIndex(dragged);
-                        const Life::TransformComponent beforeTransform = dragged.GetComponent<Life::TransformComponent>();
-                        const glm::mat4 worldTransform = scene.GetWorldTransformMatrix(dragged);
-                        dragged.RemoveParent();
-                        (void)Life::SetEntityWorldTransform(scene, dragged, worldTransform);
-                        undoStack.CommitExecuted(std::make_unique<SetEntityParentCommand>(
-                            entityId,
-                            beforeParentId,
-                            beforeSiblingIndex,
-                            beforeTransform,
-                            std::string{},
-                            scene.GetSiblingIndex(dragged),
-                            dragged.GetComponent<Life::TransformComponent>()));
-                        changed = true;
-                    }
+                        changed = ReparentEntityToRoot(scene, dragged, undoStack);
                 }
                 else if (const ImGuiPayload* assetDropPayload = ImGui::AcceptDragDropPayload(kProjectAssetDragPayloadType, ImGuiDragDropFlags_AcceptBeforeDelivery))
                 {
@@ -686,10 +750,12 @@ namespace EditorApp
                               const EditorServices& services,
                               EditorSceneState& sceneState,
                               EditorUndoStack& undoStack,
-                              bool& entityContextHandled)
+                              bool& entityContextHandled,
+                              std::vector<std::string>& currentVisibleIds)
         {
             bool changed = false;
-            const bool isSelected = sceneState.SelectedEntityId == entity.GetId();
+            currentVisibleIds.push_back(entity.GetId());
+            const bool isSelected = sceneState.IsEntitySelected(entity);
             const bool isPrefabInstance = entity.HasComponent<Life::PrefabInstanceComponent>();
             const auto children = entity.GetChildren();
 
@@ -718,6 +784,8 @@ namespace EditorApp
             const std::string contextPopupId = "##EntityContext_" + entity.GetId();
             if (entityItemRightClicked)
             {
+                if (!sceneState.IsEntitySelected(entity))
+                    sceneState.SelectEntity(entity);
                 entityContextHandled = true;
                 ImGui::OpenPopup(contextPopupId.c_str());
             }
@@ -726,7 +794,7 @@ namespace EditorApp
             if (isPrefabInstance && !isRenaming)
                 DrawPrefabInstanceBadge();
             if (entityItemClicked)
-                sceneState.SelectEntity(entity);
+                ApplyHierarchyClickSelection(sceneState, entity, ImGui::GetIO());
             if (entityItemDoubleClicked)
             {
                 if (isPrefabInstance)
@@ -796,7 +864,19 @@ namespace EditorApp
                 }
 
                 if (ImGui::MenuItem("Duplicate"))
-                    changed |= undoStack.Execute(std::make_unique<DuplicateEntityCommand>(CreateDuplicateEntitySnapshot(entity)), scene, sceneState);
+                {
+                    std::vector<Life::Entity> selectedEntities = sceneState.IsEntitySelected(entity)
+                        ? FilterTopLevelSelection(sceneState.GetSelectedEntities(scene))
+                        : std::vector<Life::Entity>{ entity };
+                    std::vector<EditorEntitySnapshot> duplicateSnapshots;
+                    duplicateSnapshots.reserve(selectedEntities.size());
+                    for (const Life::Entity& selected : selectedEntities)
+                        duplicateSnapshots.push_back(CreateDuplicateEntitySnapshot(selected));
+                    changed |= undoStack.Execute(
+                        std::make_unique<RestoreEntitySnapshotsCommand>(std::vector<EditorEntitySnapshot>{}, std::move(duplicateSnapshots)),
+                        scene,
+                        sceneState);
+                }
 
                 if (ImGui::MenuItem("Create Prefab"))
                     (void)CreatePrefabFromEntity(services, sceneState, entity);
@@ -807,8 +887,20 @@ namespace EditorApp
                     g_RenameBuffer = entity.GetTag();
                 }
 
-                if (ImGui::MenuItem("Delete Entity"))
-                    changed |= undoStack.Execute(std::make_unique<DeleteEntityCommand>(CaptureEntitySnapshot(entity)), scene, sceneState);
+                if (ImGui::MenuItem(sceneState.IsEntitySelected(entity) && sceneState.SelectedEntityIds.size() > 1u ? "Delete Entities" : "Delete Entity"))
+                {
+                    std::vector<Life::Entity> selectedEntities = sceneState.IsEntitySelected(entity)
+                        ? FilterTopLevelSelection(sceneState.GetSelectedEntities(scene))
+                        : std::vector<Life::Entity>{ entity };
+                    std::vector<EditorEntitySnapshot> deleteSnapshots;
+                    deleteSnapshots.reserve(selectedEntities.size());
+                    for (const Life::Entity& selected : selectedEntities)
+                        deleteSnapshots.push_back(CaptureEntitySnapshot(selected));
+                    changed |= undoStack.Execute(
+                        std::make_unique<RestoreEntitySnapshotsCommand>(std::move(deleteSnapshots), std::vector<EditorEntitySnapshot>{}),
+                        scene,
+                        sceneState);
+                }
 
                 ImGui::EndPopup();
             }
@@ -816,7 +908,7 @@ namespace EditorApp
             if (nodeOpen)
             {
                 for (const Life::Entity child : children)
-                    changed |= RenderEntityNode(scene, child, services, sceneState, undoStack, entityContextHandled);
+                    changed |= RenderEntityNode(scene, child, services, sceneState, undoStack, entityContextHandled, currentVisibleIds);
                 ImGui::TreePop();
             }
 
@@ -876,11 +968,13 @@ namespace EditorApp
                 ImGui::SeparatorText("Entities");
 
                 bool entityContextHandled = false;
+                std::vector<std::string> currentVisibleIds;
                 const auto roots = scene.GetRootEntities();
                 if (roots.empty())
                     ImGui::TextDisabled("No entities in the active scene.");
                 for (const Life::Entity root : roots)
-                    changed |= RenderEntityNode(scene, root, services, sceneState, undoStack, entityContextHandled);
+                    changed |= RenderEntityNode(scene, root, services, sceneState, undoStack, entityContextHandled, currentVisibleIds);
+                g_LastVisibleHierarchyIds = std::move(currentVisibleIds);
 
                 changed |= RenderRootDropTarget(scene, services, sceneState, undoStack);
 

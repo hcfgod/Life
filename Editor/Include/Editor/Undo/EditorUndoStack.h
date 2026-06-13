@@ -65,6 +65,30 @@ namespace EditorApp
         Life::TransformComponent m_After;
     };
 
+    struct MultiEntityTransformChange
+    {
+        std::string EntityId;
+        Life::TransformComponent Before;
+        Life::TransformComponent After;
+    };
+
+    class SetMultiEntityTransformCommand final : public EditorCommand
+    {
+    public:
+        explicit SetMultiEntityTransformCommand(std::vector<MultiEntityTransformChange> changes);
+
+        bool Undo(Life::Scene& scene, EditorCommandContext* context) override;
+        bool Redo(Life::Scene& scene, EditorCommandContext* context) override;
+
+    private:
+        static bool Apply(Life::Scene& scene,
+                          const std::vector<MultiEntityTransformChange>& changes,
+                          bool useBefore,
+                          EditorCommandContext* context);
+
+        std::vector<MultiEntityTransformChange> m_Changes;
+    };
+
     class RestoreEntitySnapshotCommand final : public EditorCommand
     {
     public:
