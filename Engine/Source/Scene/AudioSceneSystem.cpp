@@ -85,7 +85,14 @@ namespace Life
             }
 
             if (audioDevice != nullptr)
-                audioDevice->Update(id.Id, source.PlaybackTimeSeconds, source.Volume, source.Loop, source.Playing);
+            {
+                audioDevice->Update(id.Id, AudioDevice::VoiceUpdate{
+                    source.PlaybackTimeSeconds,
+                    source.Volume,
+                    source.Loop,
+                    source.Playing
+                });
+            }
         }
     }
 

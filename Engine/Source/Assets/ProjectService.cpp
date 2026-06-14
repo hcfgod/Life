@@ -38,7 +38,7 @@ namespace Life::Assets
         if (projectResult.IsFailure())
             return projectResult;
 
-        Project project = projectResult.GetValue();
+        Project project = std::move(projectResult.GetValue());
         if (makeActive)
         {
             auto activateResult = SetActiveProject(project);
@@ -55,7 +55,7 @@ namespace Life::Assets
         if (projectResult.IsFailure())
             return projectResult;
 
-        Project project = projectResult.GetValue();
+        Project project = std::move(projectResult.GetValue());
         auto activateResult = SetActiveProject(project);
         if (activateResult.IsFailure())
             return Result<Project>(activateResult.GetError());

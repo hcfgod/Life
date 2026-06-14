@@ -27,7 +27,7 @@ namespace Life
             it->second.Playing = false;
     }
 
-    void AudioDevice::Update(const std::string& sourceId, float playbackTimeSeconds, float volume, bool loop, bool playing)
+    void AudioDevice::Update(const std::string& sourceId, const VoiceUpdate& update)
     {
         if (sourceId.empty())
             return;
@@ -36,10 +36,10 @@ namespace Life
         if (it == m_Voices.end())
             return;
 
-        it->second.PlaybackTimeSeconds = playbackTimeSeconds;
-        it->second.Volume = std::clamp(volume, 0.0f, 1.0f);
-        it->second.Loop = loop;
-        it->second.Playing = playing;
+        it->second.PlaybackTimeSeconds = update.PlaybackTimeSeconds;
+        it->second.Volume = std::clamp(update.Volume, 0.0f, 1.0f);
+        it->second.Loop = update.Loop;
+        it->second.Playing = update.Playing;
     }
 
     void AudioDevice::Clear()

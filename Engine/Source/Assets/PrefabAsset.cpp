@@ -33,7 +33,7 @@ namespace Life::Assets
                 return nullptr;
             }
 
-            const std::filesystem::path resolvedPath = resolvedResult.GetValue();
+            const std::filesystem::path& resolvedPath = resolvedResult.GetValue();
             const auto guidResult = LoadOrCreateGuid(resolvedPath.string(), {{"key", key}, {"type", "Prefab"}});
             if (guidResult.IsFailure())
             {

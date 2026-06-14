@@ -7,6 +7,7 @@
 #include <cctype>
 #include <fstream>
 #include <system_error>
+#include <utility>
 
 namespace Life::Assets
 {
@@ -305,7 +306,7 @@ namespace Life::Assets
         if (projectResult.IsFailure())
             return projectResult;
 
-        Project project = projectResult.GetValue();
+        Project project = std::move(projectResult.GetValue());
         auto ensureDirectoriesResult = EnsureProjectDirectoriesExist(project);
         if (ensureDirectoriesResult.IsFailure())
             return Result<Project>(ensureDirectoriesResult.GetError());
