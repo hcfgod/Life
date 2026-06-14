@@ -22,6 +22,7 @@ jobs:
       build_command: ./Scripts/CI/build_windows.ps1 -Configuration Debug -Platform x64 -LogPath Build/Logs/windows-quality-build.log
       test_command: ./Scripts/CI/run_windows_tests.ps1 -Configuration Debug -Platform x64
       analysis_command: ./Scripts/CI/run_windows_code_analysis.ps1 -Configuration Debug -RulesetPath Scripts/CI/LifeNativeRecommended.ruleset -LogPath Build/Logs/windows-code-analysis.log
+      timeout_minutes: 60
       artifact_name: windows-quality-logs
       artifact_path: |
         Build/Logs/windows-quality-build.log
