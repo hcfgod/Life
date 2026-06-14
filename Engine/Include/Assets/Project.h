@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace Life::Assets
 {
@@ -30,6 +31,58 @@ namespace Life::Assets
 
     struct ProjectDescriptor
     {
+        ProjectDescriptor() = default;
+
+        ProjectDescriptor(const ProjectDescriptor& other)
+            : Version(other.Version)
+            , Name(other.Name)
+            , EngineVersion(other.EngineVersion)
+            , Dimension(other.Dimension)
+            , Paths(other.Paths)
+            , Startup(other.Startup)
+        {
+        }
+
+        ProjectDescriptor(ProjectDescriptor&& other) noexcept
+            : Version(other.Version)
+            , Name(std::move(other.Name))
+            , EngineVersion(std::move(other.EngineVersion))
+            , Dimension(other.Dimension)
+            , Paths(std::move(other.Paths))
+            , Startup(std::move(other.Startup))
+        {
+        }
+
+        ProjectDescriptor& operator=(const ProjectDescriptor& other)
+        {
+            if (this == &other)
+                return *this;
+
+            Version = other.Version;
+            Name = other.Name;
+            EngineVersion = other.EngineVersion;
+            Dimension = other.Dimension;
+            Paths = other.Paths;
+            Startup = other.Startup;
+            return *this;
+        }
+
+        ProjectDescriptor& operator=(ProjectDescriptor&& other) noexcept
+        {
+            if (this == &other)
+                return *this;
+
+            Version = other.Version;
+            Name = std::move(other.Name);
+            EngineVersion = std::move(other.EngineVersion);
+            Dimension = other.Dimension;
+            Paths = std::move(other.Paths);
+            Startup = std::move(other.Startup);
+            return *this;
+        }
+
+        ~ProjectDescriptor() = default;
+
         uint32_t Version = ProjectDescriptorCurrentVersion;
         std::string Name;
         std::string EngineVersion = std::string(ProjectDefaultEngineVersion);
