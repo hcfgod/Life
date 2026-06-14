@@ -419,7 +419,7 @@ namespace EditorApp
         const float targetCursorX = ImGui::GetWindowContentRegionMax().x - brandWidth - ImGui::GetStyle().ItemSpacing.x;
         if (targetCursorX > ImGui::GetCursorPosX())
             ImGui::SameLine(targetCursorX);
-        ImGui::TextColored(ImVec4(0.56f, 0.74f, 1.0f, 1.0f), "%s", brandLabel);
+        ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "%s", brandLabel);
         ImGui::EndMenuBar();
 #else
         (void)visibility;
@@ -453,21 +453,21 @@ namespace EditorApp
             const float centeredCursorY = std::max(0.0f, (ImGui::GetContentRegionAvail().y - ImGui::GetFrameHeight()) * 0.5f - 2.0f);
             ImGui::SetCursorPosY(centeredCursorY);
             ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Workspace");
+            ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "Workspace");
 
             ImGui::SameLine();
-            drawChip("Project", (context.ActiveProjectName != nullptr && context.ActiveProjectName[0] != '\0') ? context.ActiveProjectName : "No Project", ImVec4(0.16f, 0.28f, 0.46f, 1.0f));
+            drawChip("Project", (context.ActiveProjectName != nullptr && context.ActiveProjectName[0] != '\0') ? context.ActiveProjectName : "No Project", ImVec4(0.19f, 0.27f, 0.36f, 1.0f));
 
             ImGui::SameLine();
             const char* sceneLabel = (context.ActiveSceneName != nullptr && context.ActiveSceneName[0] != '\0') ? context.ActiveSceneName : "No Scene";
-            drawChip("Scene", sceneLabel, context.IsSceneDirty ? ImVec4(0.36f, 0.26f, 0.08f, 1.0f) : ImVec4(0.17f, 0.25f, 0.20f, 1.0f));
+            drawChip("Scene", sceneLabel, context.IsSceneDirty ? ImVec4(0.42f, 0.31f, 0.13f, 1.0f) : ImVec4(0.20f, 0.25f, 0.23f, 1.0f));
 
             ImGui::SameLine();
             const ImVec4 modeColor = context.ExecutionMode == EditorSceneExecutionMode::Play
-                ? ImVec4(0.18f, 0.34f, 0.18f, 1.0f)
+                ? ImVec4(0.20f, 0.37f, 0.22f, 1.0f)
                 : context.ExecutionMode == EditorSceneExecutionMode::Simulation
-                    ? ImVec4(0.30f, 0.25f, 0.12f, 1.0f)
-                    : ImVec4(0.20f, 0.20f, 0.24f, 1.0f);
+                    ? ImVec4(0.36f, 0.30f, 0.15f, 1.0f)
+                    : ImVec4(0.22f, 0.23f, 0.26f, 1.0f);
             drawChip("Mode", ResolveExecutionModeLabel(context.ExecutionMode), modeColor);
 
             ImGui::SameLine();
@@ -513,13 +513,13 @@ namespace EditorApp
             if (context.IsSceneDirty)
             {
                 ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.95f, 0.73f, 0.30f, 1.0f), "Unsaved changes");
+                ImGui::TextColored(ImVec4(0.88f, 0.63f, 0.28f, 1.0f), "Unsaved changes");
             }
 
             if (!context.HasSceneCamera)
             {
                 ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "No scene camera");
+                ImGui::TextColored(ImVec4(0.88f, 0.30f, 0.32f, 1.0f), "No scene camera");
             }
         }
         ImGui::EndChild();

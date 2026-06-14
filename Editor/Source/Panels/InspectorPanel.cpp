@@ -41,7 +41,7 @@ namespace EditorApp
 
         void DrawPanelHeader(const char* title, const char* subtitle)
         {
-            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "%s", title);
+            ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "%s", title);
             ImGui::SameLine();
             ImGui::TextDisabled("%s", subtitle);
             ImGui::Separator();
@@ -277,7 +277,7 @@ namespace EditorApp
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 7.0f));
             if (ImGui::BeginChild("##InspectorAssetCard", ImVec2(0.0f, isTextureAsset ? 132.0f : 118.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
             {
-                ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "%s", isTextureAsset ? "Texture Asset" : (isDirectory ? "Folder" : "Asset"));
+                ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "%s", isTextureAsset ? "Texture Asset" : (isDirectory ? "Folder" : "Asset"));
                 ImGui::TextUnformatted("Name");
                 ImGui::TextUnformatted(displayName.c_str());
                 ImGui::TextDisabled("%s", assetKey.c_str());
@@ -330,7 +330,7 @@ namespace EditorApp
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 7.0f));
             if (ImGui::BeginChild("##InspectorMultiEntityCard", ImVec2(0.0f, 100.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
             {
-                ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Multiple Entities");
+                ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "Multiple Entities");
                 ImGui::Text("%zu entities selected", selectedEntities.size());
                 std::size_t transformCount = 0;
                 for (const Life::Entity& entity : selectedEntities)
@@ -536,7 +536,7 @@ namespace EditorApp
 
                                 ImGui::TableSetColumnIndex(0);
                                 ImGui::AlignTextToFramePadding();
-                                ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Entity");
+                                ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "Entity");
 
                                 ImGui::TableSetColumnIndex(1);
                                 const float checkboxWidth = ImGui::CalcTextSize("Enabled").x + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::GetStyle().ItemSpacing.x;
@@ -564,9 +564,9 @@ namespace EditorApp
                         ImGui::EndChild();
                         ImGui::PopStyleVar();
 
-                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.44f, 0.20f, 0.22f, 1.0f));
-                        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.56f, 0.25f, 0.28f, 1.0f));
-                        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.36f, 0.16f, 0.18f, 1.0f));
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.56f, 0.20f, 0.22f, 1.0f));
+                        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.68f, 0.25f, 0.28f, 1.0f));
+                        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.45f, 0.16f, 0.18f, 1.0f));
                         if (ImGui::Button("Delete Entity", ImVec2(-1.0f, 0.0f)))
                         {
                             const std::string deletedId = selectedEntity.GetId();
@@ -631,9 +631,9 @@ namespace EditorApp
                         ImGui::Indent(kInspectorFooterPadding);
                         if (hasAddableComponents)
                         {
-                            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.33f, 0.54f, 1.0f));
-                            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.41f, 0.64f, 1.0f));
-                            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.29f, 0.48f, 1.0f));
+                            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.36f, 0.54f, 1.0f));
+                            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.46f, 0.66f, 1.0f));
+                            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.30f, 0.46f, 1.0f));
                             if (ImGui::Button("Add Component", ImVec2(-1.0f, 0.0f)))
                                 ImGui::OpenPopup("AddComponentPopup");
                             ImGui::PopStyleColor(3);

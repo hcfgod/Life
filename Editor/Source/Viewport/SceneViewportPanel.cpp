@@ -172,7 +172,7 @@ namespace
     {
         const bool selected = sceneState.ViewportTool == value;
         if (selected)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.42f, 0.70f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.36f, 0.54f, 1.0f));
         if (ImGui::Button(label, ImVec2(68.0f, 0.0f)))
             sceneState.ViewportTool = value;
         if (selected)
@@ -183,7 +183,7 @@ namespace
     {
         const bool selected = sceneState.SceneViewMode == value;
         if (selected)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.42f, 0.70f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.36f, 0.54f, 1.0f));
         if (ImGui::Button(label, ImVec2(44.0f, 0.0f)))
             sceneState.SceneViewMode = value;
         if (selected)
@@ -643,8 +643,8 @@ namespace
     void DrawMarqueeSelectionRect(const ScreenRect& rect)
     {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        const ImU32 fill = ImGui::GetColorU32(ImVec4(0.20f, 0.62f, 1.0f, 0.14f));
-        const ImU32 outline = ImGui::GetColorU32(ImVec4(0.20f, 0.62f, 1.0f, 0.86f));
+        const ImU32 fill = ImGui::GetColorU32(ImVec4(0.31f, 0.55f, 0.78f, 0.14f));
+        const ImU32 outline = ImGui::GetColorU32(ImVec4(0.31f, 0.55f, 0.78f, 0.86f));
         drawList->AddRectFilled(rect.Minimum, rect.Maximum, fill);
         drawList->AddRect(rect.Minimum, rect.Maximum, outline, 0.0f, 0, 1.5f);
     }
@@ -900,7 +900,7 @@ namespace
             return;
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        const ImU32 color = ImGui::GetColorU32(ImVec4(0.20f, 0.62f, 1.0f, 1.0f));
+        const ImU32 color = ImGui::GetColorU32(ImVec4(0.31f, 0.55f, 0.78f, 1.0f));
         if (drawScreenBounds)
         {
             DrawSelectedSpriteScreenBounds(scene, entity, projection, color);
@@ -1084,7 +1084,7 @@ namespace
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         const ImU32 minorColor = ImGui::GetColorU32(ImVec4(0.55f, 0.62f, 0.70f, 0.18f));
-        const ImU32 axisColor = ImGui::GetColorU32(ImVec4(0.55f, 0.72f, 0.95f, 0.45f));
+        const ImU32 axisColor = ImGui::GetColorU32(ImVec4(0.50f, 0.62f, 0.76f, 0.45f));
         for (float x = minX; x <= maxX + visibleGridSize * 0.5f; x += visibleGridSize)
         {
             const bool isAxis = std::abs(x) <= visibleGridSize * 0.001f;
@@ -1281,7 +1281,7 @@ namespace EditorApp
 
         if (ImGui::Begin("Scene", &isOpen))
         {
-            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Scene");
+            ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "Scene");
             ImGui::SameLine();
             ImGui::TextDisabled("Viewport and scene interaction");
             ImGui::Separator();

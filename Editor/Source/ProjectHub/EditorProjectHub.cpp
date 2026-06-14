@@ -44,19 +44,83 @@ namespace EditorApp
             return true;
         }
 
+        ImVec4 HubBand() { return ImVec4(0.135f, 0.145f, 0.16f, 1.0f); }
+        ImVec4 HubPanel() { return ImVec4(0.145f, 0.155f, 0.172f, 1.0f); }
+        ImVec4 HubPanelAlt() { return ImVec4(0.165f, 0.177f, 0.197f, 1.0f); }
+        ImVec4 HubTextMuted() { return ImVec4(0.60f, 0.64f, 0.70f, 1.0f); }
+        ImVec4 HubAccent() { return ImVec4(0.31f, 0.55f, 0.78f, 1.0f); }
+        ImVec4 HubAccentHover() { return ImVec4(0.37f, 0.63f, 0.88f, 1.0f); }
+        ImVec4 HubAccentActive() { return ImVec4(0.25f, 0.47f, 0.70f, 1.0f); }
+        ImVec4 HubDanger() { return ImVec4(0.56f, 0.20f, 0.22f, 1.0f); }
+        ImVec4 HubDangerHover() { return ImVec4(0.68f, 0.25f, 0.28f, 1.0f); }
+        ImVec4 HubDangerActive() { return ImVec4(0.45f, 0.16f, 0.18f, 1.0f); }
+        ImVec4 HubSuccess() { return ImVec4(0.32f, 0.70f, 0.45f, 1.0f); }
+        ImVec4 HubWarning() { return ImVec4(0.88f, 0.63f, 0.28f, 1.0f); }
+
+        void PushPrimaryButtonStyle()
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, HubAccent());
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HubAccentHover());
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, HubAccentActive());
+        }
+
+        void PushDangerButtonStyle()
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, HubDanger());
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HubDangerHover());
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, HubDangerActive());
+        }
+
+        void DrawSectionTitle(const char* title, const char* description)
+        {
+            ImGui::TextUnformatted(title);
+            ImGui::PushStyleColor(ImGuiCol_Text, HubTextMuted());
+            ImGui::TextWrapped("%s", description);
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
+        }
+
+        bool DrawLabeledInput(const char* label, const char* id, std::string& value)
+        {
+            ImGui::TextUnformatted(label);
+            ImGui::SetNextItemWidth(-1.0f);
+            return InputTextString(id, value);
+        }
+
         void DrawProjectDimensionButton(const char* label,
                                         Life::Assets::ProjectDimension value,
-                                        Life::Assets::ProjectDimension& selected)
+                                        Life::Assets::ProjectDimension& selected,
+                                        float width)
         {
             const bool isSelected = selected == value;
             if (isSelected)
-                ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, HubAccent());
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HubAccentHover());
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, HubAccentActive());
+            }
 
-            if (ImGui::Button(label, ImVec2(52.0f, 0.0f)))
+            if (ImGui::Button(label, ImVec2(width, 30.0f)))
                 selected = value;
 
             if (isSelected)
-                ImGui::PopStyleColor();
+                ImGui::PopStyleColor(3);
+        }
+
+        bool DrawPrimaryButton(const char* label, const ImVec2& size)
+        {
+            PushPrimaryButtonStyle();
+            const bool clicked = ImGui::Button(label, size);
+            ImGui::PopStyleColor(3);
+            return clicked;
+        }
+
+        bool DrawDangerButton(const char* label, const ImVec2& size)
+        {
+            PushDangerButtonStyle();
+            const bool clicked = ImGui::Button(label, size);
+            ImGui::PopStyleColor(3);
+            return clicked;
         }
 #endif
     }
@@ -107,18 +171,36 @@ namespace EditorApp
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
         ImGui::Begin("Project Hub", nullptr, windowFlags);
-        ImGui::PopStyleVar(2);
+        ImGui::PopStyleVar(3);
 
         RenderHeader();
-        ImGui::Spacing();
-        ImGui::Columns(2, "ProjectHubColumns", false);
-        RenderCreateProjectCard(projectService, didEnterWorkspace);
-        ImGui::NextColumn();
-        RenderOpenProjectCard(projectService, didEnterWorkspace);
-        ImGui::Columns(1);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 18.0f));
+        ImGui::BeginChild("##ProjectHubBody", ImVec2(0.0f, 0.0f), false);
+        const float contentWidth = ImGui::GetContentRegionAvail().x;
+        const float gap = 18.0f;
+        const float topCardHeight = 310.0f;
+
+        if (contentWidth >= 820.0f)
+        {
+            const float createWidth = std::max(420.0f, (contentWidth - gap) * 0.50f);
+            const float openWidth = std::max(360.0f, contentWidth - createWidth - gap);
+            RenderCreateProjectCard(projectService, didEnterWorkspace, createWidth, topCardHeight);
+            ImGui::SameLine(0.0f, gap);
+            RenderOpenProjectCard(projectService, didEnterWorkspace, openWidth, topCardHeight);
+        }
+        else
+        {
+            RenderCreateProjectCard(projectService, didEnterWorkspace, contentWidth, topCardHeight);
+            ImGui::Spacing();
+            RenderOpenProjectCard(projectService, didEnterWorkspace, contentWidth, 190.0f);
+        }
+
         ImGui::Spacing();
         RenderRecentProjectsCard(projectService, didEnterWorkspace);
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
         RenderDeletePopup(projectService);
         ImGui::End();
 #else
@@ -320,66 +402,94 @@ namespace EditorApp
     void EditorProjectHub::RenderHeader()
     {
 #if __has_include(<imgui.h>)
+        constexpr float headerHeight = 104.0f;
+        constexpr float headerPaddingX = 22.0f;
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const ImVec2 min = ImGui::GetCursorScreenPos();
+        const ImVec2 max = ImVec2(min.x + ImGui::GetContentRegionAvail().x, min.y + headerHeight);
+        drawList->AddRectFilled(min, max, ImGui::GetColorU32(HubBand()));
+        drawList->AddLine(ImVec2(min.x, max.y), max, ImGui::GetColorU32(ImGuiCol_Border));
+
+        ImGui::SetCursorPos(ImVec2(headerPaddingX, 18.0f));
+        ImGui::SetWindowFontScale(1.25f);
         ImGui::TextUnformatted("Life Project Hub");
-        ImGui::TextDisabled("Create, open, and manage projects before entering the editor workspace.");
+        ImGui::SetWindowFontScale(1.0f);
+
+        ImGui::SetCursorPos(ImVec2(headerPaddingX, 49.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, HubTextMuted());
+        ImGui::TextUnformatted("Create, open, and manage projects before entering the editor workspace.");
+        ImGui::PopStyleColor();
+
         if (!m_StatusMessage.empty())
         {
-            const ImVec4 color = m_StatusIsError ? ImVec4(0.90f, 0.35f, 0.35f, 1.0f) : ImVec4(0.35f, 0.85f, 0.50f, 1.0f);
+            const ImVec4 color = m_StatusIsError ? ImVec4(0.88f, 0.30f, 0.32f, 1.0f) : HubSuccess();
+            ImGui::SetCursorPosX(headerPaddingX);
             ImGui::PushStyleColor(ImGuiCol_Text, color);
             ImGui::TextWrapped("%s", m_StatusMessage.c_str());
             ImGui::PopStyleColor();
         }
+        ImGui::SetCursorPosY(headerHeight);
 #endif
     }
 
-    void EditorProjectHub::RenderCreateProjectCard(Life::Assets::ProjectService& projectService, bool& didEnterWorkspace)
+    void EditorProjectHub::RenderCreateProjectCard(Life::Assets::ProjectService& projectService, bool& didEnterWorkspace, float width, float height)
     {
 #if __has_include(<imgui.h>)
-        ImGui::BeginChild("CreateProjectCard", ImVec2(0.0f, 270.0f), true);
-        ImGui::TextUnformatted("Create Project");
-        ImGui::Separator();
-        InputTextString("Project Name", m_CreateProjectName);
-        InputTextString("Projects Root", m_CreateProjectRoot);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, HubPanel());
+        ImGui::BeginChild("CreateProjectCard", ImVec2(width, height), true);
+        DrawSectionTitle("Create Project", "Start a new Life project and enter the editor workspace.");
+        DrawLabeledInput("Project Name", "##CreateProjectName", m_CreateProjectName);
+        DrawLabeledInput("Projects Root", "##CreateProjectsRoot", m_CreateProjectRoot);
+
         ImGui::TextUnformatted("Project Type");
-        DrawProjectDimensionButton("2D", Life::Assets::ProjectDimension::TwoD, m_CreateProjectDimension);
+        const float buttonWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+        DrawProjectDimensionButton("2D", Life::Assets::ProjectDimension::TwoD, m_CreateProjectDimension, buttonWidth);
         ImGui::SameLine();
-        DrawProjectDimensionButton("3D", Life::Assets::ProjectDimension::ThreeD, m_CreateProjectDimension);
+        DrawProjectDimensionButton("3D", Life::Assets::ProjectDimension::ThreeD, m_CreateProjectDimension, buttonWidth);
 
         const bool canCreate = !m_CreateProjectName.empty() && !m_CreateProjectRoot.empty();
         if (!canCreate)
             ImGui::BeginDisabled();
-        if (ImGui::Button("Create and Open", ImVec2(-1.0f, 0.0f)))
+        if (DrawPrimaryButton("Create and Open", ImVec2(-1.0f, 32.0f)))
             didEnterWorkspace = TryCreateProject(projectService);
         if (!canCreate)
             ImGui::EndDisabled();
         ImGui::EndChild();
+        ImGui::PopStyleColor();
 #else
         (void)projectService;
         (void)didEnterWorkspace;
+        (void)width;
+        (void)height;
 #endif
     }
 
-    void EditorProjectHub::RenderOpenProjectCard(Life::Assets::ProjectService& projectService, bool& didEnterWorkspace)
+    void EditorProjectHub::RenderOpenProjectCard(Life::Assets::ProjectService& projectService, bool& didEnterWorkspace, float width, float height)
     {
 #if __has_include(<imgui.h>)
-        ImGui::BeginChild("OpenProjectCard", ImVec2(0.0f, 240.0f), true);
-        ImGui::TextUnformatted("Open Project");
-        ImGui::Separator();
-        InputTextString("Descriptor Path", m_OpenProjectPath);
-        if (ImGui::Button("Open Project", ImVec2(-1.0f, 0.0f)))
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, HubPanel());
+        ImGui::BeginChild("OpenProjectCard", ImVec2(width, height), true);
+        DrawSectionTitle("Open Project", "Open an existing .lifeproject descriptor or project folder.");
+        DrawLabeledInput("Descriptor Path", "##OpenProjectPath", m_OpenProjectPath);
+        if (DrawPrimaryButton("Open Project", ImVec2(-1.0f, 32.0f)))
             didEnterWorkspace = TryOpenProject(projectService);
         ImGui::EndChild();
+        ImGui::PopStyleColor();
 #else
         (void)projectService;
         (void)didEnterWorkspace;
+        (void)width;
+        (void)height;
 #endif
     }
 
     void EditorProjectHub::RenderRecentProjectsCard(Life::Assets::ProjectService& projectService, bool& didEnterWorkspace)
     {
 #if __has_include(<imgui.h>)
-        ImGui::BeginChild("RecentProjectsCard", ImVec2(0.0f, 0.0f), true);
-        ImGui::TextUnformatted("Recent Projects");
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, HubPanel());
+        const float recentHeight = std::max(1.0f, ImGui::GetContentRegionAvail().y);
+        ImGui::BeginChild("RecentProjectsCard", ImVec2(0.0f, recentHeight), true);
+        DrawSectionTitle("Recent Projects", "Resume work from projects tracked on this machine.");
         ImGui::Separator();
 
         if (m_RecentProjects.empty())
@@ -397,13 +507,43 @@ namespace EditorApp
                     : project.Name;
 
                 ImGui::PushID(static_cast<int>(index));
-                ImGui::BeginGroup();
+                const ImVec2 rowStart = ImGui::GetCursorScreenPos();
+                const float rowWidth = ImGui::GetContentRegionAvail().x;
+                const float rowHeight = 78.0f;
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                drawList->AddRectFilled(rowStart,
+                                        ImVec2(rowStart.x + rowWidth, rowStart.y + rowHeight),
+                                        ImGui::GetColorU32(HubPanelAlt()),
+                                        4.0f);
+                drawList->AddRect(rowStart,
+                                  ImVec2(rowStart.x + rowWidth, rowStart.y + rowHeight),
+                                  ImGui::GetColorU32(ImGuiCol_Border),
+                                  4.0f);
+
+                constexpr float rowPaddingX = 14.0f;
+                ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + rowPaddingX, ImGui::GetCursorPosY() + 10.0f));
                 ImGui::TextUnformatted(projectLabel.c_str());
-                ImGui::TextDisabled("%s", PathToUiString(project.DescriptorPath).c_str());
-                ImGui::TextDisabled("%s", project.Exists ? "Available" : "Missing");
+
+                const char* availabilityLabel = project.Exists ? "Available" : "Missing";
+                const ImVec4 availabilityColor = project.Exists ? HubSuccess() : HubWarning();
+                ImGui::SameLine();
+                ImGui::PushStyleColor(ImGuiCol_Text, availabilityColor);
+                ImGui::TextUnformatted(availabilityLabel);
+                ImGui::PopStyleColor();
+
+                const float actionsWidth = 252.0f;
+                ImGui::SetCursorScreenPos(ImVec2(rowStart.x + rowPaddingX, rowStart.y + 36.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, HubTextMuted());
+                ImGui::PushTextWrapPos(rowStart.x + rowWidth - actionsWidth - 28.0f);
+                ImGui::TextWrapped("%s", PathToUiString(project.DescriptorPath).c_str());
+                ImGui::PopTextWrapPos();
+                ImGui::PopStyleColor();
+
+                const float actionY = rowStart.y + 23.0f;
+                ImGui::SetCursorScreenPos(ImVec2(rowStart.x + rowWidth - actionsWidth - 12.0f, actionY));
                 if (!project.Exists)
                     ImGui::BeginDisabled();
-                if (ImGui::Button("Open"))
+                if (DrawPrimaryButton("Open", ImVec2(62.0f, 28.0f)))
                 {
                     m_OpenProjectPath = PathToUiString(project.DescriptorPath);
                     didEnterWorkspace = TryOpenProject(projectService);
@@ -411,23 +551,25 @@ namespace EditorApp
                 if (!project.Exists)
                     ImGui::EndDisabled();
                 ImGui::SameLine();
-                if (ImGui::Button("Delete"))
+                if (DrawDangerButton("Delete", ImVec2(68.0f, 28.0f)))
                     QueueDeleteProject(project);
                 ImGui::SameLine();
-                if (ImGui::Button("Remove From List"))
+                bool removeFromList = false;
+                if (ImGui::Button("Remove", ImVec2(82.0f, 28.0f)))
+                    removeFromList = true;
+                ImGui::SetCursorScreenPos(ImVec2(rowStart.x, rowStart.y + rowHeight + 8.0f));
+                ImGui::Dummy(ImVec2(rowWidth, 1.0f));
+                ImGui::PopID();
+                if (removeFromList)
                 {
                     RemoveRecentProject(project.DescriptorPath);
-                    ImGui::EndGroup();
-                    ImGui::PopID();
                     break;
                 }
-                ImGui::Separator();
-                ImGui::EndGroup();
-                ImGui::PopID();
             }
         }
 
         ImGui::EndChild();
+        ImGui::PopStyleColor();
 #else
         (void)projectService;
         (void)didEnterWorkspace;

@@ -40,7 +40,7 @@ namespace EditorApp
 #if __has_include(<imgui.h>)
         void DrawPanelHeader(const char* title, const char* subtitle)
         {
-            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "%s", title);
+            ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "%s", title);
             ImGui::SameLine();
             ImGui::TextDisabled("%s", subtitle);
             ImGui::Separator();
@@ -513,8 +513,8 @@ namespace EditorApp
         void DrawDropPreview(const ImVec2& rectMin, const ImVec2& rectMax, DropMode mode, bool valid)
         {
             ImDrawList* drawList = ImGui::GetWindowDrawList();
-            const ImU32 lineColor = ImGui::GetColorU32(valid ? ImVec4(0.24f, 0.60f, 0.96f, 0.95f) : ImVec4(0.90f, 0.26f, 0.26f, 0.95f));
-            const ImU32 fillColor = ImGui::GetColorU32(valid ? ImVec4(0.24f, 0.60f, 0.96f, 0.14f) : ImVec4(0.90f, 0.26f, 0.26f, 0.12f));
+            const ImU32 lineColor = ImGui::GetColorU32(valid ? ImVec4(0.31f, 0.55f, 0.78f, 0.95f) : ImVec4(0.88f, 0.30f, 0.32f, 0.95f));
+            const ImU32 fillColor = ImGui::GetColorU32(valid ? ImVec4(0.31f, 0.55f, 0.78f, 0.14f) : ImVec4(0.88f, 0.30f, 0.32f, 0.12f));
             const float thickness = 2.0f;
 
             switch (mode)
@@ -537,8 +537,8 @@ namespace EditorApp
         void DrawRootDropPreview(const ImVec2& rectMin, const ImVec2& rectMax, bool valid)
         {
             ImDrawList* drawList = ImGui::GetWindowDrawList();
-            const ImU32 lineColor = ImGui::GetColorU32(valid ? ImVec4(0.24f, 0.60f, 0.96f, 0.95f) : ImVec4(0.90f, 0.26f, 0.26f, 0.95f));
-            const ImU32 fillColor = ImGui::GetColorU32(valid ? ImVec4(0.24f, 0.60f, 0.96f, 0.14f) : ImVec4(0.90f, 0.26f, 0.26f, 0.12f));
+            const ImU32 lineColor = ImGui::GetColorU32(valid ? ImVec4(0.31f, 0.55f, 0.78f, 0.95f) : ImVec4(0.88f, 0.30f, 0.32f, 0.95f));
+            const ImU32 fillColor = ImGui::GetColorU32(valid ? ImVec4(0.31f, 0.55f, 0.78f, 0.14f) : ImVec4(0.88f, 0.30f, 0.32f, 0.12f));
             drawList->AddRectFilled(rectMin, rectMax, fillColor, 4.0f);
             drawList->AddRect(rectMin, rectMax, lineColor, 4.0f, 0, 2.0f);
         }
@@ -557,7 +557,7 @@ namespace EditorApp
         void DrawPrefabInstanceBadge()
         {
             ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.56f, 0.94f, 0.96f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.62f, 0.76f, 0.90f, 1.0f));
             ImGui::TextUnformatted("P");
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered())
@@ -768,9 +768,9 @@ namespace EditorApp
             const bool isRenaming = g_RenamingEntityId == entity.GetId();
             if (isPrefabInstance)
             {
-                ImGui::PushStyleColor(ImGuiCol_Header, isSelected ? ImVec4(0.14f, 0.42f, 0.46f, 0.92f) : ImVec4(0.10f, 0.28f, 0.32f, 0.72f));
-                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.14f, 0.46f, 0.50f, 0.92f));
-                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.16f, 0.52f, 0.56f, 0.96f));
+                ImGui::PushStyleColor(ImGuiCol_Header, isSelected ? ImVec4(0.22f, 0.36f, 0.50f, 0.92f) : ImVec4(0.17f, 0.23f, 0.28f, 0.72f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.40f, 0.54f, 0.92f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.28f, 0.46f, 0.62f, 0.96f));
             }
             const bool nodeOpen = ImGui::TreeNodeEx(entity.GetId().c_str(), nodeFlags, "%s", isRenaming ? "" : entity.GetTag().c_str());
             const bool entityItemClicked = ImGui::IsItemClicked();
@@ -930,8 +930,8 @@ namespace EditorApp
             if (!sceneState.StatusMessage.empty())
             {
                 const ImVec4 color = sceneState.StatusIsError
-                    ? ImVec4(0.95f, 0.35f, 0.35f, 1.0f)
-                    : ImVec4(0.35f, 0.85f, 0.45f, 1.0f);
+                    ? ImVec4(0.88f, 0.30f, 0.32f, 1.0f)
+                    : ImVec4(0.32f, 0.70f, 0.45f, 1.0f);
                 ImGui::TextColored(color, "%s", sceneState.StatusMessage.c_str());
                 ImGui::Separator();
             }
@@ -953,9 +953,9 @@ namespace EditorApp
 
                 Life::Scene& scene = *effectiveScene;
                 bool changed = false;
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.33f, 0.54f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.41f, 0.64f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.29f, 0.48f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.36f, 0.54f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.46f, 0.66f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.30f, 0.46f, 1.0f));
                 if (ImGui::Button("Create Entity", ImVec2(-1.0f, 0.0f)))
                 {
                     const Life::Entity entity = scene.CreateEntity("Entity");

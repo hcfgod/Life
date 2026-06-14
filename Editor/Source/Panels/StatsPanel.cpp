@@ -20,7 +20,7 @@ namespace EditorApp
                 ? services.ImGuiSystem->get().GetBackend()
                 : Life::GraphicsBackend::None;
 
-            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Stats");
+            ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "Stats");
             ImGui::SameLine();
             ImGui::TextDisabled("Frame and renderer diagnostics");
             ImGui::SeparatorText("Runtime");

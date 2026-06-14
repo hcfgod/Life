@@ -36,8 +36,8 @@ namespace EditorApp
         bool TryOpenProject(Life::Assets::ProjectService& projectService);
         bool TryDeleteQueuedProject(Life::Assets::ProjectService& projectService);
         void RenderHeader();
-        void RenderCreateProjectCard(Life::Assets::ProjectService& projectService, bool& didEnterWorkspace);
-        void RenderOpenProjectCard(Life::Assets::ProjectService& projectService, bool& didEnterWorkspace);
+        void RenderCreateProjectCard(Life::Assets::ProjectService& projectService, bool& didEnterWorkspace, float width, float height);
+        void RenderOpenProjectCard(Life::Assets::ProjectService& projectService, bool& didEnterWorkspace, float width, float height);
         void RenderRecentProjectsCard(Life::Assets::ProjectService& projectService, bool& didEnterWorkspace);
         void RenderDeletePopup(Life::Assets::ProjectService& projectService);
         std::filesystem::path GetRecentProjectsFilePath() const;

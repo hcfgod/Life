@@ -14,11 +14,11 @@ namespace EditorApp
 
         if (ImGui::Begin("Console", &isOpen))
         {
-            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Console");
+            ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "Console");
             ImGui::SameLine();
             ImGui::TextDisabled("Runtime and editor output");
             ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.45f, 1.0f), "Editor viewport rendering is active.");
+            ImGui::TextColored(ImVec4(0.32f, 0.70f, 0.45f, 1.0f), "Editor viewport rendering is active.");
             ImGui::TextUnformatted("ImGui is now hosted by the dedicated Editor app.");
         }
         ImGui::End();

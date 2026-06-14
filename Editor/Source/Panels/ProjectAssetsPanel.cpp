@@ -255,6 +255,26 @@ namespace EditorApp
             return ResolveDisplayStem(entry);
         }
 
+#if __has_include(<imgui.h>)
+        std::string ElideTextToWidth(const std::string& text, float maxWidth)
+        {
+            if (maxWidth <= 0.0f || ImGui::CalcTextSize(text.c_str()).x <= maxWidth)
+                return text;
+
+            constexpr const char* suffix = "...";
+            std::string shortened = text;
+            while (!shortened.empty())
+            {
+                shortened.pop_back();
+                const std::string candidate = shortened + suffix;
+                if (ImGui::CalcTextSize(candidate.c_str()).x <= maxWidth)
+                    return candidate;
+            }
+
+            return suffix;
+        }
+#endif
+
         std::string SanitizeName(std::string value)
         {
             value.erase(value.begin(), std::find_if(value.begin(), value.end(), [](unsigned char character)
@@ -383,9 +403,9 @@ namespace EditorApp
          {
              switch (kind)
              {
-                 case ProjectEntryKind::Directory: return ImVec4(0.38f, 0.62f, 0.96f, 1.0f);
+                 case ProjectEntryKind::Directory: return ImVec4(0.42f, 0.62f, 0.82f, 1.0f);
                  case ProjectEntryKind::Scene: return ImVec4(0.40f, 0.82f, 0.60f, 1.0f);
-                 case ProjectEntryKind::Prefab: return ImVec4(0.36f, 0.84f, 0.86f, 1.0f);
+                 case ProjectEntryKind::Prefab: return ImVec4(0.42f, 0.70f, 0.78f, 1.0f);
                  case ProjectEntryKind::Texture: return ImVec4(0.88f, 0.58f, 0.36f, 1.0f);
                  case ProjectEntryKind::Material: return ImVec4(0.74f, 0.52f, 0.92f, 1.0f);
                  case ProjectEntryKind::Shader: return ImVec4(0.96f, 0.72f, 0.36f, 1.0f);
@@ -939,8 +959,8 @@ namespace EditorApp
             if (const ImGuiPayload* entityPayload = ImGui::AcceptDragDropPayload(kEntityPayloadType, ImGuiDragDropFlags_AcceptBeforeDelivery))
             {
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
-                const ImU32 fillColor = ImGui::GetColorU32(ImVec4(0.20f, 0.62f, 0.66f, 0.16f));
-                const ImU32 borderColor = ImGui::GetColorU32(ImVec4(0.36f, 0.84f, 0.86f, 0.92f));
+                const ImU32 fillColor = ImGui::GetColorU32(ImVec4(0.31f, 0.55f, 0.78f, 0.16f));
+                const ImU32 borderColor = ImGui::GetColorU32(ImVec4(0.42f, 0.70f, 0.78f, 0.92f));
                 drawList->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), fillColor, 4.0f);
                 drawList->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), borderColor, 4.0f, 0, 2.0f);
 
@@ -1328,15 +1348,15 @@ namespace EditorApp
 
         if (ImGui::BeginChild("##ProjectAssetsToolbar", ImVec2(0.0f, 104.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
         {
-            ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Project Assets");
+            ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "Project Assets");
             ImGui::SameLine();
             ImGui::TextDisabled("%zu items", useGlobalSearchResults ? searchEntries.size() : currentEntries.size());
             ImGui::TextDisabled("%s", useGlobalSearchResults ? "Project-wide search" : activeFolderLabel.c_str());
             ImGui::Separator();
 
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.33f, 0.54f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.41f, 0.64f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.29f, 0.48f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.36f, 0.54f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.46f, 0.66f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.30f, 0.46f, 1.0f));
             if (ImGui::Button("Create", ImVec2(90.0f, 0.0f)))
                 ImGui::OpenPopup("##ProjectAssetsCreateMenu");
             ImGui::PopStyleColor(3);
@@ -1371,7 +1391,7 @@ namespace EditorApp
         }
         ImGui::EndChild();
 
-        const bool useCompactList = m_GridScale <= 0.25f;
+        const bool useCompactList = m_GridScale <= 0.35f;
 
         if (m_OpenPendingPopup)
         {
@@ -1440,7 +1460,7 @@ namespace EditorApp
         {
             if (ImGui::BeginChild("##ProjectAssetsTree", ImVec2(280.0f, 0.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar))
             {
-                ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "Folders");
+                ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "Folders");
                 ImGui::SameLine();
                 ImGui::TextDisabled("Project structure");
                 ImGui::Separator();
@@ -1449,9 +1469,10 @@ namespace EditorApp
                     [&](const std::filesystem::path& relativePath, bool isRoot)
                 {
                     const std::string key = relativePath.generic_string();
+                    const std::string visibleLabel = isRoot ? std::string("Assets") : relativePath.filename().string();
                     const std::string label = isRoot
-                        ? std::string("    Assets##ProjectAssetsRoot")
-                        : ("    " + relativePath.filename().string() + "##" + key);
+                        ? std::string("##ProjectAssetsRoot")
+                        : ("##ProjectAssetsFolder_" + key);
                     bool openState = isRoot ? true : (m_ExpandedFolders.contains(key) ? m_ExpandedFolders[key] : false);
                     ImGui::SetNextItemOpen(openState, ImGuiCond_Once);
                     const bool nodeOpen = ImGui::TreeNodeEx(
@@ -1460,8 +1481,19 @@ namespace EditorApp
                             ((relativePath == m_ActiveFolderRelativePath) ? ImGuiTreeNodeFlags_Selected : ImGuiTreeNodeFlags_None));
                     {
                         const ImVec2 itemMin = ImGui::GetItemRectMin();
+                        const ImVec2 itemMax = ImGui::GetItemRectMax();
                         const float iconSize = ImGui::GetTextLineHeight() * 0.92f;
-                        DrawProjectEntryIcon(ProjectEntryKind::Directory, ImVec2(itemMin.x + ImGui::GetTreeNodeToLabelSpacing(), itemMin.y + 1.0f), iconSize, ResolveAccentColor(ProjectEntryKind::Directory));
+                        const float iconX = itemMin.x + ImGui::GetTreeNodeToLabelSpacing() + 2.0f;
+                        const ImVec2 iconMin(iconX, itemMin.y + (itemMax.y - itemMin.y - iconSize) * 0.5f);
+                        DrawProjectEntryIcon(ProjectEntryKind::Directory, iconMin, iconSize, ResolveAccentColor(ProjectEntryKind::Directory));
+
+                        const float textX = iconMin.x + iconSize + 7.0f;
+                        const float textWidth = std::max(1.0f, itemMax.x - textX - 4.0f);
+                        const std::string clippedLabel = ElideTextToWidth(visibleLabel, textWidth);
+                        ImGui::GetWindowDrawList()->AddText(
+                            ImVec2(textX, itemMin.y + (itemMax.y - itemMin.y - ImGui::GetTextLineHeight()) * 0.5f),
+                            ImGui::GetColorU32(ImGuiCol_Text),
+                            clippedLabel.c_str());
                     }
                     if (!isRoot)
                         m_ExpandedFolders[key] = nodeOpen;
@@ -1582,7 +1614,7 @@ namespace EditorApp
             if (ImGui::BeginChild("##ProjectAssetsGrid", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar))
             {
                 const std::string gridLabel = useGlobalSearchResults ? std::string("Search Results") : activeFolderLabel;
-                ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), "%s", gridLabel.c_str());
+                ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "%s", gridLabel.c_str());
                 ImGui::SameLine();
                 ImGui::TextDisabled(useGlobalSearchResults ? (useCompactList ? "Search List" : "Search Grid") : (useCompactList ? "List" : "Grid"));
                 ImGui::Separator();
@@ -1672,7 +1704,7 @@ namespace EditorApp
                 if (visibleEntries.empty())
                 {
                     ImGui::Dummy(ImVec2(0.0f, 12.0f));
-                    ImGui::TextColored(ImVec4(0.60f, 0.78f, 1.0f, 1.0f), filterLower.empty() ? "No assets in this folder." : "No assets match the current search.");
+                ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), filterLower.empty() ? "No assets in this folder." : "No assets match the current search.");
                     ImGui::TextDisabled(filterLower.empty() ? "Create a folder, create a scene, or import files from Explorer." : "Search scans the full Assets tree. Try a different term or clear the filter.");
                 }
                 else if (useCompactList)
@@ -1685,9 +1717,9 @@ namespace EditorApp
                         const bool isPrefab = entry.Kind == ProjectEntryKind::Prefab;
                         ImGui::PushStyleColor(ImGuiCol_Header, selected
                             ? ImVec4(accentColor.x * 0.46f, accentColor.y * 0.46f, accentColor.z * 0.46f, 0.92f)
-                            : (isPrefab ? ImVec4(0.08f, 0.24f, 0.27f, 0.78f) : ImVec4(0.12f, 0.15f, 0.20f, 0.68f)));
+                            : (isPrefab ? ImVec4(0.16f, 0.25f, 0.29f, 0.78f) : ImVec4(0.15f, 0.16f, 0.18f, 0.68f)));
                         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, isPrefab
-                            ? ImVec4(0.12f, 0.34f, 0.38f, 0.92f)
+                            ? ImVec4(0.20f, 0.34f, 0.40f, 0.92f)
                             : ImVec4(accentColor.x * 0.32f, accentColor.y * 0.32f, accentColor.z * 0.32f, 0.90f));
                         ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(accentColor.x * 0.46f, accentColor.y * 0.46f, accentColor.z * 0.46f, 0.94f));
                         const std::string visibleName = ResolveVisibleName(entry);
@@ -1837,7 +1869,7 @@ namespace EditorApp
                         ImGui::PushStyleColor(ImGuiCol_ButtonActive, cardActive);
                         if (isPrefab)
                         {
-                            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.46f, 0.92f, 0.94f, 0.92f));
+                            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.45f, 0.76f, 0.86f, 0.92f));
                             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);
                         }
                         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
@@ -1977,6 +2009,22 @@ namespace EditorApp
                 const ImVec2 emptyDropAvail = ImGui::GetContentRegionAvail();
                 if (emptyDropAvail.x > 1.0f && emptyDropAvail.y > ImGui::GetFrameHeight())
                 {
+                    const ImVec2 dropMin = ImGui::GetCursorScreenPos();
+                    const ImVec2 dropMax(dropMin.x + emptyDropAvail.x, dropMin.y + emptyDropAvail.y);
+                    ImDrawList* drawList = ImGui::GetWindowDrawList();
+                    drawList->AddRectFilled(dropMin, dropMax, ImGui::GetColorU32(ImVec4(0.12f, 0.13f, 0.145f, 0.55f)), 4.0f);
+                    drawList->AddRect(dropMin, dropMax, ImGui::GetColorU32(ImVec4(0.30f, 0.33f, 0.38f, 0.70f)), 4.0f);
+                    if (emptyDropAvail.y > 58.0f)
+                    {
+                        const char* hint = visibleEntries.empty()
+                            ? "Drop files here or right-click to create assets"
+                            : "Drop assets here";
+                        const ImVec2 hintSize = ImGui::CalcTextSize(hint);
+                        drawList->AddText(
+                            ImVec2(dropMin.x + (emptyDropAvail.x - hintSize.x) * 0.5f, dropMin.y + std::min(26.0f, (emptyDropAvail.y - hintSize.y) * 0.5f)),
+                            ImGui::GetColorU32(ImVec4(0.52f, 0.56f, 0.62f, 0.90f)),
+                            hint);
+                    }
                     ImGui::InvisibleButton("##ProjectAssetsEmptyFolderDropArea", ImVec2(emptyDropAvail.x, emptyDropAvail.y));
                     if (ImGui::BeginDragDropTarget())
                     {

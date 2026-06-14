@@ -748,18 +748,18 @@ namespace EditorApp
         if (!m_SceneState.IsPrefabMode())
             return;
 
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.08f, 0.22f, 0.25f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.36f, 0.84f, 0.86f, 0.72f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.16f, 0.23f, 0.27f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.42f, 0.70f, 0.78f, 0.72f));
         if (ImGui::BeginChild("##PrefabModeBanner", ImVec2(0.0f, 42.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
         {
             ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(ImVec4(0.56f, 0.94f, 0.96f, 1.0f), "Prefab");
+            ImGui::TextColored(ImVec4(0.62f, 0.76f, 0.90f, 1.0f), "Prefab");
             ImGui::SameLine();
             ImGui::TextUnformatted(m_SceneState.PrefabDisplayName.c_str());
             if (m_SceneState.PrefabDirty)
             {
                 ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.96f, 0.78f, 0.34f, 1.0f), "Modified");
+                ImGui::TextColored(ImVec4(0.88f, 0.63f, 0.28f, 1.0f), "Modified");
             }
 
             const float buttonWidth = 96.0f;
