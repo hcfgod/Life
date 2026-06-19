@@ -1,0 +1,92 @@
+name: Nightly Deep Quality
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '27 8 * * *'
+
+jobs:
+  linux-sanitizers:
+    name: Linux ${{ matrix.sanitizer }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sanitizer: asan
+          - sanitizer: ubsan
+    uses: ./.github/workflows/reusable-platform-job.yml
+    with:
+      job_name: Linux ${{ matrix.sanitizer }}
+      runs_on: ubuntu-latest
+      platform: linux
+      dependency_profile: linux
+      premake_cache_dir: linux
+      cmake_cache_dir: linux
+      sdl_cache_dir: linux/x64
+      setup_command: ./Setup.sh gmake2 --arch=x64 --${{ matrix.sanitizer }}
+      build_command: ./Scripts/CI/build_make.sh Debug clean all
+      test_command: ./Scripts/CI/run_tests.sh Debug
+      artifact_name: linux-${{ matrix.sanitizer }}-logs
+      artifact_path: |
+        Build/Logs/**
+      cc: clang
+      cxx: clang++
+
+  windows-live-backend:
+    name: Windows Live Backend Smoke
+    uses: ./.github/workflows/reusable-platform-job.yml
+    with:
+      job_name: Windows Live Backend Smoke
+      runs_on: windows-2022
+      platform: windows
+      dependency_profile: windows
+      premake_cache_dir: windows
+      cmake_cache_dir: windows
+      sdl_cache_dir: windows/x64
+      setup_command: Setup.bat vs2022 --arch=x64
+      build_command: ./Scripts/CI/build_windows.ps1 -Configuration Debug -Platform x64 -LogPath Build/Logs/windows-live-smoke-msbuild.log
+      test_command: ./Scripts/CI/run_windows_tests.ps1 -Configuration Debug -Platform x64 -LiveBackendSmoke
+      artifact_name: windows-live-backend-smoke
+      artifact_path: |
+        Build/Logs/**
+        Build/**/Test/VisualSmoke/**
+
+  report-only-benchmarks:
+    name: Linux Report-Only Benchmarks
+    uses: ./.github/workflows/reusable-platform-job.yml
+    with:
+      job_name: Linux Report-Only Benchmarks
+      runs_on: ubuntu-latest
+      platform: linux
+      dependency_profile: linux
+      premake_cache_dir: linux
+      cmake_cache_dir: linux
+      sdl_cache_dir: linux/x64
+      setup_command: ./Setup.sh gmake2 --arch=x64
+      build_command: ./Scripts/CI/build_make.sh Release clean all
+      test_command: LIFE_ENABLE_BENCHMARKS=1 LIFE_BENCHMARK_OUTPUT=Build/Reports/benchmarks.json ./Scripts/CI/run_tests.sh Release
+      artifact_name: linux-benchmark-reports
+      artifact_path: |
+        Build/Reports/**
+      cc: clang
+      cxx: clang++
+
+  dependency-inventory:
+    name: Dependency Inventory
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Generate dependency inventory
+        run: python Scripts/CI/generate_dependency_inventory.py
+      - name: Upload dependency inventory
+        uses: actions/upload-artifact@v6
+        with:
+          name: dependency-inventory
+          path: Build/Reports/dependency-inventory.json

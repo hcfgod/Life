@@ -2,6 +2,31 @@ local function Trim(value)
      return (value:gsub("^%s+", ""):gsub("%s+$", ""))
  end
 
+ local function ShellValue(command)
+     local value = os.outputof(command)
+     if value == nil then
+         return nil
+     end
+
+     value = Trim(value)
+     if value == "" then
+         return nil
+     end
+
+     return value
+ end
+
+ local function EscapeDefineValue(value)
+     value = value or ""
+     value = value:gsub("\\", "\\\\")
+     value = value:gsub("\"", "\\\"")
+     return value
+ end
+
+ local function QuotedDefine(name, value)
+     return name .. "=\"" .. EscapeDefineValue(value) .. "\""
+ end
+
  local function NormalizeArchitecture(value)
      if value == nil then
          return nil
@@ -63,6 +88,12 @@ local function Trim(value)
 
  TargetArchitecture = ResolveTargetArchitecture()
  PremakeArchitecture = TargetArchitecture == "arm64" and "ARM64" or "x64"
+ LifeBuildVersion = os.getenv("LIFE_BUILD_VERSION") or os.getenv("GITHUB_REF_NAME") or ShellValue("git describe --tags --always --dirty") or "local"
+ LifeBuildCommit = os.getenv("LIFE_BUILD_COMMIT") or os.getenv("GITHUB_SHA") or ShellValue("git rev-parse --short HEAD") or "unknown"
+ if #LifeBuildCommit > 12 then
+     LifeBuildCommit = LifeBuildCommit:sub(1, 12)
+ end
+ LifeBuildDate = os.getenv("LIFE_BUILD_DATE") or os.date("!%Y-%m-%dT%H:%M:%SZ")
 
  workspace "Life"
      architecture (PremakeArchitecture)
@@ -309,6 +340,15 @@ function ConfigureCommonProject()
         defines { "NDEBUG" }
 
     filter {}
+
+    defines
+    {
+        QuotedDefine("LIFE_BUILD_VERSION", LifeBuildVersion),
+        QuotedDefine("LIFE_BUILD_COMMIT", LifeBuildCommit),
+        QuotedDefine("LIFE_BUILD_DATE", LifeBuildDate),
+        QuotedDefine("LIFE_BUILD_ARCHITECTURE", TargetArchitecture),
+        "LIFE_BUILD_CONFIGURATION=\"%{cfg.buildcfg}\""
+    }
 end
 
 function ConfigureSanitizers()

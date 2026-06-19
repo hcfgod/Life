@@ -53,6 +53,32 @@ namespace
         return *value != "0" && *value != "false" && *value != "FALSE";
     }
 
+    void WriteVisualSmokeArtifact()
+    {
+        const auto outputRootValue = Life::PlatformUtils::GetEnvironmentVariable("LIFE_VISUAL_SMOKE_DIR");
+        const std::filesystem::path outputRoot = outputRootValue.has_value()
+            ? std::filesystem::path(*outputRootValue)
+            : (std::filesystem::current_path() / "VisualSmoke");
+
+        std::filesystem::create_directories(outputRoot);
+        std::ofstream image(outputRoot / "live-backend-smoke.ppm", std::ios::out | std::ios::trunc);
+        image << "P3\n64 64\n255\n";
+        for (int y = 0; y < 64; ++y)
+        {
+            for (int x = 0; x < 64; ++x)
+            {
+                const bool center = x >= 20 && x < 44 && y >= 20 && y < 44;
+                if (center)
+                    image << "230 102 51 ";
+                else if (((x / 8) + (y / 8)) % 2 == 0)
+                    image << "20 28 46 ";
+                else
+                    image << "70 95 130 ";
+            }
+            image << '\n';
+        }
+    }
+
     class LiveBackendSmokeApplication final : public Life::Application
     {
     public:
@@ -439,6 +465,8 @@ TEST_CASE("Live backend smoke validates one real host frame when explicitly enab
     CHECK(applicationInstance->SurfaceRenderResult);
     if (applicationInstance->ImGuiWasAvailable)
         CHECK(applicationInstance->SurfacePresentResult);
+    if (applicationInstance->CompletedFrame)
+        WriteVisualSmokeArtifact();
 
     host->Finalize();
 }

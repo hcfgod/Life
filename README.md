@@ -230,6 +230,9 @@ At the moment it serves as a practical integration sample for:
 - `Setup.bat` accepts `--arch=x64` and `--arch=arm64`; `Setup.sh` does the same for native Unix hosts.
 - On Linux arm64 hosts, `Setup.sh` bootstraps Premake from source when a preinstalled `premake5` is not available.
 - CI caches downloaded toolchains and reusable SDL build/install outputs to reduce repeated setup work.
+- `Runtime` and `Editor` support `--help`, `--version`, and `--diagnostics` without creating a window.
+- Release artifacts are validated after packaging, diagnostics-run on the native runner, and published with `.sha256` checksums.
+- Deep validation such as live backend smoke, report-only benchmarks, sanitizer lanes, and dependency inventory lives in scheduled/manual CI.
 - On Windows, both `Runtime` and `Editor` compile the current `Renderer2D` GLSL shaders into SPIR-V output under their target `Assets/Shaders` folders when the Vulkan SDK is available.
 - Logging is configured through `ApplicationSpecification.Logging`, giving the engine a thread-safe, configurable logging surface backed by `spdlog` multi-threaded sinks.
 - Generated artifacts stay out of source control; the repository tracks source, scripts, configuration, and documentation rather than build outputs.
@@ -251,6 +254,7 @@ At the moment it serves as a practical integration sample for:
 - `Documents/ErrorHandling.md` - the structured error model, `Result<T>` conventions, assertions, verification, and system-error translation.
 - `Documents/PlatformRuntime.md` - runtime platform metadata, SDL runtime ownership, and low-level platform utilities.
 - `Documents/PlatformSupport.md` - target platforms, Windows/Linux/macOS architecture notes, and build/CI expectations.
+- `Documents/QualityRoadmap.md` - build metadata, release validation, deep CI lanes, dependency inventory, and crash JSON sidecars.
 
 ## Repository Layout
 

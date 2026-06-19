@@ -20,6 +20,7 @@ The intent is to explain how the current systems fit together, what owns what at
 - `ErrorHandling.md` for the structured error model, result types, and error utilities.
 - `PlatformRuntime.md` for runtime platform metadata, SDL runtime ownership, and low-level platform utilities.
 - `PlatformSupport.md` for host and target platform expectations.
+- `QualityRoadmap.md` for release validation, metadata, deep CI lanes, benchmark policy, and dependency inventory.
 
 ## Documents
 
@@ -37,3 +38,4 @@ The intent is to explain how the current systems fit together, what owns what at
 - `ErrorHandling.md` - the engine error model, `Result<T>` conventions, assertions, verification, and system error mapping.
 - `PlatformRuntime.md` - runtime platform detection, `ApplicationRuntime`, SDL runtime lifetime, and `PlatformUtils` behavior.
 - `PlatformSupport.md` - supported host and target platforms, Windows/Linux/macOS architecture notes, and CI/build expectations.
+- `QualityRoadmap.md` - build metadata, CLI diagnostics, release artifact validation, deep quality lanes, dependency inventory, and crash JSON sidecars.

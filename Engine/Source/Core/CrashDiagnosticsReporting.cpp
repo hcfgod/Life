@@ -1,5 +1,6 @@
 #include "CrashDiagnostics/CrashDiagnosticsReportWriter.h"
 
+#include "Core/BuildInfo.h"
 #include "Core/Error.h"
 #include "Core/Log.h"
 #include "Platform/PlatformDetection.h"
@@ -30,6 +31,12 @@ namespace Life::CrashDiagnosticsDetail
 {
     namespace
     {
+        std::string GetThreadIdString();
+        std::string DescribeCrashSignalImpl(int signalNumber);
+#if defined(LIFE_PLATFORM_WINDOWS)
+        std::string DescribeWindowsExceptionCodeImpl(std::uint32_t exceptionCode);
+#endif
+
         std::string SanitizeFileComponent(std::string_view value)
         {
             std::string sanitized;
@@ -118,6 +125,133 @@ namespace Life::CrashDiagnosticsDetail
                 stream << QuoteCommandLineArgument(commandLine[index]);
             }
             return stream.str();
+        }
+
+        std::string EscapeJsonString(std::string_view value)
+        {
+            std::string escaped;
+            escaped.reserve(value.size() + 8);
+            for (const char character : value)
+            {
+                switch (character)
+                {
+                    case '\\': escaped += "\\\\"; break;
+                    case '"': escaped += "\\\""; break;
+                    case '\b': escaped += "\\b"; break;
+                    case '\f': escaped += "\\f"; break;
+                    case '\n': escaped += "\\n"; break;
+                    case '\r': escaped += "\\r"; break;
+                    case '\t': escaped += "\\t"; break;
+                    default:
+                    {
+                        const unsigned char unsignedCharacter = static_cast<unsigned char>(character);
+                        if (unsignedCharacter < 0x20)
+                        {
+                            std::ostringstream stream;
+                            stream << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(unsignedCharacter);
+                            escaped += stream.str();
+                        }
+                        else
+                        {
+                            escaped.push_back(character);
+                        }
+                        break;
+                    }
+                }
+            }
+            return escaped;
+        }
+
+        void WriteJsonField(std::ostream& stream, const char* name, std::string_view value, bool trailingComma = true)
+        {
+            stream << "  \"" << name << "\": \"" << EscapeJsonString(value) << '"';
+            if (trailingComma)
+                stream << ',';
+            stream << '\n';
+        }
+
+        void WriteJsonArrayField(std::ostream& stream, const char* name, const std::vector<std::string>& values, bool trailingComma = true)
+        {
+            stream << "  \"" << name << "\": [";
+            for (std::size_t index = 0; index < values.size(); ++index)
+            {
+                if (index > 0)
+                    stream << ", ";
+                stream << '"' << EscapeJsonString(values[index]) << '"';
+            }
+            stream << ']';
+            if (trailingComma)
+                stream << ',';
+            stream << '\n';
+        }
+
+        void WriteCrashDiagnosticsJsonSidecar(
+            const std::filesystem::path& jsonPath,
+            const std::filesystem::path& reportPath,
+            const CrashDiagnosticsEvent& event,
+            const CrashDiagnosticsConfigurationSnapshot& snapshot,
+            const std::filesystem::path& minidumpPath)
+        {
+            std::ofstream stream(jsonPath, std::ios::out | std::ios::trunc);
+            if (!stream.is_open())
+                return;
+
+            const BuildInfo& buildInfo = GetBuildInfo();
+            stream << "{\n";
+            WriteJsonField(stream, "schema", "life.crash-report.v1");
+            WriteJsonField(stream, "timestamp", GetCurrentTimestampDisplayString());
+            WriteJsonField(stream, "application", snapshot.ApplicationName);
+            WriteJsonField(stream, "category", event.Category);
+            WriteJsonField(stream, "phase", event.Phase);
+            WriteJsonField(stream, "reason", event.Reason);
+            WriteJsonField(stream, "details", event.Details);
+            WriteJsonField(stream, "reportPath", reportPath.string());
+            WriteJsonField(stream, "minidumpPath", minidumpPath.string());
+            WriteJsonField(stream, "processId", std::to_string(PlatformUtils::GetCurrentProcessId()));
+            WriteJsonField(stream, "threadId", GetThreadIdString());
+            WriteJsonField(stream, "workingDirectory", std::filesystem::current_path().string());
+            WriteJsonField(stream, "commandLine", JoinCommandLine(snapshot.CommandLine));
+            WriteJsonField(stream, "buildVersion", buildInfo.Version);
+            WriteJsonField(stream, "buildCommit", buildInfo.Commit);
+            WriteJsonField(stream, "buildDate", buildInfo.BuildDate);
+            WriteJsonField(stream, "buildConfiguration", buildInfo.Configuration);
+            WriteJsonField(stream, "buildPlatform", buildInfo.Platform);
+            WriteJsonField(stream, "buildArchitecture", buildInfo.Architecture);
+            WriteJsonField(stream, "compiler", buildInfo.Compiler);
+
+            if (PlatformDetection::IsInitialized())
+            {
+                const PlatformInfo& platformInfo = PlatformDetection::GetPlatformInfo();
+                WriteJsonField(stream, "os", platformInfo.osName + " " + platformInfo.osVersion);
+                WriteJsonField(stream, "executablePath", platformInfo.executablePath);
+            }
+            else
+            {
+                WriteJsonField(stream, "os", "unknown");
+                WriteJsonField(stream, "executablePath", "");
+            }
+
+            if (event.SignalNumber != 0)
+                WriteJsonField(stream, "signal", DescribeCrashSignalImpl(event.SignalNumber) + " (" + std::to_string(event.SignalNumber) + ")");
+            else
+                WriteJsonField(stream, "signal", "");
+
+#if defined(LIFE_PLATFORM_WINDOWS)
+            std::string windowsExceptionCode;
+            if (event.WindowsExceptionCode != 0)
+            {
+                windowsExceptionCode = ToHexString(event.WindowsExceptionCode);
+                windowsExceptionCode += " (";
+                windowsExceptionCode += DescribeWindowsExceptionCodeImpl(event.WindowsExceptionCode);
+                windowsExceptionCode += ")";
+            }
+            WriteJsonField(stream, "windowsExceptionCode", windowsExceptionCode);
+#else
+            WriteJsonField(stream, "windowsExceptionCode", "");
+#endif
+
+            WriteJsonArrayField(stream, "stackTrace", event.StackTrace, false);
+            stream << "}\n";
         }
 
         std::string GetThreadIdString()
@@ -520,6 +654,8 @@ namespace Life::CrashDiagnosticsDetail
 
 #if defined(LIFE_PLATFORM_WINDOWS)
             const std::filesystem::path minidumpPath = WriteWindowsMiniDump(reportBasePath, exceptionPointers, specification);
+#else
+            const std::filesystem::path minidumpPath;
 #endif
 
             std::ofstream reportStream(reportPath, std::ios::out | std::ios::trunc);
@@ -589,6 +725,10 @@ namespace Life::CrashDiagnosticsDetail
 
             reportStream.flush();
             reportStream.close();
+
+            std::filesystem::path jsonPath = reportBasePath;
+            jsonPath += ".crash.json";
+            WriteCrashDiagnosticsJsonSidecar(jsonPath, reportPath, event, *snapshot, minidumpPath);
 
             StoreLastReportPath(reportPath);
 

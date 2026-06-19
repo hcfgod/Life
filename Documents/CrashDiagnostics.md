@@ -4,6 +4,8 @@
 
 Life includes a built-in crash-diagnostics layer intended to capture useful information when startup, runtime, or shutdown fails unexpectedly.
 
+Crash diagnostics write a human-readable `.crash.txt` report and a machine-readable `.crash.json` sidecar with schema `life.crash-report.v1`. The JSON sidecar includes build metadata, command line, platform data, crash phase, reason, report path, and stack trace so CI or external tools can collect crash data without parsing the text report.
+
 The current system serves two related purposes:
 
 - process-level crash handling for unhandled failures

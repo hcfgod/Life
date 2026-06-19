@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/ApplicationCli.h"
 #include "Core/CrashDiagnostics.h"
 #include "Core/Error.h"
 #include "Core/ApplicationHost.h"
@@ -316,6 +317,9 @@ namespace Life
         try
         {
             PrepareApplicationBootstrapDiagnostics(args);
+            if (const std::optional<int> cliResult = TryHandleApplicationCli(args))
+                return *cliResult;
+
             ApplicationRunnerState* state = CreateApplicationRunner(args, false);
 
             struct ApplicationRunnerDestroyer
