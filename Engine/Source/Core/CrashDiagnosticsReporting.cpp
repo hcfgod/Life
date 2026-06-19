@@ -185,14 +185,19 @@ namespace Life::CrashDiagnosticsDetail
             stream << '\n';
         }
 
-        void WriteCrashDiagnosticsJsonSidecar(
-            const std::filesystem::path& jsonPath,
-            const std::filesystem::path& reportPath,
-            const CrashDiagnosticsEvent& event,
-            const CrashDiagnosticsConfigurationSnapshot& snapshot,
-            const std::filesystem::path& minidumpPath)
+        struct CrashDiagnosticsJsonSidecarRequest
         {
-            std::ofstream stream(jsonPath, std::ios::out | std::ios::trunc);
+            std::filesystem::path JsonPath;
+            std::filesystem::path ReportPath;
+            std::filesystem::path MinidumpPath;
+        };
+
+        void WriteCrashDiagnosticsJsonSidecar(
+            const CrashDiagnosticsJsonSidecarRequest& request,
+            const CrashDiagnosticsEvent& event,
+            const CrashDiagnosticsConfigurationSnapshot& snapshot)
+        {
+            std::ofstream stream(request.JsonPath, std::ios::out | std::ios::trunc);
             if (!stream.is_open())
                 return;
 
@@ -205,8 +210,8 @@ namespace Life::CrashDiagnosticsDetail
             WriteJsonField(stream, "phase", event.Phase);
             WriteJsonField(stream, "reason", event.Reason);
             WriteJsonField(stream, "details", event.Details);
-            WriteJsonField(stream, "reportPath", reportPath.string());
-            WriteJsonField(stream, "minidumpPath", minidumpPath.string());
+            WriteJsonField(stream, "reportPath", request.ReportPath.string());
+            WriteJsonField(stream, "minidumpPath", request.MinidumpPath.string());
             WriteJsonField(stream, "processId", std::to_string(PlatformUtils::GetCurrentProcessId()));
             WriteJsonField(stream, "threadId", GetThreadIdString());
             WriteJsonField(stream, "workingDirectory", std::filesystem::current_path().string());
@@ -728,7 +733,14 @@ namespace Life::CrashDiagnosticsDetail
 
             std::filesystem::path jsonPath = reportBasePath;
             jsonPath += ".crash.json";
-            WriteCrashDiagnosticsJsonSidecar(jsonPath, reportPath, event, *snapshot, minidumpPath);
+            WriteCrashDiagnosticsJsonSidecar(
+                CrashDiagnosticsJsonSidecarRequest{
+                    jsonPath,
+                    reportPath,
+                    minidumpPath
+                },
+                event,
+                *snapshot);
 
             StoreLastReportPath(reportPath);
 

@@ -223,6 +223,13 @@ TEST_CASE("ApplicationHost destructor suppresses shutdown exceptions")
 {
     Life::Log::Init();
 
+    CrashDiagnosticsConfigurationRestorer crashDiagnosticsRestorer;
+    Life::CrashReportingSpecification crashReportingSpecification = Life::CrashDiagnostics::GetSpecification();
+    crashReportingSpecification.WriteReport = false;
+    crashReportingSpecification.WriteMiniDump = false;
+    crashReportingSpecification.MaxStackFrames = 0;
+    Life::CrashDiagnostics::Configure(crashReportingSpecification);
+
     auto application = Life::CreateScope<ThrowingLifecycleApplication>();
     auto host = Life::CreateScope<Life::ApplicationHost>(std::move(application), Life::CreateScope<TestRuntime>());
 
