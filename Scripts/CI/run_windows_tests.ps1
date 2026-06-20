@@ -249,17 +249,27 @@ if ($null -ne $vulkanBinDirectory) {
 Push-Location $testDirectory
 $previousLiveBackendSmoke = $env:LIFE_ENABLE_LIVE_BACKEND_SMOKE
 try {
+    $testArguments = @()
+    $shouldRunTests = $true
+
     if ($LiveBackendSmoke) {
         if (Test-LiveBackendSmokePrerequisites -VulkanBinDir $vulkanBinDirectory) {
             $env:LIFE_ENABLE_LIVE_BACKEND_SMOKE = '1'
+            $testArguments = @('--test-case=Live backend smoke validates one real host frame when explicitly enabled')
             Write-Host "[CI] Live backend smoke test enabled."
         } else {
             Remove-Item Env:\LIFE_ENABLE_LIVE_BACKEND_SMOKE -ErrorAction SilentlyContinue
+            Write-Host "[CI] Live backend smoke prerequisites unavailable; skipping live smoke test invocation."
+            $shouldRunTests = $false
         }
     }
 
-    & $testBinary
-    $testExitCode = $LASTEXITCODE
+    if ($shouldRunTests) {
+        & $testBinary @testArguments
+        $testExitCode = $LASTEXITCODE
+    } else {
+        $testExitCode = 0
+    }
 }
 finally {
     if ($null -eq $previousLiveBackendSmoke) {
