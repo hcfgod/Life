@@ -9,8 +9,18 @@
 #include "Core/Log.h"
 #include "Core/ServiceRegistry.h"
 
+#include <cstdio>
+
 namespace Life::Assets
 {
+    namespace
+    {
+        void ReportPrefabAssetLoggingFailure() noexcept
+        {
+            (void)std::fputs("PrefabAsset::LoadAsync: suppressed exception while reporting async load failure.\n", stderr);
+        }
+    }
+
     PrefabAsset::PrefabAsset(std::string key, std::string guid, Scope<Scene> scene, Settings settings)
         : Asset(std::move(key), std::move(guid))
         , m_Scene(std::move(scene))
@@ -66,6 +76,7 @@ namespace Life::Assets
                 }
                 catch (...)
                 {
+                    ReportPrefabAssetLoggingFailure();
                 }
                 return nullptr;
             }
@@ -77,6 +88,7 @@ namespace Life::Assets
                 }
                 catch (...)
                 {
+                    ReportPrefabAssetLoggingFailure();
                 }
                 return nullptr;
             }
