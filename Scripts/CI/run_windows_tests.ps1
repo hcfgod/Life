@@ -293,3 +293,5 @@ if ($testExitCode -ne 0) {
 
     exit $testExitCode
 }
+
+exit 0

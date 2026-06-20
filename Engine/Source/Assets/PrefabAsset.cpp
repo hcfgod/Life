@@ -25,31 +25,61 @@ namespace Life::Assets
 
     std::future<PrefabAsset::Ptr> PrefabAsset::LoadAsync(const std::string& key, const Settings& settings)
     {
-        return std::async(std::launch::async, [key, settings]() -> Ptr {
-            const auto resolvedResult = ResolveAssetKeyToPath(key);
-            if (resolvedResult.IsFailure())
+        const auto loadKey = CreateRef<std::string>(key);
+        const auto loadSettings = CreateRef<Settings>(settings);
+
+        return std::async(std::launch::async, [loadKey, loadSettings]() noexcept -> Ptr {
+            const std::string& key = *loadKey;
+            const Settings& settings = *loadSettings;
+            try
             {
-                LOG_CORE_ERROR("PrefabAsset::LoadAsync: failed to resolve key '{}': {}", key, resolvedResult.GetError().GetErrorMessage());
+                const auto resolvedResult = ResolveAssetKeyToPath(key);
+                if (resolvedResult.IsFailure())
+                {
+                    LOG_CORE_ERROR("PrefabAsset::LoadAsync: failed to resolve key '{}': {}", key, resolvedResult.GetError().GetErrorMessage());
+                    return nullptr;
+                }
+
+                const std::filesystem::path& resolvedPath = resolvedResult.GetValue();
+                const auto guidResult = LoadOrCreateGuid(resolvedPath.string(), {{"key", key}, {"type", "Prefab"}});
+                if (guidResult.IsFailure())
+                {
+                    LOG_CORE_ERROR("PrefabAsset::LoadAsync: meta GUID failed for '{}': {}", resolvedPath.string(), guidResult.GetError().GetErrorMessage());
+                    return nullptr;
+                }
+
+                auto* assetManager = GetServices().TryGet<AssetManager>();
+                auto sceneResult = SceneSerializer::Load(resolvedPath, assetManager);
+                if (sceneResult.IsFailure())
+                {
+                    LOG_CORE_ERROR("PrefabAsset::LoadAsync: failed to load '{}': {}", resolvedPath.string(), sceneResult.GetError().GetErrorMessage());
+                    return nullptr;
+                }
+
+                return Ref<PrefabAsset>(new PrefabAsset(key, guidResult.GetValue(), std::move(sceneResult.GetValue()), settings));
+            }
+            catch (const std::exception& e)
+            {
+                try
+                {
+                    LOG_CORE_ERROR("PrefabAsset::LoadAsync: unexpected exception for '{}': {}", key, e.what());
+                }
+                catch (...)
+                {
+                }
                 return nullptr;
             }
-
-            const std::filesystem::path& resolvedPath = resolvedResult.GetValue();
-            const auto guidResult = LoadOrCreateGuid(resolvedPath.string(), {{"key", key}, {"type", "Prefab"}});
-            if (guidResult.IsFailure())
+            catch (...)
             {
-                LOG_CORE_ERROR("PrefabAsset::LoadAsync: meta GUID failed for '{}': {}", resolvedPath.string(), guidResult.GetError().GetErrorMessage());
+                try
+                {
+                    LOG_CORE_ERROR("PrefabAsset::LoadAsync: unexpected exception for '{}'", key);
+                }
+                catch (...)
+                {
+                }
                 return nullptr;
             }
-
-            auto* assetManager = GetServices().TryGet<AssetManager>();
-            auto sceneResult = SceneSerializer::Load(resolvedPath, assetManager);
-            if (sceneResult.IsFailure())
-            {
-                LOG_CORE_ERROR("PrefabAsset::LoadAsync: failed to load '{}': {}", resolvedPath.string(), sceneResult.GetError().GetErrorMessage());
-                return nullptr;
-            }
-
-            return Ref<PrefabAsset>(new PrefabAsset(key, guidResult.GetValue(), std::move(sceneResult.GetValue()), settings));
         });
     }
 

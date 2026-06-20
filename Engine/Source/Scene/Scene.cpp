@@ -444,8 +444,7 @@ namespace Life
         if (std::find(m_SpriteSortingLayers.begin(), m_SpriteSortingLayers.end(), name) != m_SpriteSortingLayers.end())
             return false;
 
-        std::string previousName = *it;
-        *it = name;
+        const std::string& previousName = *it;
         for (Entity entity : GetEntities())
         {
             if (SpriteRendererComponent* spriteRenderer = entity.TryGetComponent<SpriteRendererComponent>();
@@ -454,6 +453,7 @@ namespace Life
                 spriteRenderer->SortingLayer = name;
             }
         }
+        *it = std::move(name);
         return true;
     }
 
